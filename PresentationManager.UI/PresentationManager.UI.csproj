@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2957.106" />
+    <PackageReference Include="Microsoft.Office.Interop.PowerPoint" Version="15.0.4420.1018" />
+    <PackageReference Include="PDFtoImage" Version="5.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The PowerPoint PIA above depends on the Office "core" PIA (Microsoft.Office.Core.MsoTriState etc.),
+         which isn't published as its own NuGet package. It ships instead as part of any Office desktop
+         install's Primary Interop Assemblies, at this well-known, version-stable GAC location (unchanged
+         since Office 2007 through current 365/2019/2021 desktop installs) — used here only to resolve
+         types at BUILD time on this machine.
+         Private=true (the default, stated explicitly here) copies office.dll into our own build/publish
+         output instead of relying on it being present at runtime. That copy matters for two reasons: (1)
+         modern .NET does not consult the machine GAC at all the way .NET Framework did, so a GAC-only
+         reference silently fails to resolve at runtime even when Office is installed — this was the actual
+         cause of "Slaydni ko'rsatishda xatolik" on a real PowerPoint file; (2) the Microsoft.Office.Interop.
+         PowerPoint package above has its own hard metadata dependency on this exact assembly, so it must be
+         resolvable at our app's own base directory (or bundled into the single-file publish) regardless of
+         whatever PIA state the target machine's GAC happens to be in.
+         Real PowerPoint automation still requires PowerPoint desktop (not Office web-only) to be installed
+         on the machine running this app — that part is unavoidable and separate from this file reference. -->
+    <Reference Include="office">
+      <HintPath>$(SystemRoot)\assembly\GAC_MSIL\office\15.0.0.0__71e9bce111e9429c\OFFICE.DLL</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PresentationManager.Application\PresentationManager.Application.csproj" />
+    <ProjectReference Include="..\PresentationManager.Infrastructure\PresentationManager.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
