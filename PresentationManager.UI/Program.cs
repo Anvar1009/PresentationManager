@@ -25,7 +25,14 @@ static class Program
         // valid SynchronizationContext.Current and can marshal ticks back to this thread reliably.
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
 
-        var dbPath = Path.Combine(AppContext.BaseDirectory, "presentationmanager.db");
+        // Per-user AppData, not AppContext.BaseDirectory — so the published app is a single standalone
+        // .exe with nothing else to hand over: the database and uploaded files are created here on first
+        // run instead of needing to sit alongside the executable (which would otherwise require copying a
+        // whole folder rather than one file, and would break entirely if the exe lives somewhere read-only
+        // like Program Files).
+        var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PresentationManager");
+        Directory.CreateDirectory(appDataDir);
+        var dbPath = Path.Combine(appDataDir, "presentationmanager.db");
 
         using var host = Host.CreateDefaultBuilder()
             .ConfigureServices(services =>
@@ -35,7 +42,7 @@ static class Program
                 services.AddSingleton<IPresentationRepository, PresentationRepository>();
                 services.AddSingleton<ISettingsRepository, SettingsRepository>();
                 services.AddSingleton<IHistoryRepository, HistoryRepository>();
-                services.AddSingleton<IFileStorageService>(_ => new FileStorageService());
+                services.AddSingleton<IFileStorageService>(_ => new FileStorageService(Path.Combine(appDataDir, "Files")));
                 services.AddSingleton<IAlarmSoundService, AlarmSoundService>();
 
                 services.AddSingleton<TimerEngine>();

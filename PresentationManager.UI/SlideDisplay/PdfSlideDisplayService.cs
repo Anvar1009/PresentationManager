@@ -61,12 +61,9 @@ public sealed class PdfSlideDisplayService : ISlideDisplayService
 
         // WebView2's built-in PDF viewer defaults to a small, centered zoom level with a lot of empty
         // margin — these are the same "open parameters" Adobe Acrobat/Chromium's PDF viewer support:
+        // FitH fits the page to the viewer's width (filling the space properly for a presentation), and
         // toolbar=0/navpanes=0 hide the print/zoom/sidebar chrome that's just clutter for an audience.
-        // view=Fit (not FitH) fits the WHOLE page — width and height — inside the viewer, preserving
-        // whatever aspect ratio the page was actually authored at (A4 portrait, A3 landscape, 16:9 slide,
-        // ...); FitH only matched the page's width and let a tall/portrait page's height run off past the
-        // bottom of a widescreen projector, which read as the page being stretched "uzun" (elongated).
-        _webView.CoreWebView2.Navigate(new Uri(absoluteFilePath).AbsoluteUri + "#toolbar=0&navpanes=0&view=Fit");
+        _webView.CoreWebView2.Navigate(new Uri(absoluteFilePath).AbsoluteUri + "#toolbar=0&navpanes=0&view=FitH");
         _webView.Visible = true;
         _webView.Focus();
         _open = true;

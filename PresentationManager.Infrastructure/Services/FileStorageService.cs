@@ -2,19 +2,22 @@ using PresentationManager.Application.Interfaces;
 
 namespace PresentationManager.Infrastructure.Services;
 
-/// <summary>Copies picked presentation files into a managed "/Files/" folder next to the executable, under
-/// a per-day subfolder ("/Files/yyyy-MM-dd/"), so the database only ever stores a relative path — never
-/// the file bytes themselves — and files stay organized by the day they were added. Presentations are
-/// never pruned by date: <see cref="Repositories.PresentationRepository.GetAllOrderedAsync"/> always
-/// returns every row regardless of which day's folder its file lives in, so anything added today is still
-/// listed (and its file still resolvable) the next time the app starts, tomorrow or later.</summary>
+/// <summary>Copies picked presentation files into a managed storage folder, under a per-day subfolder
+/// ("yyyy-MM-dd/"), so the database only ever stores a relative path — never the file bytes themselves —
+/// and files stay organized by the day they were added. Presentations are never pruned by date:
+/// <see cref="Repositories.PresentationRepository.GetAllOrderedAsync"/> always returns every row regardless
+/// of which day's folder its file lives in, so anything added today is still listed (and its file still
+/// resolvable) the next time the app starts, tomorrow or later.</summary>
 public class FileStorageService : IFileStorageService
 {
     private readonly string _storageRoot;
 
-    public FileStorageService(string storageFolderName = "Files")
+    /// <param name="storageRoot">Absolute path to the folder files are stored under — the caller decides
+    /// where that lives (e.g. per-user AppData, so a published single-file .exe has nothing else to sit
+    /// alongside it) rather than this service assuming it's always next to the executable.</param>
+    public FileStorageService(string storageRoot)
     {
-        _storageRoot = Path.Combine(AppContext.BaseDirectory, storageFolderName);
+        _storageRoot = storageRoot;
         Directory.CreateDirectory(_storageRoot);
     }
 
