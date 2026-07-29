@@ -1,5 +1,7 @@
+using System.Drawing.Drawing2D;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
+using PresentationManager.Domain.Enums;
 using PresentationManager.UI.Controls;
 using PresentationManager.UI.Localization;
 using PresentationManager.UI.Theme;
@@ -17,10 +19,20 @@ namespace PresentationManager.UI.Forms;
 /// loop.</remarks>
 public sealed class PresentationPickerForm : Form
 {
+    private const int CardCornerRadius = 10;
+    private const int RowSpacing = 6;
+    private const int BadgeDiameter = 36;
+    private const int PillHeight = 24;
+
     private readonly PresentationSessionController _session;
     private readonly ListBox _listBox;
     private readonly RoundedButton _startButton;
+    private readonly Font _badgeFont = new("Segoe UI", 11, FontStyle.Bold);
+    private readonly Font _nameFont = new("Segoe UI", 11.5f, FontStyle.Bold);
+    private readonly Font _titleFont = new("Segoe UI", 10f);
+    private readonly Font _pillFont = new("Segoe UI", 8.5f, FontStyle.Bold);
     private List<Presentation> _items = [];
+    private int _hoveredIndex = -1;
 
     /// <summary>Set once the operator picks a row and confirms — null if the dialog was dismissed without
     /// choosing anything.</summary>
@@ -43,48 +55,92 @@ public sealed class PresentationPickerForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(560, 480);
+        ClientSize = new Size(620, 560);
 
         var header = new Label
         {
-            Text = "Keyingi taqdimotchini tanlang va boshlang:",
+            Text = "Keyingi taqdimotchini tanlang",
             Dock = DockStyle.Top,
             Height = 32,
+            ForeColor = AppColors.TextPrimary,
+            Font = new Font("Segoe UI", 16, FontStyle.Bold)
+        };
+
+        var subheader = new Label
+        {
+            // Height includes 20px of blank space below the text itself (rather than relying on Margin,
+            // which the plain Dock/Anchor layout engine used here ignores — only FlowLayoutPanel/
+            // TableLayoutPanel honor it) to leave section-spacing breathing room before the list card.
+            Text = "Ro'yxatdan birini tanlang, so'ng muhokamani yakunlab boshlang.",
+            Dock = DockStyle.Top,
+            Height = 44,
             ForeColor = AppColors.TextSecondary,
-            Font = new Font("Segoe UI", 10, FontStyle.Bold)
+            Font = new Font("Segoe UI", 10)
         };
 
         _listBox = new ListBox
         {
             Dock = DockStyle.Fill,
-            BackColor = AppColors.PanelAlt,
+            BackColor = AppColors.Panel,
             ForeColor = AppColors.TextPrimary,
-            BorderStyle = BorderStyle.FixedSingle,
+            BorderStyle = BorderStyle.None,
             IntegralHeight = false,
-            Font = new Font("Segoe UI", 11)
+            DrawMode = DrawMode.OwnerDrawFixed,
+            ItemHeight = 64,
+            Cursor = Cursors.Hand
         };
         _listBox.SelectedIndexChanged += (_, _) => _startButton.Enabled = _listBox.SelectedIndex >= 0;
         _listBox.DoubleClick += (_, _) => TryAccept();
+        _listBox.DrawItem += ListBox_DrawItem;
+        _listBox.MouseMove += (_, e) =>
+        {
+            var index = _listBox.IndexFromPoint(e.Location);
+            SetHoveredIndex(index >= 0 && index < _items.Count ? index : -1);
+        };
+        _listBox.MouseLeave += (_, _) => SetHoveredIndex(-1);
+
+        var listCard = new Panel { Dock = DockStyle.Fill, BackColor = AppColors.Panel };
+        listCard.Paint += (_, e) =>
+        {
+            using var pen = new Pen(AppColors.Border);
+            e.Graphics.DrawRectangle(pen, 0, 0, listCard.Width - 1, listCard.Height - 1);
+        };
+        listCard.Controls.Add(_listBox);
+
+        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24, 24, 24, 0) };
+        content.Controls.Add(listCard);
+        content.Controls.Add(subheader);
+        content.Controls.Add(header);
 
         _startButton = new RoundedButton
         {
             Text = "BOSHLASH",
-            Dock = DockStyle.Bottom,
-            Height = 56,
+            Dock = DockStyle.Fill,
             BackColor = AppColors.Success,
             Font = new Font("Segoe UI", 13, FontStyle.Bold),
             Enabled = false
         };
         _startButton.Click += (_, _) => TryAccept();
 
-        var padded = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16) };
-        padded.Controls.Add(_listBox);
-        padded.Controls.Add(header);
+        var actionBar = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24, 16, 24, 24) };
+        actionBar.Controls.Add(_startButton);
 
-        Controls.Add(padded);
-        Controls.Add(_startButton);
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88f));
+        root.Controls.Add(content, 0, 0);
+        root.Controls.Add(actionBar, 0, 1);
+
+        Controls.Add(root);
 
         Load += (_, _) => PopulateList();
+        FormClosed += (_, _) =>
+        {
+            _badgeFont.Dispose();
+            _nameFont.Dispose();
+            _titleFont.Dispose();
+            _pillFont.Dispose();
+        };
     }
 
     private void PopulateList()
@@ -93,8 +149,130 @@ public sealed class PresentationPickerForm : Form
         _listBox.Items.Clear();
         foreach (var p in _items)
         {
-            _listBox.Items.Add($"{p.OrderNumber + 1}. {p.FullName} - {p.Title}  [{UzbekText.StatusLabel(p.Status)}]");
+            // Custom-painted in ListBox_DrawItem — this text only backs the item count/index and screen readers.
+            _listBox.Items.Add($"{p.OrderNumber + 1}. {p.FullName} - {p.Title}");
         }
+    }
+
+    private void SetHoveredIndex(int index)
+    {
+        if (index == _hoveredIndex)
+        {
+            return;
+        }
+
+        var previous = _hoveredIndex;
+        _hoveredIndex = index;
+        if (previous >= 0 && previous < _listBox.Items.Count)
+        {
+            _listBox.Invalidate(_listBox.GetItemRectangle(previous));
+        }
+
+        if (_hoveredIndex >= 0 && _hoveredIndex < _listBox.Items.Count)
+        {
+            _listBox.Invalidate(_listBox.GetItemRectangle(_hoveredIndex));
+        }
+    }
+
+    private void ListBox_DrawItem(object? sender, DrawItemEventArgs e)
+    {
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+        using (var backBrush = new SolidBrush(AppColors.Panel))
+        {
+            e.Graphics.FillRectangle(backBrush, e.Bounds);
+        }
+
+        if (e.Index < 0 || e.Index >= _items.Count)
+        {
+            return;
+        }
+
+        var presentation = _items[e.Index];
+        var selected = (e.State & DrawItemState.Selected) != 0;
+        var hovered = e.Index == _hoveredIndex;
+
+        var rowRect = Rectangle.Inflate(e.Bounds, -12, -RowSpacing / 2);
+        var rowColor = selected ? AppColors.PanelAlt : hovered ? ControlPaint.Light(AppColors.Panel, 0.08f) : AppColors.Panel;
+
+        using (var rowPath = RoundedRect(rowRect, CardCornerRadius))
+        using (var rowBrush = new SolidBrush(rowColor))
+        {
+            e.Graphics.FillPath(rowBrush, rowPath);
+        }
+
+        if (selected)
+        {
+            using var accentBrush = new SolidBrush(AppColors.Accent);
+            using var accentBarPath = RoundedRect(new Rectangle(rowRect.X, rowRect.Y, 4, rowRect.Height), 2);
+            e.Graphics.FillPath(accentBrush, accentBarPath);
+        }
+
+        var badgeRect = new Rectangle(rowRect.X + 16, rowRect.Y + (rowRect.Height - BadgeDiameter) / 2, BadgeDiameter, BadgeDiameter);
+        using (var badgeBrush = new SolidBrush(AppColors.Accent))
+        {
+            e.Graphics.FillEllipse(badgeBrush, badgeRect);
+        }
+
+        TextRenderer.DrawText(e.Graphics, (presentation.OrderNumber + 1).ToString(), _badgeFont, badgeRect, AppColors.Background,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+
+        var statusText = UzbekText.StatusLabel(presentation.Status).ToUpperInvariant();
+        var statusColor = StatusColor(presentation.Status);
+        var statusSize = TextRenderer.MeasureText(e.Graphics, statusText, _pillFont);
+        var pillWidth = statusSize.Width + 20;
+        var pillRect = new Rectangle(rowRect.Right - pillWidth - 16, rowRect.Y + (rowRect.Height - PillHeight) / 2, pillWidth, PillHeight);
+
+        using (var pillBrush = new SolidBrush(Color.FromArgb(46, statusColor)))
+        using (var pillPath = RoundedRect(pillRect, PillHeight / 2f))
+        {
+            e.Graphics.FillPath(pillBrush, pillPath);
+        }
+
+        TextRenderer.DrawText(e.Graphics, statusText, _pillFont, pillRect, statusColor,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+
+        var textLeft = badgeRect.Right + 14;
+        var textWidth = Math.Max(0, pillRect.Left - textLeft - 12);
+        var nameHeight = TextRenderer.MeasureText(presentation.FullName, _nameFont).Height;
+        var titleHeight = TextRenderer.MeasureText(presentation.Title, _titleFont).Height;
+        var blockTop = rowRect.Y + (rowRect.Height - nameHeight - titleHeight - 2) / 2;
+
+        var nameRect = new Rectangle(textLeft, blockTop, textWidth, nameHeight);
+        var titleRect = new Rectangle(textLeft, blockTop + nameHeight + 2, textWidth, titleHeight);
+
+        TextRenderer.DrawText(e.Graphics, presentation.FullName, _nameFont, nameRect, AppColors.TextPrimary,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(e.Graphics, presentation.Title, _titleFont, titleRect, AppColors.TextSecondary,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+    }
+
+    private static Color StatusColor(PresentationStatus status) => status switch
+    {
+        PresentationStatus.Running => AppColors.Success,
+        PresentationStatus.Paused => AppColors.Warning,
+        PresentationStatus.Discussion or PresentationStatus.DiscussionReady => AppColors.DiscussionAction,
+        PresentationStatus.DiscussionPaused => AppColors.Warning,
+        PresentationStatus.Ready => AppColors.Accent,
+        PresentationStatus.Finished or PresentationStatus.Skipped => AppColors.TextSecondary,
+        _ => AppColors.TextSecondary // Waiting
+    };
+
+    private static GraphicsPath RoundedRect(Rectangle bounds, float radius)
+    {
+        var diameter = Math.Min(radius * 2, Math.Min(bounds.Width, bounds.Height));
+        var arcRect = new RectangleF(bounds.X, bounds.Y, diameter, diameter);
+
+        var path = new GraphicsPath();
+        path.AddArc(arcRect, 180, 90);
+        arcRect.X = bounds.Right - diameter;
+        path.AddArc(arcRect, 270, 90);
+        arcRect.Y = bounds.Bottom - diameter;
+        path.AddArc(arcRect, 0, 90);
+        arcRect.X = bounds.X;
+        path.AddArc(arcRect, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 
     private void TryAccept()

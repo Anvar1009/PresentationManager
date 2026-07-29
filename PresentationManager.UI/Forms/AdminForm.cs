@@ -548,15 +548,45 @@ public sealed class AdminForm : Form
         }
     }
 
+    /// <summary>Widest the center "current presentation" card's content is ever allowed to stretch to — only
+    /// kicks in on a genuinely huge (4K+/ultra-wide) monitor, so the slide preview still fills essentially
+    /// all of the available width everywhere else instead of leaving it visibly letterboxed by dead panel
+    /// background on both sides. See <c>RepositionCardContent</c>.</summary>
+    private const int CardContentMaxWidth = 1400;
+
+    /// <summary>Fixed breathing margin kept on each side of the content even below <see cref="CardContentMaxWidth"/> —
+    /// small enough that the preview still reads as filling the card, per the 24px outer-margin convention
+    /// used throughout this dashboard.</summary>
+    private const int CardContentSideMargin = 24;
+
     private Control BuildCenterPanel()
     {
         var panel = new Panel { Dock = DockStyle.Fill, BackColor = AppColors.Background, Padding = new Padding(20) };
 
-        var card = new Panel { Dock = DockStyle.Fill, BackColor = AppColors.Panel, Padding = new Padding(24) };
+        var card = new Panel { Dock = DockStyle.Fill, BackColor = AppColors.Panel };
 
-        _currentNameLabel = new Label { Dock = DockStyle.Top, Height = 46, Font = new Font("Segoe UI", 20, FontStyle.Bold), ForeColor = AppColors.TextPrimary };
-        _currentTitleLabel = new Label { Dock = DockStyle.Top, Height = 32, Font = new Font("Segoe UI", 13, FontStyle.Italic), ForeColor = AppColors.Accent };
-        _currentStatusLabel = new Label { Dock = DockStyle.Top, Height = 34, Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = AppColors.Warning };
+        // Not Dock.Fill — kept at a sane reading width and re-centered on every resize (see
+        // RepositionCardContent) instead of stretching edge-to-edge on a wide admin monitor.
+        var content = new Panel { BackColor = AppColors.Panel, Padding = new Padding(24) };
+
+        _currentNameLabel = new Label
+        {
+            Dock = DockStyle.Top, Height = 46,
+            Font = new Font("Segoe UI", 20, FontStyle.Bold), ForeColor = AppColors.TextPrimary,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        _currentTitleLabel = new Label
+        {
+            Dock = DockStyle.Top, Height = 32,
+            Font = new Font("Segoe UI", 13, FontStyle.Italic), ForeColor = AppColors.Accent,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        _currentStatusLabel = new Label
+        {
+            Dock = DockStyle.Top, Height = 34,
+            Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = AppColors.Warning,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
 
         _startButton = new RoundedButton
         {
@@ -574,7 +604,8 @@ public sealed class AdminForm : Form
             Dock = DockStyle.Bottom,
             Height = 24,
             ForeColor = AppColors.TextSecondary,
-            Font = new Font("Segoe UI", 9f, FontStyle.Italic)
+            Font = new Font("Segoe UI", 9f, FontStyle.Italic),
+            TextAlign = ContentAlignment.MiddleCenter
         };
 
         // Framed the same way the queue/logs panels frame their own content (PanelAlt fill, small gap from
@@ -594,12 +625,23 @@ public sealed class AdminForm : Form
         // laid out last) only ever gets whatever's left after the Top labels and Bottom hint/button above
         // and below it have already taken their strips — see BuildLeftQueuePanel's _queueListBox for the
         // same established pattern in this file.
-        card.Controls.Add(previewWrap);
-        card.Controls.Add(hint);
-        card.Controls.Add(_startButton);
-        card.Controls.Add(_currentStatusLabel);
-        card.Controls.Add(_currentTitleLabel);
-        card.Controls.Add(_currentNameLabel);
+        content.Controls.Add(previewWrap);
+        content.Controls.Add(hint);
+        content.Controls.Add(_startButton);
+        content.Controls.Add(_currentStatusLabel);
+        content.Controls.Add(_currentTitleLabel);
+        content.Controls.Add(_currentNameLabel);
+
+        card.Controls.Add(content);
+
+        void RepositionCardContent()
+        {
+            var width = Math.Min(CardContentMaxWidth, Math.Max(0, card.ClientSize.Width - CardContentSideMargin * 2));
+            content.SetBounds((card.ClientSize.Width - width) / 2, 0, width, card.ClientSize.Height);
+        }
+
+        card.Resize += (_, _) => RepositionCardContent();
+        RepositionCardContent();
 
         panel.Controls.Add(card);
         return panel;
@@ -681,9 +723,11 @@ public sealed class AdminForm : Form
         // BOSHLASH targets whatever row is highlighted in the queue, not just the session's own "current"
         // pointer — otherwise a Finished/Skipped file that the operator clicks on (to run it again) left
         // the button disabled forever, since CurrentPresentation only ever advances forward on its own.
-        // A selected row that differs from whatever's actively running is always startable (that's the
-        // whole point — jump to any file on demand); with nothing selected, fall back to the original
-        // "only when idle" rule so the button doesn't sit falsely enabled mid-presentation.
+        // Any explicitly selected row is always startable, even one that happens to still be "current" —
+        // e.g. parked mid-flow at Discussion/Paused/DiscussionReady after the operator backed out of
+        // advancing past it — since OnStartClick always resets the target back to Ready before starting
+        // regardless. With nothing selected, fall back to the original "only when idle" rule so the button
+        // doesn't sit falsely enabled mid-presentation with no explicit choice made.
         var selected = GetSelectedPresentation();
 
         // Same idea applies to the name/title/preview above the button: once the operator clicks a
@@ -696,8 +740,7 @@ public sealed class AdminForm : Form
         _currentStatusLabel.Text = UzbekText.StatusLabel(_session.Status);
 
         _startButton.Enabled = selected is not null
-            ? selected.Id != current?.Id || _session.Status is PresentationStatus.Waiting or PresentationStatus.Ready
-            : current is not null && _session.Status is PresentationStatus.Waiting or PresentationStatus.Ready;
+            || (current is not null && _session.Status is PresentationStatus.Waiting or PresentationStatus.Ready);
 
         _ = UpdatePreviewAsync(target);
     }
@@ -742,7 +785,10 @@ public sealed class AdminForm : Form
     /// <summary>Starts whatever's selected in the queue list — including a Finished/Skipped file the
     /// operator wants to (re-)present — falling back to the session's own current pointer only when
     /// nothing's been clicked yet (e.g. right after launch). Re-selecting first resets any prior status
-    /// back to Ready, which is what makes starting an old/already-finished file work.</summary>
+    /// back to Ready, which is what makes starting an old/already-finished file work — needed not only when
+    /// switching to a different target, but also when the target is already "current" yet parked mid-flow
+    /// (Discussion/Paused/DiscussionReady, e.g. after backing out of advancing past it): without resetting,
+    /// StartPresentationAsync would silently refuse to start since it only proceeds from Ready/Waiting.</summary>
     private async void OnStartClick()
     {
         try
@@ -753,7 +799,9 @@ public sealed class AdminForm : Form
                 return;
             }
 
-            if (_session.CurrentPresentation?.Id != target.Id)
+            var alreadyCurrentAndReady = _session.CurrentPresentation?.Id == target.Id
+                && _session.Status is PresentationStatus.Ready or PresentationStatus.Waiting;
+            if (!alreadyCurrentAndReady)
             {
                 await _session.SelectPresentationAsync(target.Id);
             }

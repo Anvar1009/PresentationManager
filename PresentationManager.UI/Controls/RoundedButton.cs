@@ -84,14 +84,14 @@ public sealed class RoundedButton : Button
         var g = pevent.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        // Fill with the parent's background first so the rounded corners blend into whatever sits behind
-        // instead of showing a default square control face.
-        using (var bgBrush = new SolidBrush(Parent?.BackColor ?? AppColors.Panel))
-        {
-            g.FillRectangle(bgBrush, ClientRectangle);
-        }
-
         var scale = DeviceDpi / 96f;
+
+        // Clips the control's own window to the rounded silhouette instead of its full rectangular bounds,
+        // so the corners genuinely aren't part of this window at all — whatever really sits behind (a solid
+        // panel, or live slide content on the presentation screen) shows through natively there instead of a
+        // background-color patch that can never match every possible backdrop this button floats over.
+        UpdateRegionToButtonShape(scale);
+
         var borderWidth = Math.Max(1f, scale);
         var inset = borderWidth / 2f;
         var rect = RectangleF.Inflate(new RectangleF(0, 0, Width, Height), -inset, -inset);
@@ -122,6 +122,19 @@ public sealed class RoundedButton : Button
         var textColor = Enabled ? ForeColor : AppColors.TextSecondary;
         TextRenderer.DrawText(g, Text, Font, ClientRectangle, textColor,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+    }
+
+    /// <summary>Shapes the window region to the full (non-inset) rounded rectangle so the 1px stroke drawn
+    /// in <see cref="OnPaint"/> — centered on a slightly inset path — never gets clipped at its outer edge.</summary>
+    private void UpdateRegionToButtonShape(float scale)
+    {
+        if (Width <= 0 || Height <= 0)
+        {
+            return;
+        }
+
+        using var outerPath = RoundedRectPath(new RectangleF(0, 0, Width, Height), CornerRadius * scale);
+        Region = new Region(outerPath);
     }
 
     private static GraphicsPath RoundedRectPath(RectangleF rect, float radius)

@@ -16,13 +16,6 @@ namespace PresentationManager.UI.Forms;
 /// </summary>
 public sealed class PresentationForm : Form
 {
-    /// <summary>Starting point for <see cref="PositionDiscussionHeader"/>'s fit-to-width shrinking — the
-    /// letter-spaced headline (see <see cref="SpacedOut"/>) at this size can be wider than the window on
-    /// narrower monitors or the non-fullscreen dev window, which silently clipped trailing characters
-    /// (e.g. the final "R" in "javoblar") since Label draws past its bounds without wrapping.</summary>
-    private const int DiscussionHeaderMaxFontSize = 60;
-    private const int DiscussionHeaderMinFontSize = 20;
-
     /// <summary>Final stretch of either timer (10, 9, 8, ... 1) where every second gets its own short beep
     /// plus a synchronized gold/red blink — see <see cref="HandleWarningState"/>. The expiry alarm at 0 is
     /// separate — see <see cref="PlayFinalAlarm"/>.</summary>
@@ -35,16 +28,19 @@ public sealed class PresentationForm : Form
     private readonly IAlarmSoundService _alarmSoundService;
 
     private readonly Label _timerLabel;
-    private readonly Panel _discussionSpacer;
-    private readonly Label _discussionHeader;
-    private readonly Panel _discussionAccentLine;
-    private readonly Panel _discussionBottomGap;
     private readonly Button _closeButton;
 
     /// <summary>Small always-visible countdown shown over the slide while it's covering the big centered
     /// <see cref="_timerLabel"/> — plain floating controls (like <see cref="_closeButton"/>), not a backing
     /// panel/bar, so nothing but the digits and the button themselves are ever on screen.</summary>
     private readonly TransparentOverlayLabel _miniTimerLabel;
+
+    /// <summary>Static "MUHOKAMA VAQTI" caption floating just above <see cref="_miniTimerLabel"/> — shown
+    /// only while that countdown is actually counting discussion time (<see cref="PresentationStatus.DiscussionReady"/>
+    /// or <see cref="PresentationStatus.Discussion"/>), so the operator can tell at a glance which clock the
+    /// digits underneath belong to instead of confusing it for the presentation countdown.</summary>
+    private readonly TransparentOverlayLabel _miniTimerCaptionLabel;
+
     private readonly RoundedButton _controlButton;
 
     /// <summary>The embedded WebView2 PDF viewer (used for both real PDFs and PPTX-converted-to-PDF) is
@@ -91,46 +87,6 @@ public sealed class PresentationForm : Form
             Text = "00:00"
         };
 
-        // Sits above the big timer only while a discussion is actually in progress or about to start —
-        // toggled alongside ContentHost's visibility in UpdateStatusDisplay so it doesn't also show during
-        // the plain idle/Ready states that share this same underlying screen. Plain Dock.Top controls
-        // (rather than a custom-painted one) deliberately — a hand-rolled OnPaint here previously ended up
-        // not rendering at all in the real fullscreen window despite working in an isolated test, and wasn't
-        // worth debugging further when Label/Panel are guaranteed to just work.
-        _discussionSpacer = new Panel
-        {
-            Dock = DockStyle.Top,
-            BackColor = AppColors.Background,
-            Height = 0,
-            Visible = false
-        };
-        _discussionHeader = new Label
-        {
-            Dock = DockStyle.Top,
-            Height = 170,
-            Font = new Font("Segoe UI", DiscussionHeaderMaxFontSize, FontStyle.Bold),
-            ForeColor = AppColors.DiscussionAction,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Text = SpacedOut("Muhokama va savol-javoblar"),
-            Visible = false
-        };
-        _discussionAccentLine = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 3,
-            BackColor = AppColors.DiscussionAction,
-            Visible = false
-        };
-        // Plain blank strip rather than Margin/Padding — Dock layout doesn't respect either between
-        // siblings, so a real spacer control is the only reliable way to keep the accent line off the timer.
-        _discussionBottomGap = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 30,
-            BackColor = AppColors.Background,
-            Visible = false
-        };
-
         // No top info bar anymore — the operator wanted the projector-facing screen to show as much of the
         // actual slide as possible, with only a small always-on-top close control left floating in the
         // corner (fullscreen mode has no title bar at all, so this is otherwise the only way to close it).
@@ -153,6 +109,21 @@ public sealed class PresentationForm : Form
             ForeColor = AppColors.Success,
             AutoSize = true,
             Text = "00:00",
+            Visible = false
+        };
+
+        _miniTimerCaptionLabel = new TransparentOverlayLabel
+        {
+            Font = new Font("Segoe UI", 13, FontStyle.Bold),
+            ForeColor = AppColors.DiscussionAction,
+            // Floats over arbitrary slide content, unlike every other themed control here that only ever
+            // sits on the fixed dark app background — a solid dark pill (rather than just an outline) keeps
+            // the gold text legible and reads as a deliberate tag/badge no matter what's behind it.
+            PillColor = AppColors.Panel,
+            PillBorderColor = AppColors.DiscussionAction,
+            Padding = new Padding(18, 7, 18, 7),
+            AutoSize = true,
+            Text = "MUHOKAMA VAQTI",
             Visible = false
         };
 
@@ -184,10 +155,6 @@ public sealed class PresentationForm : Form
         };
 
         Controls.Add(_timerLabel);
-        Controls.Add(_discussionBottomGap);
-        Controls.Add(_discussionAccentLine);
-        Controls.Add(_discussionHeader);
-        Controls.Add(_discussionSpacer);
         Controls.Add(ContentHost);
         ContentHost.BringToFront();
 
@@ -195,18 +162,16 @@ public sealed class PresentationForm : Form
         // live slide content on top of everything else.
         Controls.Add(_closeButton);
         Controls.Add(_miniTimerLabel);
+        Controls.Add(_miniTimerCaptionLabel);
         Controls.Add(_controlButton);
         _closeButton.BringToFront();
         _miniTimerLabel.BringToFront();
+        _miniTimerCaptionLabel.BringToFront();
         _controlButton.BringToFront();
         Resize += (_, _) => PositionCloseButton();
         PositionCloseButton();
         Resize += (_, _) => PositionOverlayControls();
         PositionOverlayControls();
-
-        Resize += (_, _) => PositionDiscussionHeader();
-        Shown += (_, _) => PositionDiscussionHeader();
-        PositionDiscussionHeader();
 
         _session.PresentationChanged += () => RunOnUiThread(UpdatePresentationDisplay);
         _session.StatusChanged += status => RunOnUiThread(() =>
@@ -214,6 +179,14 @@ public sealed class PresentationForm : Form
             StopBlink();
             UpdateStatusDisplay(status);
             _ = HandleSlideVisibilityAsync(status);
+
+            // No "Boshlash" button for this anymore — the moment DiscussionReady is reached (whether by an
+            // early manual click or the presentation timer running out on its own) this prompt itself is
+            // what asks the operator's permission, without needing them to find and press anything first.
+            if (status == PresentationStatus.DiscussionReady)
+            {
+                _ = ConfirmAndStartDiscussionAsync();
+            }
         });
         _session.TimeTick += (remaining, mode) => RunOnUiThread(() =>
         {
@@ -344,25 +317,37 @@ public sealed class PresentationForm : Form
         {
             if (_session.Status == PresentationStatus.DiscussionReady)
             {
-                // Starting the (already-waiting) discussion clock isn't "early" for anything — there's
-                // nothing running yet to interrupt — so it never needs the confirmation dialog below.
-                await _session.StartDiscussionAsync();
+                // Normally already asked and settled automatically the instant DiscussionReady was reached
+                // (see the StatusChanged subscription in the constructor) — this only re-runs the same
+                // prompt as a fallback if the operator declined it there and is now clicking "Keyingi"
+                // (the only button showing at this point) to retry.
+                await ConfirmAndStartDiscussionAsync();
                 return;
             }
 
             var inDiscussion = _session.ActiveTimerMode == TimerMode.Discussion;
-            var remaining = inDiscussion ? _session.DiscussionRemainingSeconds : _session.PresentationRemainingSeconds;
 
-            if (remaining > 0)
+            if (!inDiscussion)
             {
-                // Next never skips discussion — from the presentation phase it only jumps ahead to
-                // Discussion (mirrors what happens automatically once the timer hits zero); only from
-                // Discussion does it actually finish and move to the next presenter. The confirmation text
-                // must say which one is about to happen, not always "move to next presenter".
-                var question = inDiscussion
-                    ? "Muhokama vaqti hali tugamagan. Keyingi taqdimotchiga o'tishni xohlaysizmi?"
-                    : "Taqdimot vaqti hali tugamagan. Muhokamaga o'tishni xohlaysizmi?";
-                var confirm = MessageBox.Show(this, question,
+                // Only moves the status to DiscussionReady — the panel (slide, mini timer, button) stays
+                // exactly as it is, and the discussion clock itself only starts once the operator confirms
+                // the follow-up prompt that fires automatically once that status is reached.
+                var confirm = MessageBox.Show(this,
+                    "Muhokamaga o'tishni xohlaysizmi?",
+                    "Tasdiqlash", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (confirm != DialogResult.Yes)
+                {
+                    return;
+                }
+
+                await _session.NextPresenterAsync();
+                return;
+            }
+
+            if (_session.DiscussionRemainingSeconds > 0)
+            {
+                var confirm = MessageBox.Show(this,
+                    "Muhokama vaqti hali tugamagan. Keyingi taqdimotchiga o'tishni xohlaysizmi?",
                     "Tasdiqlash", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                 if (confirm != DialogResult.Yes)
                 {
@@ -370,23 +355,34 @@ public sealed class PresentationForm : Form
                 }
             }
 
-            if (inDiscussion)
-            {
-                // Deliberately doesn't finish/touch the current presentation until the picker below actually
-                // returns a choice — so the discussion screen underneath (header, big timer) stays exactly
-                // as it was for as long as the picker sits open on top of it, and a cancelled picker leaves
-                // discussion running untouched instead of stranding the operator on a blank screen.
-                await ShowNextPresentationPickerAsync();
-            }
-            else
-            {
-                await _session.NextPresenterAsync();
-            }
+            // Deliberately doesn't finish/touch the current presentation until the picker below actually
+            // returns a choice — so the screen underneath (slide, big timer) stays exactly as it was for as
+            // long as the picker sits open on top of it, and a cancelled picker leaves discussion running
+            // untouched instead of stranding the operator on a blank screen.
+            await ShowNextPresentationPickerAsync();
         }
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Amal bajarilmadi", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    /// <summary>The one required confirmation before the discussion clock actually starts ticking — fired
+    /// automatically as soon as <see cref="PresentationStatus.DiscussionReady"/> is reached (see the
+    /// StatusChanged subscription in the constructor), not from a dedicated button. Declining leaves the
+    /// state parked exactly as it was; <see cref="OnControlButtonClick"/>'s DiscussionReady branch calls
+    /// this same method again if the operator then clicks "Keyingi" to retry.</summary>
+    private async Task ConfirmAndStartDiscussionAsync()
+    {
+        var confirm = MessageBox.Show(this,
+            "Muhokama vaqtini boshlashni tasdiqlaysizmi?",
+            "Muhokamani boshlash", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (confirm != DialogResult.Yes)
+        {
+            return;
+        }
+
+        await _session.StartDiscussionAsync();
     }
 
     /// <summary>Shown modally over this screen once a discussion is finished — lets the operator choose
@@ -476,59 +472,21 @@ public sealed class PresentationForm : Form
 
     /// <summary>Bottom-corner placement for <see cref="_miniTimerLabel"/> and <see cref="_controlButton"/> —
     /// each sized to its own content with no backing bar behind them, mirroring how <see cref="_closeButton"/>
-    /// floats over <see cref="ContentHost"/>.</summary>
+    /// floats over <see cref="ContentHost"/>. <see cref="_miniTimerCaptionLabel"/> is centered directly above
+    /// the mini timer's digits (rather than sharing their left edge) so the badge reads as attached to the
+    /// clock beneath it, whether or not it's actually visible right now.</summary>
     private void PositionOverlayControls()
     {
         const int margin = 24;
+        const int captionGap = 10;
         _miniTimerLabel.Location = new Point(margin, ClientSize.Height - _miniTimerLabel.Height - margin);
+        _miniTimerCaptionLabel.Location = new Point(
+            _miniTimerLabel.Left + (_miniTimerLabel.Width - _miniTimerCaptionLabel.Width) / 2,
+            _miniTimerLabel.Top - _miniTimerCaptionLabel.Height - captionGap);
         _controlButton.Location = new Point(
             ClientSize.Width - _controlButton.Width - margin,
             ClientSize.Height - _controlButton.Height - margin);
     }
-
-    /// <summary>Grows <see cref="_discussionSpacer"/> (a plain Dock.Top blank strip sitting above the
-    /// header) just enough to give the header some breathing room below the top edge, without eating so
-    /// much height that the big timer's own Dock.Fill area — which needs to dominate the screen and read as
-    /// centered — gets squeezed down into a small strip at the bottom. Deliberately a small fraction of
-    /// ClientSize rather than a calculation tied to the timer's own font metrics: this only needs to land
-    /// "off the top edge", and a fixed fraction is far less likely to be thrown off by a stale ClientSize
-    /// read during a status transition.</summary>
-    private void PositionDiscussionHeader()
-    {
-        _discussionSpacer.Height = Math.Max(0, ClientSize.Height / 12);
-        FitDiscussionHeaderFont();
-    }
-
-    /// <summary>Shrinks <see cref="_discussionHeader"/>'s font, starting from <see cref="DiscussionHeaderMaxFontSize"/>,
-    /// until the (letter-spaced) headline actually fits within the window's width — otherwise trailing
-    /// characters silently draw past the label's right edge and get clipped by it. Re-run alongside the
-    /// spacer on every resize since "fits" depends on the current window width.</summary>
-    private void FitDiscussionHeaderFont()
-    {
-        var maxWidth = Math.Max(1, ClientSize.Width - 40);
-        var size = DiscussionHeaderMaxFontSize;
-        while (size > DiscussionHeaderMinFontSize && !FitsWidth(size))
-        {
-            size -= 2;
-        }
-
-        bool FitsWidth(int fontSize)
-        {
-            using var trialFont = new Font("Segoe UI", fontSize, FontStyle.Bold);
-            return TextRenderer.MeasureText(_discussionHeader.Text, trialFont).Width <= maxWidth;
-        }
-
-        if (_discussionHeader.Font.Size != size)
-        {
-            var oldFont = _discussionHeader.Font;
-            _discussionHeader.Font = new Font("Segoe UI", size, FontStyle.Bold);
-            oldFont.Dispose();
-        }
-    }
-
-    /// <summary>Fakes letter-spacing for the discussion header — a plain Label can't do real character
-    /// tracking, but interposing thin spaces reads close enough for a big bold conference-room headline.</summary>
-    private static string SpacedOut(string text) => string.Join(" ", text.ToUpperInvariant().Select(c => c.ToString()));
 
     private void RunOnUiThread(Action action)
     {
@@ -558,29 +516,28 @@ public sealed class PresentationForm : Form
     {
         UpdateControlButton();
 
-        // Real slide content only covers the screen while the presentation timer itself is active;
-        // every other state (waiting/discussion/finished) shows our own info screen underneath.
-        ContentHost.Visible = status is PresentationStatus.Running;
+        // The slide covers the screen for both the presentation itself and its discussion phase — there is
+        // no separate discussion screen to switch to anymore, so it simply stays up and the big centered
+        // timer underneath just switches to counting down the discussion time instead.
+        ContentHost.Visible = status is PresentationStatus.Running or PresentationStatus.Discussion or PresentationStatus.DiscussionReady;
 
         // The mini timer only needs to exist while the slide is actually hiding the big centered one behind
-        // it — everywhere else (including Discussion) that centered timer is already visible on its own, so
-        // showing this too would just duplicate it.
+        // it — everywhere else that centered timer is already visible on its own, so showing this too would
+        // just duplicate it.
         _miniTimerLabel.Visible = ContentHost.Visible;
 
-        var discussionActive = status is PresentationStatus.Discussion or PresentationStatus.DiscussionReady or PresentationStatus.DiscussionPaused;
-        _discussionSpacer.Visible = discussionActive;
-        _discussionHeader.Visible = discussionActive;
-        _discussionAccentLine.Visible = discussionActive;
-        _discussionBottomGap.Visible = discussionActive;
-        PositionDiscussionHeader();
+        // Labels which clock the mini timer's digits actually belong to right now — DiscussionReady is
+        // reached before StartDiscussionAsync has run (so ActiveTimerMode is still whatever it was before),
+        // hence checking Status here rather than the timer's own mode.
+        var discussionActive = status is PresentationStatus.Discussion or PresentationStatus.DiscussionReady;
+        _miniTimerCaptionLabel.Visible = discussionActive && ContentHost.Visible;
 
-        try
+        if (status == PresentationStatus.DiscussionReady)
         {
-            System.IO.File.AppendAllText(
-                @"C:\Users\a.soxibov\AppData\Local\Temp\claude\E--Anvar-Projects-Inno-viwer\747d5aab-f6b0-44e4-b5aa-6dbd3b605590\scratchpad\statuslog.txt",
-                $"{DateTime.Now:HH:mm:ss.fff} status={status} discussionActive={discussionActive} ClientSize={ClientSize} spacer.H={_discussionSpacer.Height} spacer.V={_discussionSpacer.Visible} header.Top={_discussionHeader.Top} header.V={_discussionHeader.Visible}\n");
+            // Parked, not yet ticking — show the discussion duration it's about to start from instead of
+            // leaving the mini timer frozen on whatever the presentation countdown last displayed.
+            UpdateTimerDisplay(_session.DiscussionRemainingSeconds, TimerMode.Discussion);
         }
-        catch { /* diagnostic only */ }
     }
 
     private void UpdateControlButton()
@@ -589,20 +546,23 @@ public sealed class PresentationForm : Form
         _controlButton.Text = _session.Status switch
         {
             PresentationStatus.Running or PresentationStatus.Paused => "MUHOKAMAGA O'TISH",
-            PresentationStatus.DiscussionReady => "BOSHLASH",
+            // No dedicated "Boshlash" state anymore — DiscussionReady's confirmation fires on its own (see
+            // ConfirmAndStartDiscussionAsync), so this button reads "Keyingi" here too, same as once
+            // discussion is actually running.
             _ => "KEYINGI"
         };
 
-        // Text length varies by state ("BOSHLASH" vs "MUHOKAMAGA O'TISH"), so both the fitted size and the
+        // Text length varies by state ("KEYINGI" vs "MUHOKAMAGA O'TISH"), so both the fitted size and the
         // bottom-right-anchored position need recomputing every time, not just once at construction.
         _controlButton.AutoFitToText();
         PositionOverlayControls();
     }
 
     /// <summary>
-    /// Drives the real slide content in lockstep with the state machine: Running shows it (opening fresh
-    /// the first time), Discussion hides it without closing (kept ready in case we resume showing it),
-    /// every other state (Finished/Skipped/next presenter) closes it.
+    /// Drives the real slide content in lockstep with the state machine: Running and the discussion phase
+    /// both show it (opening fresh the first time) — there is no separate discussion screen to switch to
+    /// anymore, so the slide simply stays up underneath the discussion countdown. Every other state
+    /// (Finished/Skipped/next presenter) closes it.
     /// </summary>
     private async Task HandleSlideVisibilityAsync(PresentationStatus status)
     {
@@ -610,7 +570,7 @@ public sealed class PresentationForm : Form
         {
             switch (status)
             {
-                case PresentationStatus.Running:
+                case PresentationStatus.Running or PresentationStatus.Discussion or PresentationStatus.DiscussionReady:
                     if (_slideOpen && _openPresentationId == _session.CurrentPresentation?.Id)
                     {
                         await _pdfDisplayService.ShowAsync();
@@ -618,13 +578,6 @@ public sealed class PresentationForm : Form
                     else
                     {
                         await OpenCurrentSlideAsync();
-                    }
-                    break;
-
-                case PresentationStatus.Discussion or PresentationStatus.DiscussionReady:
-                    if (_slideOpen)
-                    {
-                        await _pdfDisplayService.HideAsync();
                     }
                     break;
 

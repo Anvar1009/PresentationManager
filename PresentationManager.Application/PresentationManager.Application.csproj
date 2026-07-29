@@ -7,12 +7,20 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="C:\Users\a.soxibov\Pictures\Screenshots\Снимок экрана 2026-07-29 165430.png" Link="photo\Снимок экрана 2026-07-29 165430.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PresentationManager.Domain\PresentationManager.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="photo\" />
   </ItemGroup>
 
 </Project>
