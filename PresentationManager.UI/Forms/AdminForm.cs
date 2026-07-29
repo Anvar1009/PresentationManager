@@ -11,9 +11,11 @@ using PresentationManager.UI.Theme;
 namespace PresentationManager.UI.Forms;
 
 /// <summary>
-/// Operator dashboard, now scoped to just managing the presentation queue (add/edit/delete/reorder/search)
-/// and app settings. Starting, advancing and watching the timer all happen on <see cref="PresentationForm"/>
-/// instead — see that class for the control surface.
+/// Operator dashboard — every control surface lives here (queue add/edit/delete/reorder/search, app
+/// settings, starting a presentation, and advancing it through discussion/next). <see cref="PresentationForm"/>
+/// (Namoyish Ekrani) is deliberately left with no controls of its own: it's the window actually shown or
+/// screen-shared to the audience, so it only ever displays the live timer and the slide — nothing an
+/// operator clicks.
 /// </summary>
 public sealed class AdminForm : Form
 {
@@ -35,6 +37,7 @@ public sealed class AdminForm : Form
     private Label _currentStatusLabel = null!;
     private PictureBox _previewBox = null!;
     private RoundedButton _startButton = null!;
+    private RoundedButton _advanceButton = null!;
 
     /// <summary>Id of whichever presentation <see cref="_previewBox"/> currently shows a thumbnail for —
     /// guards against re-rendering the same file's first page on every <see cref="RefreshCurrentPanel"/>
@@ -73,9 +76,18 @@ public sealed class AdminForm : Form
     private void BuildMenu()
     {
         var menu = new MenuStrip { BackColor = AppColors.Panel, ForeColor = AppColors.TextPrimary };
+
         var settingsItem = new ToolStripMenuItem("Sozlamalar");
         settingsItem.Click += (_, _) => OnSettingsClick();
         menu.Items.Add(settingsItem);
+
+        // Replaces the close (X) button that used to float directly on Namoyish Ekrani — that screen has no
+        // controls of its own anymore (it's the one actually shown/shared to the audience), so hiding it is
+        // now an explicit operator action from here instead.
+        var hideScreenItem = new ToolStripMenuItem("Namoyish ekranini yashirish");
+        hideScreenItem.Click += (_, _) => _presentationForm.HideAll();
+        menu.Items.Add(hideScreenItem);
+
         MainMenuStrip = menu;
         Controls.Add(menu); // added after the Fill split layout so it correctly claims the top strip
     }
@@ -123,6 +135,14 @@ public sealed class AdminForm : Form
             {
                 _presentationForm.HideAll();
                 Activate();
+            }
+
+            // No dedicated button for this — the moment DiscussionReady is reached (whether by an early
+            // manual "Keyingi" click or the presentation timer running out on its own) this prompt itself
+            // is what asks the operator's permission, without needing them to find and press anything first.
+            if (status == PresentationStatus.DiscussionReady)
+            {
+                _ = ConfirmAndStartDiscussionAsync();
             }
         });
     }
@@ -591,16 +611,35 @@ public sealed class AdminForm : Form
         _startButton = new RoundedButton
         {
             Text = "BOSHLASH",
-            Dock = DockStyle.Bottom,
-            Height = 64,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 6, 0),
             BackColor = AppColors.Success,
             Font = new Font("Segoe UI", 14, FontStyle.Bold)
         };
         _startButton.Click += (_, _) => OnStartClick();
 
+        // Mirrors what used to be a floating button directly on Namoyish Ekrani (the projector/shared
+        // screen) — moved here so that screen stays pure output (timer + slide only, no controls at all)
+        // and every operator action happens from this dashboard instead.
+        _advanceButton = new RoundedButton
+        {
+            Text = "KEYINGI",
+            Dock = DockStyle.Fill,
+            Margin = new Padding(6, 0, 0, 0),
+            BackColor = AppColors.DiscussionAction,
+            Font = new Font("Segoe UI", 14, FontStyle.Bold)
+        };
+        _advanceButton.Click += (_, _) => OnAdvanceClick();
+
+        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 64, ColumnCount = 2, RowCount = 1 };
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        actionRow.Controls.Add(_startButton, 0, 0);
+        actionRow.Controls.Add(_advanceButton, 1, 0);
+
         var hint = new Label
         {
-            Text = "Boshlangach, fayl Namoyish ekranida ochiladi - taymer va Keyingi tugmasi ham o'sha yerda.",
+            Text = "Boshlangach, fayl Namoyish ekranida ochiladi - taymer shu yerda, ekranning o'zida hech qanday tugma bo'lmaydi.",
             Dock = DockStyle.Bottom,
             Height = 24,
             ForeColor = AppColors.TextSecondary,
@@ -627,7 +666,7 @@ public sealed class AdminForm : Form
         // same established pattern in this file.
         content.Controls.Add(previewWrap);
         content.Controls.Add(hint);
-        content.Controls.Add(_startButton);
+        content.Controls.Add(actionRow);
         content.Controls.Add(_currentStatusLabel);
         content.Controls.Add(_currentTitleLabel);
         content.Controls.Add(_currentNameLabel);
@@ -742,6 +781,16 @@ public sealed class AdminForm : Form
         _startButton.Enabled = selected is not null
             || (current is not null && _session.Status is PresentationStatus.Waiting or PresentationStatus.Ready);
 
+        // Mirrors the old floating control button on Namoyish Ekrani — always acts on the session's actual
+        // active presentation (never the merely-selected queue row, unlike BOSHLASH above), since it's
+        // advancing whatever's really running rather than jumping to something else.
+        _advanceButton.Enabled = current is not null;
+        _advanceButton.Text = _session.Status switch
+        {
+            PresentationStatus.Running or PresentationStatus.Paused => "MUHOKAMAGA O'TISH",
+            _ => "KEYINGI"
+        };
+
         _ = UpdatePreviewAsync(target);
     }
 
@@ -812,6 +861,102 @@ public sealed class AdminForm : Form
         {
             MessageBox.Show(this, ex.Message, "Boshlashda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    /// <summary>This button does one of three different things depending on <see cref="PresentationSessionController.Status"/>
+    /// — see <see cref="RefreshCurrentPanel"/> for the matching label on each. Moved here from what used to
+    /// be a floating button directly on Namoyish Ekrani, so that screen stays pure output.</summary>
+    private async void OnAdvanceClick()
+    {
+        try
+        {
+            if (_session.Status == PresentationStatus.DiscussionReady)
+            {
+                // Normally already asked and settled automatically the instant DiscussionReady was reached
+                // (see the StatusChanged subscription in WireSessionEvents) — this only re-runs the same
+                // prompt as a fallback if the operator declined it there and is now clicking "Keyingi"
+                // (the only relevant action at this point) to retry.
+                await ConfirmAndStartDiscussionAsync();
+                return;
+            }
+
+            var inDiscussion = _session.ActiveTimerMode == TimerMode.Discussion;
+
+            if (!inDiscussion)
+            {
+                // Only moves the status to DiscussionReady — the slide/timer on Namoyish Ekrani stays
+                // exactly as it is, and the discussion clock itself only starts once the operator confirms
+                // the follow-up prompt that fires automatically once that status is reached.
+                var confirm = MessageBox.Show(this,
+                    "Muhokamaga o'tishni xohlaysizmi?",
+                    "Tasdiqlash", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (confirm != DialogResult.Yes)
+                {
+                    return;
+                }
+
+                await _session.NextPresenterAsync();
+                return;
+            }
+
+            if (_session.DiscussionRemainingSeconds > 0)
+            {
+                var confirm = MessageBox.Show(this,
+                    "Muhokama vaqti hali tugamagan. Keyingi taqdimotchiga o'tishni xohlaysizmi?",
+                    "Tasdiqlash", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (confirm != DialogResult.Yes)
+                {
+                    return;
+                }
+            }
+
+            // Deliberately doesn't finish/touch the current presentation until the picker below actually
+            // returns a choice — so Namoyish Ekrani stays exactly as it was for as long as the picker sits
+            // open, and a cancelled picker leaves discussion running untouched instead of stranding the
+            // operator on a blank screen.
+            await ShowNextPresentationPickerAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Amal bajarilmadi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>The one required confirmation before the discussion clock actually starts ticking — fired
+    /// automatically as soon as <see cref="PresentationStatus.DiscussionReady"/> is reached (see
+    /// WireSessionEvents), not from a dedicated button. Declining leaves the state parked exactly as it was;
+    /// <see cref="OnAdvanceClick"/>'s DiscussionReady branch calls this same method again if the operator
+    /// then clicks "Keyingi" to retry.</summary>
+    private async Task ConfirmAndStartDiscussionAsync()
+    {
+        var confirm = MessageBox.Show(this,
+            "Muhokama vaqtini boshlashni tasdiqlaysizmi?",
+            "Muhokamani boshlash", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (confirm != DialogResult.Yes)
+        {
+            return;
+        }
+
+        await _session.StartDiscussionAsync();
+    }
+
+    /// <summary>Shown once a discussion is finished — lets the operator choose which queued presentation
+    /// starts next instead of the queue silently advancing on its own. The actual finish/select/start
+    /// sequence deliberately runs here, after <c>ShowDialog</c> returns, rather than from inside the
+    /// picker's own button click — running those (real async DB + WebView2) calls from a handler nested
+    /// inside the dialog's own modal message loop made the presentation silently fail to start once
+    /// picked.</summary>
+    private async Task ShowNextPresentationPickerAsync()
+    {
+        using var picker = new PresentationPickerForm(_session);
+        if (picker.ShowDialog(this) != DialogResult.OK || picker.SelectedPresentationId is not { } presentationId)
+        {
+            return;
+        }
+
+        await _session.FinishCurrentPresentationAsync();
+        await _session.SelectPresentationAsync(presentationId);
+        await _presentationForm.StartSelectedPresentationAsync();
     }
 
     private async Task RefreshLogsAsync()
