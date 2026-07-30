@@ -98,7 +98,14 @@ public sealed class PresentationSessionController
     }
 
     /// <summary>Reloads the queue from the database after an external CRUD/reorder operation, preserving
-    /// the current pointer by presentation Id where possible. No-ops if no project is currently active.</summary>
+    /// the current pointer by presentation Id where possible. No-ops if no project is currently active.
+    /// Also called on a timer by AdminForm so presentations submitted via the Telegram bot show up on their
+    /// own — which is why this must never disturb a presentation that's actively Running/Paused/in
+    /// discussion: it used to unconditionally reset the current presentation's timers and force
+    /// <see cref="Status"/> back to Ready on every call, which was harmless when this only ever ran after an
+    /// explicit CRUD action taken while the queue was idle, but turned into a real bug once a periodic
+    /// caller could invoke it mid-presentation — the slide would silently drop out from under the operator
+    /// every time it fired, with the countdown reset to full and stranded on Ready.</summary>
     public async Task ReloadQueueAsync(CancellationToken ct = default)
     {
         if (CurrentProjectId is not int projectId)
@@ -107,8 +114,19 @@ public sealed class PresentationSessionController
         }
 
         var currentId = CurrentPresentation?.Id;
+        var wasActive = CurrentPresentation is not null && Status is not (PresentationStatus.Waiting or PresentationStatus.Ready);
+
         _queue = await _presentationRepository.GetAllOrderedAsync(projectId, ct);
         _currentIndex = currentId is null ? -1 : _queue.FindIndex(p => p.Id == currentId);
+
+        if (wasActive && _currentIndex >= 0)
+        {
+            // Still mid-flow on the same presentation - only the list contents changed (e.g. a new
+            // bot-submitted presentation appeared further down the queue). Leave Status/timers alone and
+            // just let subscribers know the queue itself is different.
+            PresentationChanged?.Invoke();
+            return;
+        }
 
         if (_currentIndex < 0)
         {

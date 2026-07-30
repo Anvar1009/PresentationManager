@@ -34,6 +34,11 @@ public sealed class AdminForm : Form
     private Point _queueDragStart;
     private Label _projectLabel = null!;
 
+    /// <summary>Periodically reloads the active project's queue so presentations submitted via the Telegram
+    /// bot (a separate process-internal flow that never goes through this form's own Add button) show up on
+    /// their own, without the operator having to do anything.</summary>
+    private readonly System.Windows.Forms.Timer _botPollTimer;
+
     private Label _currentNameLabel = null!;
     private Label _currentTitleLabel = null!;
     private Label _currentStatusLabel = null!;
@@ -74,7 +79,32 @@ public sealed class AdminForm : Form
         BuildMenu();
         WireSessionEvents();
 
+        _botPollTimer = new System.Windows.Forms.Timer { Interval = 5000 };
+        _botPollTimer.Tick += OnBotPollTick;
+        _botPollTimer.Start();
+        FormClosed += (_, _) => _botPollTimer.Stop();
+
         Load += OnFormLoad;
+    }
+
+    /// <summary>No-op while no project is active or the DB is briefly unreachable - a missed tick just means
+    /// a bot-submitted presentation shows up on the next one instead of instantly, which is an acceptable
+    /// trade-off for not popping error dialogs on every transient hiccup.</summary>
+    private async void OnBotPollTick(object? sender, EventArgs e)
+    {
+        if (_session.CurrentProjectId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _session.ReloadQueueAsync();
+        }
+        catch
+        {
+            // Swallowed deliberately - see summary above.
+        }
     }
 
     private void BuildMenu()

@@ -10,6 +10,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="appsettings.Local.json" Condition="Exists('appsettings.Local.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2957.106" />
     <PackageReference Include="Microsoft.Office.Interop.PowerPoint" Version="15.0.4420.1018" />
@@ -41,6 +50,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PresentationManager.Application\PresentationManager.Application.csproj" />
     <ProjectReference Include="..\PresentationManager.Infrastructure\PresentationManager.Infrastructure.csproj" />
+    <ProjectReference Include="..\PresentationManager.TelegramBot\PresentationManager.TelegramBot.csproj" />
   </ItemGroup>
 
 </Project>

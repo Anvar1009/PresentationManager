@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
 
     public DbSet<Project> Projects => Set<Project>();
 
+    public DbSet<Presenter> Presenters => Set<Presenter>();
+
     public DbSet<AppSettings> Settings => Set<AppSettings>();
 
     public DbSet<HistoryEntry> HistoryEntries => Set<HistoryEntry>();
@@ -40,6 +42,14 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(p => p.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Presenter>(b =>
+        {
+            b.ToTable("Presenters");
+            b.HasKey(p => p.Id);
+            b.Property(p => p.FullName).IsRequired();
+            b.HasIndex(p => p.TelegramChatId).IsUnique();
         });
 
         modelBuilder.Entity<AppSettings>(b =>

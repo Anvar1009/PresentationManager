@@ -13,6 +13,14 @@ namespace PresentationManager.UI.SlideDisplay;
 /// </summary>
 public static class PptxToPdfConverter
 {
+    /// <summary>Serializes every conversion app-wide — AdminForm's queue-preview thumbnail
+    /// (<see cref="SlideThumbnailService"/>) and PresentationForm's real on-screen open both call into this
+    /// converter independently, and two concurrent <c>new PowerPoint.Application()</c> automations racing
+    /// each other (e.g. selecting a queue row and immediately pressing Boshlash) is a known source of
+    /// intermittent COM errors (RPC_E_CALL_REJECTED/CO_E_SERVER_EXEC_FAILURE) that would otherwise surface
+    /// as an unexplained failure to open the slide.</summary>
+    private static readonly SemaphoreSlim ConversionLock = new(1, 1);
+
     /// <summary>Runs the (COM-requires-STA) conversion on its own dedicated STA thread so it doesn't block
     /// the UI thread, then hands the result back via the returned Task.</summary>
     public static Task<string> EnsureConvertedToPdfAsync(string pptxPath)
@@ -20,6 +28,7 @@ public static class PptxToPdfConverter
         var tcs = new TaskCompletionSource<string>();
         var thread = new Thread(() =>
         {
+            ConversionLock.Wait();
             try
             {
                 tcs.SetResult(EnsureConvertedToPdf(pptxPath));
@@ -27,6 +36,10 @@ public static class PptxToPdfConverter
             catch (Exception ex)
             {
                 tcs.SetException(ex);
+            }
+            finally
+            {
+                ConversionLock.Release();
             }
         })
         {

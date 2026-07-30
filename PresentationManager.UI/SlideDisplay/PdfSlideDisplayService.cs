@@ -1,3 +1,4 @@
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
@@ -36,6 +37,15 @@ public sealed class PdfSlideDisplayService : ISlideDisplayService
 
     public async Task OpenAsync(string absoluteFilePath, ScreenBounds targetBounds, CancellationToken ct = default)
     {
+        // Navigating to a file:// URI that doesn't exist doesn't reliably surface as a navigation failure
+        // below (Chromium's PDF viewer can render its own "couldn't load" page as a successful navigation)
+        // — catching the common case explicitly here gives a much clearer error than a silent blank/black
+        // screen.
+        if (!File.Exists(absoluteFilePath))
+        {
+            throw new FileNotFoundException("Slayd fayli topilmadi.", absoluteFilePath);
+        }
+
         var isFirstCreate = _webView is null;
         _webView ??= new WebView2 { Dock = DockStyle.Fill };
         if (!_hostPanel.Controls.Contains(_webView))
@@ -63,10 +73,35 @@ public sealed class PdfSlideDisplayService : ISlideDisplayService
         // margin — these are the same "open parameters" Adobe Acrobat/Chromium's PDF viewer support:
         // FitH fits the page to the viewer's width (filling the space properly for a presentation), and
         // toolbar=0/navpanes=0 hide the print/zoom/sidebar chrome that's just clutter for an audience.
-        _webView.CoreWebView2.Navigate(new Uri(absoluteFilePath).AbsoluteUri + "#toolbar=0&navpanes=0&view=FitH");
+        //
+        // Navigate() itself is fire-and-forget — awaiting NavigationCompleted here (rather than the old
+        // "call it and hope" approach) is what actually catches a failed load instead of silently leaving
+        // the operator on a black panel with no error anywhere.
+        var completed = await NavigateAndWaitAsync(
+            new Uri(absoluteFilePath).AbsoluteUri + "#toolbar=0&navpanes=0&view=FitH");
+        if (!completed.IsSuccess)
+        {
+            throw new InvalidOperationException($"Faylni ochib bo'lmadi ({completed.WebErrorStatus}).");
+        }
+
         _webView.Visible = true;
         _webView.Focus();
         _open = true;
+    }
+
+    private Task<CoreWebView2NavigationCompletedEventArgs> NavigateAndWaitAsync(string url)
+    {
+        var tcs = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+        {
+            _webView!.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+            tcs.TrySetResult(e);
+        }
+
+        _webView!.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+        _webView.CoreWebView2.Navigate(url);
+        return tcs.Task;
     }
 
     public Task ShowAsync(CancellationToken ct = default)

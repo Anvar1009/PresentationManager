@@ -3,6 +3,10 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Local secrets (DB connection string, Telegram bot token) - never committed, see appsettings.json for the
+# checked-in placeholder defaults this overrides.
+appsettings.Local.json
+
 # User-specific files
 *.rsuser
 *.suo

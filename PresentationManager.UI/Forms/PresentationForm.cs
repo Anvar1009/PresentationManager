@@ -192,7 +192,14 @@ public sealed class PresentationForm : Form
         }
 
         await EnsureVisibleAsync();
-        await ShowSlidePreviewAsync();
+        if (!await ShowSlidePreviewAsync())
+        {
+            // Slide failed to open (error already shown to the operator inside ShowSlidePreviewAsync) —
+            // bail out here instead of proceeding to the gate/timer over a black, empty screen. Boshlash
+            // can simply be pressed again once whatever's wrong (missing file, PowerPoint unavailable, ...)
+            // is fixed.
+            return;
+        }
 
         using var gate = new StartPresentationGateForm(current.FullName, current.Title);
         if (gate.ShowDialog() != DialogResult.OK)
@@ -219,7 +226,9 @@ public sealed class PresentationForm : Form
     /// <see cref="HandleSlideVisibilityAsync"/>, since <see cref="StartPresentationAsync"/>'s own later
     /// transition to Running will find the slide already open (same presentation Id) and just re-show it
     /// instead of loading it a second time.</summary>
-    private async Task ShowSlidePreviewAsync()
+    /// <returns>false if the slide failed to open — the caller must not proceed to starting the timer in
+    /// that case, since there would be nothing but the black <see cref="ContentHost"/> panel to show for it.</returns>
+    private async Task<bool> ShowSlidePreviewAsync()
     {
         try
         {
@@ -234,10 +243,14 @@ public sealed class PresentationForm : Form
             }
 
             _miniTimerLabel.BringToFront();
+            return true;
         }
         catch (Exception ex)
         {
+            // Nothing actually loaded — hide the bare black panel rather than leaving it up over nothing.
+            ContentHost.Visible = false;
             MessageBox.Show(this, $"Slaydni ko'rsatishda xatolik: {ex.Message}", "Namoyish Ekrani", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
         }
     }
 
@@ -422,6 +435,11 @@ public sealed class PresentationForm : Form
         }
         catch (Exception ex)
         {
+            // Unlike ShowSlidePreviewAsync, the timer/status transition here has already happened by the
+            // time this runs (this path only fires from auto-advance, not the Boshlash gate) so it can't be
+            // aborted — hiding the bare black panel is the best that can be done, on top of telling the
+            // operator what went wrong.
+            ContentHost.Visible = false;
             MessageBox.Show(this, $"Slaydni ko'rsatishda xatolik: {ex.Message}", "Namoyish Ekrani", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
