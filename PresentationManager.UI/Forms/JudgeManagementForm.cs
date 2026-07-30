@@ -25,8 +25,8 @@ public sealed class JudgeManagementForm : Form
         _projectId = projectId;
 
         Text = $"Hakamlar - {projectName}";
-        BackColor = AppColors.Background;
-        ForeColor = AppColors.TextPrimary;
+        BackColor = LightColors.Background;
+        ForeColor = LightColors.TextPrimary;
         Font = new Font("Segoe UI", 9.5f);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
@@ -40,19 +40,20 @@ public sealed class JudgeManagementForm : Form
             Dock = DockStyle.Top,
             Height = 28,
             Padding = new Padding(16, 10, 16, 0),
-            ForeColor = AppColors.TextSecondary,
+            ForeColor = LightColors.TextSecondary,
             Font = new Font("Segoe UI", 8.5f, FontStyle.Italic)
         };
 
         _listBox = new ListBox
         {
             Dock = DockStyle.Fill,
-            BackColor = AppColors.PanelAlt,
-            ForeColor = AppColors.TextPrimary,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
             BorderStyle = BorderStyle.FixedSingle,
             IntegralHeight = false,
             Font = new Font("Segoe UI", 10.5f)
         };
+        ListBoxTheme.ApplyRowDividers(_listBox);
         var listWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 4, 16, 4) };
         listWrap.Controls.Add(_listBox);
 
@@ -60,15 +61,15 @@ public sealed class JudgeManagementForm : Form
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-        var assignButton = new Button { Text = "+ Hakam tayinlash", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = AppColors.Success, ForeColor = AppColors.Background, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+        var assignButton = new Button { Text = "+ Hakam tayinlash", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.Success, ForeColor = Color.White, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
         assignButton.Click += OnAssignClick;
-        var deleteButton = new Button { Text = "O'chirish", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), FlatStyle = FlatStyle.Flat, BackColor = AppColors.Danger, ForeColor = AppColors.TextPrimary, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+        var deleteButton = new Button { Text = "O'chirish", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.Danger, ForeColor = Color.White, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
         deleteButton.Click += OnDeleteClick;
         toolbar.Controls.Add(assignButton, 0, 0);
         toolbar.Controls.Add(deleteButton, 1, 0);
         toolbarWrap.Controls.Add(toolbar);
 
-        var closeButton = new Button { Text = "Yopish", DialogResult = DialogResult.Cancel, Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat, BackColor = AppColors.PanelAlt, ForeColor = AppColors.TextPrimary };
+        var closeButton = new Button { Text = "Yopish", DialogResult = DialogResult.Cancel, Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary };
         var closeWrap = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(16, 0, 16, 12) };
         closeWrap.Controls.Add(closeButton);
 
@@ -173,8 +174,8 @@ public sealed class JudgeAssignForm : Form
         _candidates = candidates;
 
         Text = "Hakam tayinlash";
-        BackColor = AppColors.Background;
-        ForeColor = AppColors.TextPrimary;
+        BackColor = LightColors.Background;
+        ForeColor = LightColors.TextPrimary;
         Font = new Font("Segoe UI", 9.5f);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
@@ -186,8 +187,8 @@ public sealed class JudgeAssignForm : Form
         {
             Dock = DockStyle.Top,
             PlaceholderText = "Ism yoki telefon bo'yicha qidirish...",
-            BackColor = AppColors.PanelAlt,
-            ForeColor = AppColors.TextPrimary,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
             BorderStyle = BorderStyle.FixedSingle
         };
         _searchBox.TextChanged += (_, _) => PopulateList();
@@ -197,8 +198,8 @@ public sealed class JudgeAssignForm : Form
         _listBox = new ListBox
         {
             Dock = DockStyle.Fill,
-            BackColor = AppColors.PanelAlt,
-            ForeColor = AppColors.TextPrimary,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
             BorderStyle = BorderStyle.FixedSingle,
             IntegralHeight = false,
             Font = new Font("Segoe UI", 10.5f)
@@ -208,8 +209,8 @@ public sealed class JudgeAssignForm : Form
         listWrap.Controls.Add(_listBox);
 
         var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 56, Padding = new Padding(16, 0, 16, 16), FlowDirection = FlowDirection.RightToLeft };
-        var cancelButton = new Button { Text = "Bekor qilish", DialogResult = DialogResult.Cancel, Width = 90, FlatStyle = FlatStyle.Flat, BackColor = AppColors.PanelAlt, ForeColor = AppColors.TextPrimary };
-        var assignButton = new Button { Text = "Tayinlash", Width = 90, FlatStyle = FlatStyle.Flat, BackColor = AppColors.Accent, ForeColor = AppColors.TextPrimary };
+        var cancelButton = new Button { Text = "Bekor qilish", DialogResult = DialogResult.Cancel, Width = 90, FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary };
+        var assignButton = new Button { Text = "Tayinlash", Width = 90, FlatStyle = FlatStyle.Flat, BackColor = LightColors.Accent, ForeColor = Color.White };
         assignButton.Click += (_, _) => TryAccept();
         buttonPanel.Controls.Add(cancelButton);
         buttonPanel.Controls.Add(assignButton);

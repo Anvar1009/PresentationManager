@@ -46,12 +46,13 @@ public static class DataGridViewTheme
 
         grid.ColumnHeadersDefaultCellStyle.BackColor = headerBackground;
         grid.ColumnHeadersDefaultCellStyle.ForeColor = headerForeground;
-        // Clicking any cell in a column marks that column's header as the "current" one, which WinForms then
-        // paints using these Selection* colors - left at their defaults that meant a blue header background
-        // with whatever near-invisible foreground it inherited. Explicit white keeps the label readable
-        // instead of vanishing into the highlight.
-        grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = accent;
-        grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.White;
+        // Clicking any cell marks that column's header as "current", which WinForms paints using these
+        // Selection* colors regardless of EnableHeadersVisualStyles - trying to just recolor that highlight
+        // (e.g. white text on the accent color) still came out unreadable in practice. Setting both to
+        // exactly match the header's normal (non-selected) colors is the reliable fix: the header simply
+        // never visually changes when a cell in its column is clicked, so there's nothing left to go wrong.
+        grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = headerBackground;
+        grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = headerForeground;
         grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
         grid.ColumnHeadersDefaultCellStyle.Padding = new Padding(10, 8, 10, 8);
         grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;

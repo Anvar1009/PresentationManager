@@ -44,40 +44,41 @@ public sealed class AdminPanelForm : Form
         _presenterRepository = presenterRepository;
 
         Text = "Admin paneli";
-        BackColor = AppColors.Background;
-        ForeColor = AppColors.TextPrimary;
-        Font = new Font("Segoe UI", 9.5f);
+        BackColor = LightColors.Background;
+        ForeColor = LightColors.TextPrimary;
+        Font = new Font("Segoe UI", 10.5f);
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(900, 600);
         WindowState = FormWindowState.Maximized;
 
-        var topPanel = new Panel { Dock = DockStyle.Top, Height = 56, Padding = new Padding(16, 12, 16, 12), BackColor = AppColors.Panel };
+        var topPanel = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(20, 12, 20, 12), BackColor = LightColors.Panel };
+        var topPanelRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
         var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 1 };
-        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
-        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
-        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
 
-        var projectLabel = new Label { Text = "Loyiha:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = AppColors.TextSecondary };
+        var projectLabel = new Label { Text = "Loyiha:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = LightColors.TextSecondary, Font = new Font("Segoe UI", 10.5f) };
         _projectCombo = new ComboBox
         {
             Dock = DockStyle.Fill,
             DropDownStyle = ComboBoxStyle.DropDownList,
             DisplayMember = nameof(Project.Name),
-            BackColor = AppColors.PanelAlt,
-            ForeColor = AppColors.TextPrimary,
-            Font = new Font("Segoe UI", 10.5f)
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            Font = new Font("Segoe UI", 11.5f)
         };
         _projectCombo.SelectedIndexChanged += async (_, _) => await RefreshAllAsync();
 
-        var newProjectButton = new Button { Text = "+ Yangi loyiha", Dock = DockStyle.Fill, Margin = new Padding(8, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = AppColors.Success, ForeColor = AppColors.Background, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+        var newProjectButton = new Button { Text = "+ Yangi loyiha", Dock = DockStyle.Fill, Margin = new Padding(8, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.Success, ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
         newProjectButton.Click += OnNewProjectClick;
 
-        var criteriaButton = new Button { Text = "Baholash mezonlari", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = AppColors.Accent, ForeColor = AppColors.Background, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+        var criteriaButton = new Button { Text = "Baholash mezonlari", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.Accent, ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
         criteriaButton.Click += OnCriteriaClick;
 
-        var judgesButton = new Button { Text = "Hakamlar", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), FlatStyle = FlatStyle.Flat, BackColor = AppColors.DiscussionAction, ForeColor = AppColors.Background, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+        var judgesButton = new Button { Text = "Hakamlar", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(124, 58, 237), ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
         judgesButton.Click += OnJudgesClick;
 
         topLayout.Controls.Add(projectLabel, 0, 0);
@@ -87,18 +88,18 @@ public sealed class AdminPanelForm : Form
         topLayout.Controls.Add(judgesButton, 4, 0);
         topPanel.Controls.Add(topLayout);
 
-        var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9.5f) };
+        var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10.5f) };
 
-        _participantsGrid = DataGridViewTheme.CreateReadOnlyGrid();
-        var participantsTab = new TabPage("Qatnashchilar") { BackColor = AppColors.Background };
+        _participantsGrid = LightGrid();
+        var participantsTab = new TabPage("Qatnashchilar") { BackColor = LightColors.Background };
         participantsTab.Controls.Add(_participantsGrid);
 
-        _presentationsGrid = DataGridViewTheme.CreateReadOnlyGrid();
-        var presentationsTab = new TabPage("Taqdimotlar") { BackColor = AppColors.Background };
+        _presentationsGrid = LightGrid();
+        var presentationsTab = new TabPage("Taqdimotlar") { BackColor = LightColors.Background };
         presentationsTab.Controls.Add(_presentationsGrid);
 
-        _finalScoresGrid = DataGridViewTheme.CreateReadOnlyGrid();
-        var finalScoresTab = new TabPage("Yakuniy baholar") { BackColor = AppColors.Background };
+        _finalScoresGrid = LightGrid();
+        var finalScoresTab = new TabPage("Yakuniy baholar") { BackColor = LightColors.Background };
         finalScoresTab.Controls.Add(_finalScoresGrid);
 
         tabs.TabPages.Add(participantsTab);
@@ -106,10 +107,21 @@ public sealed class AdminPanelForm : Form
         tabs.TabPages.Add(finalScoresTab);
 
         Controls.Add(tabs);
+        Controls.Add(topPanelRule);
         Controls.Add(topPanel);
 
         Load += async (_, _) => await LoadProjectsAsync();
     }
+
+    private static DataGridView LightGrid() => DataGridViewTheme.CreateReadOnlyGrid(
+        background: LightColors.Panel,
+        alternatingBackground: LightColors.PanelAlt,
+        headerBackground: LightColors.PanelAlt,
+        headerForeground: LightColors.TextSecondary,
+        textColor: LightColors.TextPrimary,
+        accent: LightColors.Accent,
+        selectionForeground: Color.White,
+        gridLines: LightColors.Border);
 
     private async Task LoadProjectsAsync()
     {

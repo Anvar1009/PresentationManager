@@ -23,8 +23,8 @@ public sealed class ProjectEditForm : Form
     public ProjectEditForm()
     {
         Text = "Yangi loyiha";
-        BackColor = AppColors.Background;
-        ForeColor = AppColors.TextPrimary;
+        BackColor = LightColors.Background;
+        ForeColor = LightColors.TextPrimary;
         Font = new Font("Segoe UI", 9.5f);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
@@ -79,8 +79,8 @@ public sealed class ProjectEditForm : Form
         AddRow(layout, 4, "Manzili", _locationBox);
 
         var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
-        var cancelButton = new Button { Text = "Bekor qilish", DialogResult = DialogResult.Cancel, Width = 90, FlatStyle = FlatStyle.Flat, BackColor = AppColors.PanelAlt, ForeColor = AppColors.TextPrimary };
-        var saveButton = new Button { Text = "Saqlash", Width = 90, FlatStyle = FlatStyle.Flat, BackColor = AppColors.Accent, ForeColor = AppColors.TextPrimary };
+        var cancelButton = new Button { Text = "Bekor qilish", DialogResult = DialogResult.Cancel, Width = 90, FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary };
+        var saveButton = new Button { Text = "Saqlash", Width = 90, FlatStyle = FlatStyle.Flat, BackColor = LightColors.Accent, ForeColor = Color.White };
         saveButton.Click += OnSaveClick;
         buttonPanel.Controls.Add(cancelButton);
         buttonPanel.Controls.Add(saveButton);
@@ -95,15 +95,15 @@ public sealed class ProjectEditForm : Form
     private static void AddRow(TableLayoutPanel layout, int row, string labelText, Control control)
     {
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        layout.Controls.Add(new Label { Text = labelText, ForeColor = AppColors.TextSecondary, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, row);
+        layout.Controls.Add(new Label { Text = labelText, ForeColor = LightColors.TextSecondary, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, row);
         layout.Controls.Add(control, 1, row);
     }
 
     private static TextBox DarkTextBox() => new()
     {
         Dock = DockStyle.Fill,
-        BackColor = AppColors.PanelAlt,
-        ForeColor = AppColors.TextPrimary,
+        BackColor = LightColors.PanelAlt,
+        ForeColor = LightColors.TextPrimary,
         BorderStyle = BorderStyle.FixedSingle
     };
 
@@ -111,8 +111,8 @@ public sealed class ProjectEditForm : Form
     {
         Dock = DockStyle.Fill,
         Format = DateTimePickerFormat.Short,
-        CalendarForeColor = AppColors.TextPrimary,
-        CalendarMonthBackground = AppColors.PanelAlt
+        CalendarForeColor = LightColors.TextPrimary,
+        CalendarMonthBackground = LightColors.PanelAlt
     };
 
     private void OnSaveClick(object? sender, EventArgs e)
