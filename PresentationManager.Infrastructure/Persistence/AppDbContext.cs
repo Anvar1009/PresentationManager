@@ -11,12 +11,22 @@ public class AppDbContext : DbContext
 
     public DbSet<Presentation> Presentations => Set<Presentation>();
 
+    public DbSet<Project> Projects => Set<Project>();
+
     public DbSet<AppSettings> Settings => Set<AppSettings>();
 
     public DbSet<HistoryEntry> HistoryEntries => Set<HistoryEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Project>(b =>
+        {
+            b.ToTable("Projects");
+            b.HasKey(p => p.Id);
+            b.Property(p => p.Name).IsRequired();
+            b.HasIndex(p => p.Name);
+        });
+
         modelBuilder.Entity<Presentation>(b =>
         {
             b.ToTable("Presentations");
@@ -25,6 +35,11 @@ public class AppDbContext : DbContext
             b.Property(p => p.Title).IsRequired();
             b.Property(p => p.FilePath).IsRequired();
             b.HasIndex(p => p.OrderNumber);
+            b.HasIndex(p => p.ProjectId);
+            b.HasOne<Project>()
+                .WithMany()
+                .HasForeignKey(p => p.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AppSettings>(b =>

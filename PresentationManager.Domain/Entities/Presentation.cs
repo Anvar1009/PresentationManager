@@ -6,6 +6,8 @@ public class Presentation
 {
     public int Id { get; set; }
 
+    public int ProjectId { get; set; }
+
     public required string FullName { get; set; }
 
     public required string Title { get; set; }

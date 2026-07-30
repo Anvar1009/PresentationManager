@@ -19,10 +19,19 @@ public class PresentationRepository : IPresentationRepository
         _dbFactory = dbFactory;
     }
 
-    public async Task<List<Presentation>> GetAllOrderedAsync(CancellationToken ct = default)
+    public async Task<List<Presentation>> GetAllOrderedAsync(int projectId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
-        return await db.Presentations.AsNoTracking().OrderBy(p => p.OrderNumber).ToListAsync(ct);
+        return await db.Presentations.AsNoTracking()
+            .Where(p => p.ProjectId == projectId)
+            .OrderBy(p => p.OrderNumber)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<Presentation>> GetByProjectIdAsync(int projectId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Presentations.AsNoTracking().Where(p => p.ProjectId == projectId).ToListAsync(ct);
     }
 
     public async Task<Presentation?> GetByIdAsync(int id, CancellationToken ct = default)
@@ -78,11 +87,11 @@ public class PresentationRepository : IPresentationRepository
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<List<Presentation>> SearchByNameAsync(string query, CancellationToken ct = default)
+    public async Task<List<Presentation>> SearchByNameAsync(string query, int projectId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         return await db.Presentations.AsNoTracking()
-            .Where(p => EF.Functions.Like(p.FullName, $"%{query}%"))
+            .Where(p => p.ProjectId == projectId && EF.Functions.Like(p.FullName, $"%{query}%"))
             .OrderBy(p => p.OrderNumber)
             .ToListAsync(ct);
     }

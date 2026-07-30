@@ -17,29 +17,30 @@ public sealed class PresentationQueueService
         _fileStorageService = fileStorageService;
     }
 
-    public Task<List<Presentation>> GetAllAsync(CancellationToken ct = default) =>
-        _presentationRepository.GetAllOrderedAsync(ct);
+    public Task<List<Presentation>> GetAllAsync(int projectId, CancellationToken ct = default) =>
+        _presentationRepository.GetAllOrderedAsync(projectId, ct);
 
-    public Task<List<Presentation>> SearchAsync(string query, CancellationToken ct = default) =>
+    public Task<List<Presentation>> SearchAsync(string query, int projectId, CancellationToken ct = default) =>
         string.IsNullOrWhiteSpace(query)
-            ? _presentationRepository.GetAllOrderedAsync(ct)
-            : _presentationRepository.SearchByNameAsync(query, ct);
+            ? _presentationRepository.GetAllOrderedAsync(projectId, ct)
+            : _presentationRepository.SearchByNameAsync(query, projectId, ct);
 
     public async Task<Presentation> AddAsync(
-        string fullName, string title,
+        int projectId, string fullName, string title,
         string sourceFilePath, PresentationFileType fileType,
         int presentationTimeSeconds, int discussionTimeSeconds, CancellationToken ct = default)
     {
         var storedRelativePath = await _fileStorageService.SaveFileAsync(sourceFilePath, ct);
-        var all = await _presentationRepository.GetAllOrderedAsync(ct);
+        var existing = await _presentationRepository.GetAllOrderedAsync(projectId, ct);
 
         var presentation = new Presentation
         {
+            ProjectId = projectId,
             FullName = fullName,
             Title = title,
             FilePath = storedRelativePath,
             FileType = fileType,
-            OrderNumber = all.Count,
+            OrderNumber = existing.Count,
             PresentationTimeSeconds = presentationTimeSeconds,
             DiscussionTimeSeconds = discussionTimeSeconds,
             Status = PresentationStatus.Waiting

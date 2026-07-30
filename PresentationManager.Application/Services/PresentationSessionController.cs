@@ -42,6 +42,10 @@ public sealed class PresentationSessionController
 
     public IReadOnlyList<Presentation> Queue => _queue;
 
+    /// <summary>The project whose presentations <see cref="Queue"/> currently reflects — null means no
+    /// project has been selected yet (e.g. first launch before any project exists).</summary>
+    public int? CurrentProjectId { get; private set; }
+
     public PresentationStatus Status { get; private set; } = PresentationStatus.Waiting;
 
     public int PresentationRemainingSeconds { get; private set; }
@@ -62,9 +66,13 @@ public sealed class PresentationSessionController
     /// <summary>Raised whenever the current/next presentation changes (queue navigation).</summary>
     public event Action? PresentationChanged;
 
-    public async Task InitializeAsync(CancellationToken ct = default)
+    /// <summary>First load on app startup — selects <paramref name="projectId"/> (typically the operator's
+    /// last-active project) as the current project and loads its queue. Pass null when no project is
+    /// selectable yet (e.g. very first launch, before any project has been created).</summary>
+    public async Task InitializeAsync(int? projectId, CancellationToken ct = default)
     {
-        _queue = await _presentationRepository.GetAllOrderedAsync(ct);
+        CurrentProjectId = projectId;
+        _queue = projectId is int id ? await _presentationRepository.GetAllOrderedAsync(id, ct) : [];
         // -1 (not found) means every presentation in the queue is already Finished/Skipped; leaving it at
         // -1 here reports "no current presentation" instead of resurrecting the last finished one as Ready.
         _currentIndex = _queue.FindIndex(p => p.Status != PresentationStatus.Finished && p.Status != PresentationStatus.Skipped);
@@ -79,12 +87,27 @@ public sealed class PresentationSessionController
         PresentationChanged?.Invoke();
     }
 
+    /// <summary>Switches the active project (e.g. the operator picked a different one from the Loyihalar
+    /// dialog) and reloads the queue to that project's presentations. Any timer in progress is stopped —
+    /// switching projects is an explicit operator action, so nothing should keep running against the
+    /// project being navigated away from.</summary>
+    public async Task SetActiveProjectAsync(int? projectId, CancellationToken ct = default)
+    {
+        _timer.Stop();
+        await InitializeAsync(projectId, ct);
+    }
+
     /// <summary>Reloads the queue from the database after an external CRUD/reorder operation, preserving
-    /// the current pointer by presentation Id where possible.</summary>
+    /// the current pointer by presentation Id where possible. No-ops if no project is currently active.</summary>
     public async Task ReloadQueueAsync(CancellationToken ct = default)
     {
+        if (CurrentProjectId is not int projectId)
+        {
+            return;
+        }
+
         var currentId = CurrentPresentation?.Id;
-        _queue = await _presentationRepository.GetAllOrderedAsync(ct);
+        _queue = await _presentationRepository.GetAllOrderedAsync(projectId, ct);
         _currentIndex = currentId is null ? -1 : _queue.FindIndex(p => p.Id == currentId);
 
         if (_currentIndex < 0)

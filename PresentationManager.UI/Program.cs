@@ -40,6 +40,7 @@ static class Program
                 services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
 
                 services.AddSingleton<IPresentationRepository, PresentationRepository>();
+                services.AddSingleton<IProjectRepository, ProjectRepository>();
                 services.AddSingleton<ISettingsRepository, SettingsRepository>();
                 services.AddSingleton<IHistoryRepository, HistoryRepository>();
                 services.AddSingleton<IFileStorageService>(_ => new FileStorageService(Path.Combine(appDataDir, "Files")));
@@ -48,6 +49,7 @@ static class Program
                 services.AddSingleton<TimerEngine>();
                 services.AddSingleton<PresentationSessionController>();
                 services.AddSingleton<PresentationQueueService>();
+                services.AddSingleton<ProjectService>();
 
                 services.AddSingleton<PresentationForm>();
                 services.AddSingleton<AdminForm>();

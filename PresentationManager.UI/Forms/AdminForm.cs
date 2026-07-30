@@ -24,6 +24,7 @@ public sealed class AdminForm : Form
     private readonly ISettingsRepository _settingsRepository;
     private readonly IFileStorageService _fileStorageService;
     private readonly PresentationQueueService _queueService;
+    private readonly ProjectService _projectService;
     private readonly PresentationForm _presentationForm;
 
     private ListBox _queueListBox = null!;
@@ -31,6 +32,7 @@ public sealed class AdminForm : Form
     private List<Presentation> _displayedQueue = [];
     private ListBox _logsListBox = null!;
     private Point _queueDragStart;
+    private Label _projectLabel = null!;
 
     private Label _currentNameLabel = null!;
     private Label _currentTitleLabel = null!;
@@ -50,6 +52,7 @@ public sealed class AdminForm : Form
         ISettingsRepository settingsRepository,
         IFileStorageService fileStorageService,
         PresentationQueueService queueService,
+        ProjectService projectService,
         PresentationForm presentationForm)
     {
         _session = session;
@@ -57,6 +60,7 @@ public sealed class AdminForm : Form
         _settingsRepository = settingsRepository;
         _fileStorageService = fileStorageService;
         _queueService = queueService;
+        _projectService = projectService;
         _presentationForm = presentationForm;
 
         Text = "Taqdimotlar Boshqaruvi - Administrator";
@@ -76,6 +80,10 @@ public sealed class AdminForm : Form
     private void BuildMenu()
     {
         var menu = new MenuStrip { BackColor = AppColors.Panel, ForeColor = AppColors.TextPrimary };
+
+        var projectsItem = new ToolStripMenuItem("Loyihalar");
+        projectsItem.Click += (_, _) => OnProjectsClick();
+        menu.Items.Add(projectsItem);
 
         var settingsItem = new ToolStripMenuItem("Sozlamalar");
         settingsItem.Click += (_, _) => OnSettingsClick();
@@ -103,15 +111,80 @@ public sealed class AdminForm : Form
         }
     }
 
+    /// <summary>Opens the Loyihalar dialog and reconciles whatever it decides the active project should be
+    /// once it closes — reached either by explicitly activating a different project or, if the previously
+    /// active one was just deleted, by that project id becoming null. Runs the same reconciliation
+    /// regardless of DialogResult (Yopish vs. double-click activation) since both can change the answer.</summary>
+    private async void OnProjectsClick()
+    {
+        try
+        {
+            using var dialog = new ProjectManagementForm(_projectService, _session.CurrentProjectId);
+            dialog.ShowDialog(this);
+            await ApplyActiveProjectAsync(dialog.SelectedActiveProjectId);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Loyihalarda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>Switches the session to <paramref name="projectId"/> (only if it actually differs from what's
+    /// already active), persists it as the operator's last-active project, and refreshes every panel that
+    /// depends on the active project/queue.</summary>
+    private async Task ApplyActiveProjectAsync(int? projectId)
+    {
+        if (projectId != _session.CurrentProjectId)
+        {
+            await _session.SetActiveProjectAsync(projectId);
+
+            var settings = await _settingsRepository.GetAsync();
+            settings.LastActiveProjectId = projectId;
+            await _settingsRepository.SaveAsync(settings);
+        }
+
+        await RefreshProjectLabelAsync();
+        RefreshQueueList();
+        RefreshCurrentPanel();
+    }
+
+    private async Task RefreshProjectLabelAsync()
+    {
+        if (_session.CurrentProjectId is not int projectId)
+        {
+            _projectLabel.Text = "Loyiha tanlanmagan - \"Loyihalar\" menyusidan tanlang";
+            return;
+        }
+
+        var projects = await _projectService.GetAllAsync();
+        var project = projects.FirstOrDefault(p => p.Id == projectId);
+        _projectLabel.Text = project is null ? "Loyiha tanlanmagan" : $"Loyiha: {project.Name}";
+    }
+
     private async void OnFormLoad(object? sender, EventArgs e)
     {
         var primary = Screen.PrimaryScreen ?? Screen.AllScreens[0];
         Bounds = primary.WorkingArea;
 
-        await _session.InitializeAsync();
+        var projects = await _projectService.GetAllAsync();
+        var settings = await _settingsRepository.GetAsync();
+        var startupProjectId = projects.Any(p => p.Id == settings.LastActiveProjectId)
+            ? settings.LastActiveProjectId
+            : null;
+
+        await _session.InitializeAsync(startupProjectId);
+        await RefreshProjectLabelAsync();
         RefreshQueueList();
         RefreshCurrentPanel();
         await RefreshLogsAsync();
+
+        // No usable project yet (first launch, or the last-active one was deleted since) - send the
+        // operator straight to Loyihalar instead of leaving them stuck on an empty queue with no obvious
+        // next step (Qo'shish stays disabled with no project selected - see OnAddClick).
+        if (startupProjectId is null)
+        {
+            OnProjectsClick();
+        }
 
         // Namoyish Ekrani is not shown until the operator actually presses Boshlash — see OnStartClick.
     }
@@ -228,6 +301,15 @@ public sealed class AdminForm : Form
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
         };
 
+        _projectLabel = new Label
+        {
+            Text = "Loyiha tanlanmagan",
+            Dock = DockStyle.Top,
+            Height = 20,
+            ForeColor = AppColors.Accent,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+        };
+
         // A search box wrapper that owns its own top/bottom gap directly (rather than relying on Margin,
         // which sibling Dock.Top controls don't reliably honor) so the toolbar below it never crowds it.
         var searchWrap = new Panel { Dock = DockStyle.Top, Height = 54, Padding = new Padding(0, 8, 0, 22) };
@@ -318,6 +400,7 @@ public sealed class AdminForm : Form
         panel.Controls.Add(tableHeader);
         panel.Controls.Add(toolbarWrap);
         panel.Controls.Add(searchWrap);
+        panel.Controls.Add(_projectLabel);
         panel.Controls.Add(header);
         return panel;
     }
@@ -493,6 +576,12 @@ public sealed class AdminForm : Form
 
     private async void OnAddClick()
     {
+        if (_session.CurrentProjectId is not int projectId)
+        {
+            MessageBox.Show(this, "Avval \"Loyihalar\" menyusidan loyiha tanlang.", "Loyiha tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
         using var dialog = new PresentationEditForm("Taqdimot qo'shish", requireFile: true);
         if (dialog.ShowDialog(this) != DialogResult.OK)
         {
@@ -502,7 +591,7 @@ public sealed class AdminForm : Form
         try
         {
             await _queueService.AddAsync(
-                dialog.FullName, dialog.Title,
+                projectId, dialog.FullName, dialog.Title,
                 dialog.SelectedFilePath!, dialog.SelectedFileType!.Value,
                 dialog.PresentationTimeSeconds, dialog.DiscussionTimeSeconds);
             await _session.ReloadQueueAsync();

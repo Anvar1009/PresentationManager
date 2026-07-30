@@ -20,4 +20,8 @@ public class AppSettings
     public bool AlarmEnabled { get; set; } = true;
 
     public string StorageFolderPath { get; set; } = "Files";
+
+    /// <summary>Id of the project the operator had active when the app was last closed, so it's
+    /// automatically re-selected on next launch instead of forcing a re-pick every time.</summary>
+    public int? LastActiveProjectId { get; set; }
 }
