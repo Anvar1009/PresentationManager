@@ -139,8 +139,19 @@ public sealed class RoundedButton : Button
 
     private static GraphicsPath RoundedRectPath(RectangleF rect, float radius)
     {
-        var d = radius * 2;
         var path = new GraphicsPath();
+
+        // GDI+'s AddArc throws ArgumentException ("Parameter is not valid") when given a zero-size bounding
+        // box - CornerRadius = 0 (a plain sharp-cornered rectangle, as used e.g. by SuperAdminPanelForm's
+        // refresh button) would otherwise crash every single paint. A plain rectangle is exactly what a
+        // zero radius should look like anyway, so it's not just a guard, it's the correct shape too.
+        var d = radius * 2;
+        if (d <= 0)
+        {
+            path.AddRectangle(rect);
+            return path;
+        }
+
         path.AddArc(rect.X, rect.Y, d, d, 180, 90);
         path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
         path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);

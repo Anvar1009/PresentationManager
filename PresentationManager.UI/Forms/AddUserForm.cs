@@ -20,8 +20,8 @@ public sealed class AddUserForm : Form
     public AddUserForm()
     {
         Text = "Yangi foydalanuvchi";
-        BackColor = AppColors.Background;
-        ForeColor = AppColors.TextPrimary;
+        BackColor = LightColors.Background;
+        ForeColor = LightColors.TextPrimary;
         Font = new Font("Segoe UI", 9.5f);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
@@ -33,16 +33,16 @@ public sealed class AddUserForm : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        _usernameBox = DarkTextBox();
-        _passwordBox = DarkTextBox();
+        _usernameBox = FieldTextBox();
+        _passwordBox = FieldTextBox();
         _passwordBox.UseSystemPasswordChar = true;
-        _fullNameBox = DarkTextBox();
+        _fullNameBox = FieldTextBox();
         _roleCombo = new ComboBox
         {
             Dock = DockStyle.Fill,
             DropDownStyle = ComboBoxStyle.DropDownList,
-            BackColor = AppColors.PanelAlt,
-            ForeColor = AppColors.TextPrimary
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary
         };
         _roleCombo.Items.AddRange([UserRole.Operator, UserRole.Admin, UserRole.SuperAdmin]);
         _roleCombo.SelectedIndex = 0;
@@ -53,8 +53,8 @@ public sealed class AddUserForm : Form
         AddRow(layout, 3, "Rol *", _roleCombo);
 
         var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
-        var cancelButton = new Button { Text = "Bekor qilish", DialogResult = DialogResult.Cancel, Width = 90, FlatStyle = FlatStyle.Flat, BackColor = AppColors.PanelAlt, ForeColor = AppColors.TextPrimary };
-        var saveButton = new Button { Text = "Saqlash", Width = 90, FlatStyle = FlatStyle.Flat, BackColor = AppColors.Accent, ForeColor = AppColors.TextPrimary };
+        var cancelButton = new Button { Text = "Bekor qilish", DialogResult = DialogResult.Cancel, Width = 90, FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary };
+        var saveButton = new Button { Text = "Saqlash", Width = 90, FlatStyle = FlatStyle.Flat, BackColor = LightColors.Accent, ForeColor = Color.White };
         saveButton.Click += OnSaveClick;
         buttonPanel.Controls.Add(cancelButton);
         buttonPanel.Controls.Add(saveButton);
@@ -69,15 +69,15 @@ public sealed class AddUserForm : Form
     private static void AddRow(TableLayoutPanel layout, int row, string labelText, Control control)
     {
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        layout.Controls.Add(new Label { Text = labelText, ForeColor = AppColors.TextSecondary, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, row);
+        layout.Controls.Add(new Label { Text = labelText, ForeColor = LightColors.TextSecondary, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, row);
         layout.Controls.Add(control, 1, row);
     }
 
-    private static TextBox DarkTextBox() => new()
+    private static TextBox FieldTextBox() => new()
     {
         Dock = DockStyle.Fill,
-        BackColor = AppColors.PanelAlt,
-        ForeColor = AppColors.TextPrimary,
+        BackColor = LightColors.PanelAlt,
+        ForeColor = LightColors.TextPrimary,
         BorderStyle = BorderStyle.FixedSingle
     };
 

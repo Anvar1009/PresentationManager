@@ -36,6 +36,18 @@ public sealed class PresentationBotHostedService : BackgroundService
         OneTimeKeyboard = true
     };
 
+    /// <summary>Persistent bottom panel shown to judges (deliberately NOT <c>OneTimeKeyboard</c>, unlike
+    /// <see cref="ContactRequestKeyboard"/>, so it stays docked at the bottom of the chat across every
+    /// message) — tapping "📋 Loyihalar" jumps straight back to the project/presentation menu without
+    /// needing /start.</summary>
+    private static readonly ReplyKeyboardMarkup JudgeMainKeyboard = new(
+        new[] { new KeyboardButton("📋 Loyihalar") })
+    {
+        ResizeKeyboard = true
+    };
+
+    private const string JudgeProjectsButtonText = "📋 Loyihalar";
+
     private readonly PresentationBotOptions _options;
     private readonly ProjectService _projectService;
     private readonly PresentationQueueService _queueService;
@@ -136,7 +148,7 @@ public sealed class PresentationBotHostedService : BackgroundService
     {
         var chatId = message.Chat.Id;
 
-        if (message.Text is "/start" or "/cancel")
+        if (message.Text is "/start" or "/cancel" or JudgeProjectsButtonText)
         {
             _sessions.TryRemove(chatId, out _);
             _judgeSessions.TryRemove(chatId, out _);
@@ -205,6 +217,10 @@ public sealed class PresentationBotHostedService : BackgroundService
         var judgeAssignments = await _judgeService.GetLinkedAssignmentsByChatIdAsync(chatId, ct);
         if (judgeAssignments.Count > 0)
         {
+            // Sent as its own message (a reply keyboard can't ride along on the inline-keyboard menu message
+            // below) - keeps the "📋 Loyihalar" button docked at the bottom of the chat from here on, so
+            // returning to this menu later never needs /start again.
+            await botClient.SendMessage(chatId, "🧑‍⚖️ Hakam paneli", replyMarkup: JudgeMainKeyboard, cancellationToken: ct);
             await ShowJudgeProjectMenuAsync(botClient, chatId, judgeAssignments, ct);
             return;
         }
@@ -253,7 +269,8 @@ public sealed class PresentationBotHostedService : BackgroundService
             var projectName = projects.FirstOrDefault(p => p.Id == judge.ProjectId)?.Name ?? "loyiha";
 
             await botClient.SendMessage(chatId,
-                $"🎉 Tabriklaymiz! Siz \"{projectName}\" loyihasi uchun hakam etib tayinlandingiz.\nBaholashni boshlash uchun /start bosing.");
+                $"🎉 Tabriklaymiz! Siz \"{projectName}\" loyihasi uchun hakam etib tayinlandingiz.\nPastdagi \"📋 Loyihalar\" tugmasi orqali istalgan vaqt boshlashingiz mumkin.",
+                replyMarkup: JudgeMainKeyboard);
         }
         catch (Exception ex)
         {
@@ -434,11 +451,15 @@ public sealed class PresentationBotHostedService : BackgroundService
         var criteria = await _criterionService.GetByProjectIdAsync(session.ProjectId, ct);
         var progress = await _scoreService.GetJudgeProgressAsync(session.PresentationId, session.JudgeId, ct);
 
+        // Inline buttons have no real background color in the Bot API - a leading green/white square is the
+        // closest equivalent, giving the same "scored vs. not" read at a glance the operator asked for.
         var buttons = criteria
             .Select(c =>
             {
-                var scoreText = progress.TryGetValue(c.Id, out var value) ? $"{value}/{c.MaxScore}" : $"—/{c.MaxScore}";
-                return new[] { InlineKeyboardButton.WithCallbackData($"{c.Name} ({scoreText})", $"jcrit:{c.Id}") };
+                var isScored = progress.TryGetValue(c.Id, out var value);
+                var mark = isScored ? "🟩" : "⬜";
+                var scoreText = isScored ? $"{value}/{c.MaxScore}" : $"—/{c.MaxScore}";
+                return new[] { InlineKeyboardButton.WithCallbackData($"{mark} {c.Name} ({scoreText})", $"jcrit:{c.Id}") };
             })
             .ToList();
         buttons.Add([InlineKeyboardButton.WithCallbackData("✅ Yakunlash", "jdone")]);
@@ -580,7 +601,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         }
 
         await botClient.AnswerCallbackQuery(callbackQuery.Id, "✅ Yakunlandi", cancellationToken: ct);
-        await botClient.SendMessage(chatId.Value, "✅ Baholash yakunlandi.", cancellationToken: ct);
+        await botClient.SendMessage(chatId.Value, "✅ Baholash yakunlandi.", replyMarkup: JudgeMainKeyboard, cancellationToken: ct);
 
         var assignments = await _judgeService.GetLinkedAssignmentsByChatIdAsync(chatId.Value, ct);
         var judge = assignments.FirstOrDefault(a => a.Id == session.JudgeId);

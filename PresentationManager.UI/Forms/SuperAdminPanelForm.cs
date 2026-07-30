@@ -1,5 +1,7 @@
+using System.Drawing.Drawing2D;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
+using PresentationManager.UI.Controls;
 using PresentationManager.UI.Localization;
 using PresentationManager.UI.Theme;
 
@@ -10,9 +12,15 @@ namespace PresentationManager.UI.Forms;
 /// could ever populate the Users table the login system itself depends on.</summary>
 public sealed class SuperAdminPanelForm : Form
 {
-    private static readonly string[] Sections =
+    private static readonly (string Icon, string Label)[] Sections =
     [
-        "Loyihalar", "Taqdimotlar", "Taqdimotchilar", "Hakamlar", "Foydalanuvchilar", "Baholar", "Jurnal"
+        ("📁", "Loyihalar"),
+        ("🎤", "Taqdimotlar"),
+        ("🎓", "Taqdimotchilar"),
+        ("⚖️", "Hakamlar"),
+        ("👥", "Foydalanuvchilar"),
+        ("⭐", "Baholar"),
+        ("🕒", "Jurnal")
     ];
 
     private readonly ProjectService _projectService;
@@ -25,8 +33,11 @@ public sealed class SuperAdminPanelForm : Form
     private readonly IHistoryRepository _historyRepository;
 
     private readonly ListBox _sectionList;
+    private readonly Label _sectionTitleLabel;
+    private readonly Label _rowCountLabel;
     private readonly DataGridView _grid;
-    private readonly Button _addUserButton;
+    private readonly RoundedButton _addUserButton;
+    private readonly ModernOutlineButton _refreshButton;
 
     public SuperAdminPanelForm(
         ProjectService projectService,
@@ -48,64 +59,262 @@ public sealed class SuperAdminPanelForm : Form
         _historyRepository = historyRepository;
 
         Text = "SuperAdmin paneli";
-        BackColor = AppColors.Background;
-        ForeColor = AppColors.TextPrimary;
+        BackColor = LightColors.Background;
+        ForeColor = LightColors.TextPrimary;
         Font = new Font("Segoe UI", 9.5f);
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(1000, 650);
+        MinimumSize = new Size(1050, 680);
         WindowState = FormWindowState.Maximized;
 
+        // ---------- Top header ----------
+        var header = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = LightColors.Panel, Padding = new Padding(28, 0, 24, 0) };
+        var headerBottomRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
+        var headerLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 165));
+
+        var titleStack = new Panel { Dock = DockStyle.Fill };
+        var titleLabel = new Label
+        {
+            Text = "SuperAdmin paneli",
+            Dock = DockStyle.Top,
+            Height = 30,
+            Font = new Font("Segoe UI", 15, FontStyle.Bold),
+            ForeColor = LightColors.TextPrimary,
+            TextAlign = ContentAlignment.BottomLeft
+        };
+        var subtitleLabel = new Label
+        {
+            Text = "Barcha jadvallar va jarayonlar — faqat ko'rish rejimi",
+            Dock = DockStyle.Top,
+            Height = 20,
+            Font = new Font("Segoe UI", 9f),
+            ForeColor = LightColors.TextSecondary,
+            TextAlign = ContentAlignment.TopLeft
+        };
+        titleStack.Controls.Add(subtitleLabel);
+        titleStack.Controls.Add(titleLabel);
+
+        // Dock.Fill inside a 165px column with a 20px right margin yields the exact 145px width; symmetric
+        // top/bottom margin against the 72px header row controls the height (well under the 40px spec
+        // default here) while keeping it vertically centered, never touching the row's edges. At this
+        // height the control's own default vertical Padding (10/10) would leave only 4px for content and
+        // clip the 16px icon, so it's tightened here to just fit it.
+        _refreshButton = new ModernOutlineButton
+        {
+            Text = "Yangilash",
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 24, 20, 24),
+            Padding = new Padding(18, 4, 18, 4)
+        };
+        _refreshButton.Click += async (_, _) => await RefreshSelectedSectionAsync();
+
+        headerLayout.Controls.Add(titleStack, 0, 0);
+        headerLayout.Controls.Add(_refreshButton, 1, 0);
+        header.Controls.Add(headerLayout);
+
+        // ---------- Left nav ----------
         _sectionList = new ListBox
         {
             Dock = DockStyle.Fill,
-            BackColor = AppColors.Panel,
-            ForeColor = AppColors.TextPrimary,
+            BackColor = LightColors.Panel,
+            ForeColor = LightColors.TextPrimary,
             BorderStyle = BorderStyle.None,
             Font = new Font("Segoe UI", 10.5f),
-            IntegralHeight = false
+            IntegralHeight = false,
+            DrawMode = DrawMode.OwnerDrawFixed,
+            ItemHeight = 46,
+            Cursor = Cursors.Hand
         };
-        _sectionList.Items.AddRange(Sections);
+        _sectionList.Items.AddRange(Sections.Select(s => (object)s).ToArray());
+        _sectionList.DrawItem += OnSectionDrawItem;
         _sectionList.SelectedIndexChanged += async (_, _) => await RefreshSelectedSectionAsync();
+        _sectionList.MouseMove += (_, e) => SetHoveredIndex(_sectionList.IndexFromPoint(e.Location));
+        _sectionList.MouseLeave += (_, _) => SetHoveredIndex(-1);
 
-        var sectionWrap = new Panel { Dock = DockStyle.Left, Width = 200, BackColor = AppColors.Panel, Padding = new Padding(8) };
-        sectionWrap.Controls.Add(_sectionList);
+        var navWrap = new Panel { Dock = DockStyle.Left, Width = 232, BackColor = LightColors.Panel, Padding = new Padding(10, 16, 10, 16) };
+        navWrap.Controls.Add(_sectionList);
 
-        _grid = DataGridViewTheme.CreateReadOnlyGrid();
-        var gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12) };
-        gridWrap.Controls.Add(_grid);
+        var navDivider = new Panel { Dock = DockStyle.Left, Width = 1, BackColor = LightColors.Border };
 
-        _addUserButton = new Button
+        // ---------- Content: card header (section title + count + add-user) over the grid ----------
+        var contentPanel = new Panel { Dock = DockStyle.Fill, BackColor = LightColors.Background, Padding = new Padding(24) };
+
+        var card = new Panel { Dock = DockStyle.Fill, BackColor = LightColors.Panel };
+        card.Paint += (_, e) => e.Graphics.DrawRectangle(new Pen(LightColors.Border), 0, 0, card.Width - 1, card.Height - 1);
+
+        var cardHeader = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(20, 0, 16, 0) };
+        var cardHeaderLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+
+        _sectionTitleLabel = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 13, FontStyle.Bold),
+            ForeColor = LightColors.TextPrimary
+        };
+        _rowCountLabel = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(12, 0, 0, 0),
+            Font = new Font("Segoe UI", 9.5f),
+            ForeColor = LightColors.TextSecondary
+        };
+
+        _addUserButton = new RoundedButton
         {
             Text = "+ Foydalanuvchi qo'shish",
             Dock = DockStyle.Fill,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = AppColors.Success,
-            ForeColor = AppColors.Background,
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Margin = new Padding(0, 13, 0, 13),
+            BackColor = LightColors.Success,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            CornerRadius = 8,
             Visible = false
         };
         _addUserButton.Click += OnAddUserClick;
-        var addUserWrap = new Panel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(12, 0, 12, 12) };
-        addUserWrap.Controls.Add(_addUserButton);
 
-        var contentPanel = new Panel { Dock = DockStyle.Fill };
-        contentPanel.Controls.Add(gridWrap);
-        contentPanel.Controls.Add(addUserWrap);
+        cardHeaderLayout.Controls.Add(_sectionTitleLabel, 0, 0);
+        cardHeaderLayout.Controls.Add(_rowCountLabel, 1, 0);
+        cardHeaderLayout.Controls.Add(_addUserButton, 2, 0);
+        cardHeader.Controls.Add(cardHeaderLayout);
+
+        var cardHeaderRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
+
+        _grid = DataGridViewTheme.CreateReadOnlyGrid(
+            background: LightColors.Panel,
+            alternatingBackground: LightColors.PanelAlt,
+            headerBackground: LightColors.PanelAlt,
+            headerForeground: LightColors.TextSecondary,
+            textColor: LightColors.TextPrimary,
+            accent: LightColors.Accent,
+            selectionForeground: Color.White,
+            gridLines: LightColors.Border);
+        var gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16) };
+        gridWrap.Controls.Add(_grid);
+
+        card.Controls.Add(gridWrap);
+        card.Controls.Add(cardHeaderRule);
+        card.Controls.Add(cardHeader);
+        contentPanel.Controls.Add(card);
 
         Controls.Add(contentPanel);
-        Controls.Add(sectionWrap);
+        Controls.Add(navDivider);
+        Controls.Add(navWrap);
+        Controls.Add(headerBottomRule);
+        Controls.Add(header);
 
         Load += (_, _) => _sectionList.SelectedIndex = 0;
     }
 
+    private int _hoveredSectionIndex = -1;
+
+    /// <summary>ListBox never actually reports <see cref="DrawItemState.HotLight"/> for its own items (that
+    /// flag is a menu/toolstrip thing) - hover has to be tracked by hand from MouseMove, same approach
+    /// <see cref="PresentationPickerForm"/> uses for its list.</summary>
+    private void SetHoveredIndex(int index)
+    {
+        if (index == _hoveredSectionIndex)
+        {
+            return;
+        }
+
+        var previous = _hoveredSectionIndex;
+        _hoveredSectionIndex = index;
+        if (previous >= 0 && previous < _sectionList.Items.Count)
+        {
+            _sectionList.Invalidate(_sectionList.GetItemRectangle(previous));
+        }
+
+        if (_hoveredSectionIndex >= 0 && _hoveredSectionIndex < _sectionList.Items.Count)
+        {
+            _sectionList.Invalidate(_sectionList.GetItemRectangle(_hoveredSectionIndex));
+        }
+    }
+
+    /// <summary>Owner-draws each nav row as an icon + label with a rounded accent tint and left bar when
+    /// selected, and a subtle hover tint otherwise — matching the rest of the app's dark, card-based look
+    /// instead of a plain default-styled ListBox.</summary>
+    private void OnSectionDrawItem(object? sender, DrawItemEventArgs e)
+    {
+        if (e.Index < 0 || e.Index >= Sections.Length)
+        {
+            e.DrawBackground();
+            return;
+        }
+
+        var (icon, label) = Sections[e.Index];
+        var isSelected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+        var isHot = e.Index == _hoveredSectionIndex;
+        var bounds = e.Bounds;
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+
+        using (var bgBrush = new SolidBrush(LightColors.Panel))
+        {
+            g.FillRectangle(bgBrush, bounds);
+        }
+
+        var rowRect = Rectangle.Inflate(bounds, -2, -3);
+        if (isSelected || isHot)
+        {
+            var fillColor = isSelected ? Blend(LightColors.Panel, LightColors.Accent, 0.14f) : LightColors.PanelAlt;
+            using var path = RoundedRect(rowRect, 8f);
+            using var fillBrush = new SolidBrush(fillColor);
+            g.FillPath(fillBrush, path);
+        }
+
+        if (isSelected)
+        {
+            using var barBrush = new SolidBrush(LightColors.Accent);
+            g.FillRectangle(barBrush, bounds.X, bounds.Y + 8, 4, bounds.Height - 16);
+        }
+
+        var iconRect = new Rectangle(bounds.X + 16, bounds.Y, 28, bounds.Height);
+        TextRenderer.DrawText(g, icon, Font, iconRect, LightColors.TextPrimary,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+
+        var labelRect = new Rectangle(bounds.X + 50, bounds.Y, bounds.Width - 60, bounds.Height);
+        var labelFont = isSelected ? new Font(_sectionList.Font, FontStyle.Bold) : _sectionList.Font;
+        TextRenderer.DrawText(g, label, labelFont, labelRect, isSelected ? LightColors.TextPrimary : LightColors.TextSecondary,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
+    }
+
+    private static Color Blend(Color from, Color to, float amount) => Color.FromArgb(
+        (int)(from.R + (to.R - from.R) * amount),
+        (int)(from.G + (to.G - from.G) * amount),
+        (int)(from.B + (to.B - from.B) * amount));
+
+    private static GraphicsPath RoundedRect(Rectangle rect, float radius)
+    {
+        var d = radius * 2;
+        var path = new GraphicsPath();
+        path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
     private async Task RefreshSelectedSectionAsync()
     {
-        var section = _sectionList.SelectedItem as string;
-        _addUserButton.Visible = section == "Foydalanuvchilar";
+        if (_sectionList.SelectedItem is not (string icon, string label))
+        {
+            return;
+        }
+
+        _sectionTitleLabel.Text = $"{icon} {label}";
+        _addUserButton.Visible = label == "Foydalanuvchilar";
 
         try
         {
-            switch (section)
+            switch (label)
             {
                 case "Loyihalar":
                     await LoadProjectsAsync();
@@ -129,9 +338,12 @@ public sealed class SuperAdminPanelForm : Form
                     await LoadHistoryAsync();
                     break;
             }
+
+            _rowCountLabel.Text = $"{_grid.RowCount} ta yozuv";
         }
         catch (Exception ex)
         {
+            _rowCountLabel.Text = string.Empty;
             MessageBox.Show(this, ex.Message, "Ma'lumotlarni yuklashda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
@@ -252,6 +464,7 @@ public sealed class SuperAdminPanelForm : Form
         {
             await _userService.CreateAsync(dialog.Username, dialog.Password, dialog.FullName, dialog.Role);
             await LoadUsersAsync();
+            _rowCountLabel.Text = $"{_grid.RowCount} ta yozuv";
         }
         catch (Exception ex)
         {
