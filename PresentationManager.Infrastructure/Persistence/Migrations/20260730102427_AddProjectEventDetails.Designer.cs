@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PresentationManager.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PresentationManager.Infrastructure.Persistence;
 namespace PresentationManager.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260730102427_AddProjectEventDetails")]
+    partial class AddProjectEventDetails
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -64,37 +67,6 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.ToTable("Settings", (string)null);
                 });
 
-            modelBuilder.Entity("PresentationManager.Domain.Entities.EvaluationCriterion", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("MaxScore")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("OrderNumber")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ProjectId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProjectId");
-
-                    b.ToTable("EvaluationCriteria", (string)null);
-                });
-
             modelBuilder.Entity("PresentationManager.Domain.Entities.HistoryEntry", b =>
                 {
                     b.Property<int>("Id")
@@ -121,41 +93,6 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.HasIndex("PresentationId");
 
                     b.ToTable("History", (string)null);
-                });
-
-            modelBuilder.Entity("PresentationManager.Domain.Entities.Judge", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FullName")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PhoneNumber")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("ProjectId")
-                        .HasColumnType("integer");
-
-                    b.Property<long?>("TelegramChatId")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PhoneNumber");
-
-                    b.HasIndex("ProjectId");
-
-                    b.HasIndex("TelegramChatId");
-
-                    b.ToTable("Judges", (string)null);
                 });
 
             modelBuilder.Entity("PresentationManager.Domain.Entities.Presentation", b =>
@@ -189,9 +126,6 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.Property<int>("PresentationTimeSeconds")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("PresenterId")
-                        .HasColumnType("integer");
-
                     b.Property<int>("ProjectId")
                         .HasColumnType("integer");
 
@@ -208,8 +142,6 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OrderNumber");
-
-                    b.HasIndex("PresenterId");
 
                     b.HasIndex("ProjectId");
 
@@ -289,130 +221,11 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.ToTable("Projects", (string)null);
                 });
 
-            modelBuilder.Entity("PresentationManager.Domain.Entities.Score", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("CriterionId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("JudgeId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("PresentationId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Value")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CriterionId");
-
-                    b.HasIndex("JudgeId");
-
-                    b.HasIndex("PresentationId", "JudgeId", "CriterionId")
-                        .IsUnique();
-
-                    b.ToTable("Scores", (string)null);
-                });
-
-            modelBuilder.Entity("PresentationManager.Domain.Entities.User", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("PasswordHash")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("Role")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Username")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Username")
-                        .IsUnique();
-
-                    b.ToTable("Users", (string)null);
-                });
-
-            modelBuilder.Entity("PresentationManager.Domain.Entities.EvaluationCriterion", b =>
-                {
-                    b.HasOne("PresentationManager.Domain.Entities.Project", null)
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PresentationManager.Domain.Entities.Judge", b =>
-                {
-                    b.HasOne("PresentationManager.Domain.Entities.Project", null)
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("PresentationManager.Domain.Entities.Presentation", b =>
                 {
-                    b.HasOne("PresentationManager.Domain.Entities.Presenter", null)
-                        .WithMany()
-                        .HasForeignKey("PresenterId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("PresentationManager.Domain.Entities.Project", null)
                         .WithMany()
                         .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("PresentationManager.Domain.Entities.Score", b =>
-                {
-                    b.HasOne("PresentationManager.Domain.Entities.EvaluationCriterion", null)
-                        .WithMany()
-                        .HasForeignKey("CriterionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("PresentationManager.Domain.Entities.Judge", null)
-                        .WithMany()
-                        .HasForeignKey("JudgeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("PresentationManager.Domain.Entities.Presentation", null)
-                        .WithMany()
-                        .HasForeignKey("PresentationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

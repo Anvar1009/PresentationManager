@@ -4,6 +4,10 @@ namespace PresentationManager.Application.Interfaces;
 
 public interface IPresentationRepository
 {
+    /// <summary>Every presentation across every project — used by the SuperAdmin panel's read-only overview,
+    /// not by the queue/session flow (which is always scoped to a single active project).</summary>
+    Task<List<Presentation>> GetAllAsync(CancellationToken ct = default);
+
     Task<List<Presentation>> GetAllOrderedAsync(int projectId, CancellationToken ct = default);
 
     Task<Presentation?> GetByIdAsync(int id, CancellationToken ct = default);

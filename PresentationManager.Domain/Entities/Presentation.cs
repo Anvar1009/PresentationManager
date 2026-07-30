@@ -8,6 +8,10 @@ public class Presentation
 
     public int ProjectId { get; set; }
 
+    /// <summary>Set when submitted via the Telegram bot (linked to the registered <see cref="Presenter"/>);
+    /// null when the operator adds it manually, since there's no bot registration to link to in that case.</summary>
+    public int? PresenterId { get; set; }
+
     public required string FullName { get; set; }
 
     public required string Title { get; set; }

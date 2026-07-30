@@ -20,6 +20,10 @@ public sealed class PresentationQueueService
     public Task<List<Presentation>> GetAllAsync(int projectId, CancellationToken ct = default) =>
         _presentationRepository.GetAllOrderedAsync(projectId, ct);
 
+    /// <summary>Every presentation across every project — for the SuperAdmin panel's read-only overview.</summary>
+    public Task<List<Presentation>> GetAllAsync(CancellationToken ct = default) =>
+        _presentationRepository.GetAllAsync(ct);
+
     public Task<List<Presentation>> SearchAsync(string query, int projectId, CancellationToken ct = default) =>
         string.IsNullOrWhiteSpace(query)
             ? _presentationRepository.GetAllOrderedAsync(projectId, ct)
@@ -28,7 +32,8 @@ public sealed class PresentationQueueService
     public async Task<Presentation> AddAsync(
         int projectId, string fullName, string title,
         string sourceFilePath, PresentationFileType fileType,
-        int presentationTimeSeconds, int discussionTimeSeconds, CancellationToken ct = default)
+        int presentationTimeSeconds, int discussionTimeSeconds,
+        int? presenterId = null, CancellationToken ct = default)
     {
         var storedRelativePath = await _fileStorageService.SaveFileAsync(sourceFilePath, ct);
         var existing = await _presentationRepository.GetAllOrderedAsync(projectId, ct);
@@ -36,6 +41,7 @@ public sealed class PresentationQueueService
         var presentation = new Presentation
         {
             ProjectId = projectId,
+            PresenterId = presenterId,
             FullName = fullName,
             Title = title,
             FilePath = storedRelativePath,

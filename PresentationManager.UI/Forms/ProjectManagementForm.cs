@@ -114,15 +114,16 @@ public sealed class ProjectManagementForm : Form
 
     private async void OnCreateClick(object? sender, EventArgs e)
     {
-        using var prompt = new TextInputForm("Yangi loyiha", "Loyiha nomi");
-        if (prompt.ShowDialog(this) != DialogResult.OK)
+        using var dialog = new ProjectEditForm();
+        if (dialog.ShowDialog(this) != DialogResult.OK)
         {
             return;
         }
 
         try
         {
-            await _projectService.CreateAsync(prompt.Value);
+            await _projectService.CreateAsync(
+                dialog.ProjectName, dialog.EventStartDate, dialog.EventEndDate, dialog.EventTime, dialog.Location);
             await LoadProjectsAsync();
         }
         catch (Exception ex)

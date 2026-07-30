@@ -19,6 +19,12 @@ public class PresentationRepository : IPresentationRepository
         _dbFactory = dbFactory;
     }
 
+    public async Task<List<Presentation>> GetAllAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Presentations.AsNoTracking().OrderByDescending(p => p.CreatedAt).ToListAsync(ct);
+    }
+
     public async Task<List<Presentation>> GetAllOrderedAsync(int projectId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
+using PresentationManager.Domain.Enums;
 using PresentationManager.Infrastructure.Persistence;
 using PresentationManager.Infrastructure.Repositories;
 using PresentationManager.Infrastructure.Services;
@@ -55,6 +56,10 @@ static class Program
                 services.AddSingleton<IPresenterRepository, PresenterRepository>();
                 services.AddSingleton<ISettingsRepository, SettingsRepository>();
                 services.AddSingleton<IHistoryRepository, HistoryRepository>();
+                services.AddSingleton<IUserRepository, UserRepository>();
+                services.AddSingleton<ICriterionRepository, CriterionRepository>();
+                services.AddSingleton<IJudgeRepository, JudgeRepository>();
+                services.AddSingleton<IScoreRepository, ScoreRepository>();
                 services.AddSingleton<IFileStorageService>(_ => new FileStorageService(Path.Combine(appDataDir, "Files")));
                 services.AddSingleton<IAlarmSoundService, AlarmSoundService>();
 
@@ -62,10 +67,16 @@ static class Program
                 services.AddSingleton<PresentationSessionController>();
                 services.AddSingleton<PresentationQueueService>();
                 services.AddSingleton<ProjectService>();
+                services.AddSingleton<UserService>();
+                services.AddSingleton<CriterionService>();
+                services.AddSingleton<JudgeService>();
+                services.AddSingleton<ScoreService>();
                 services.AddHostedService<PresentationBotHostedService>();
 
                 services.AddSingleton<PresentationForm>();
                 services.AddSingleton<AdminForm>();
+                services.AddSingleton<AdminPanelForm>();
+                services.AddSingleton<SuperAdminPanelForm>();
             })
             .Build();
 
@@ -78,9 +89,30 @@ static class Program
         // never run (this host was previously only ever used as a DI container, never actually started).
         host.Start();
 
-        var adminForm = host.Services.GetRequiredService<AdminForm>();
-        WinFormsApp.Run(adminForm);
+        var userService = host.Services.GetRequiredService<UserService>();
+        // Task.Run, not a direct blocking await: the main thread's SynchronizationContext is already the
+        // WindowsFormsSynchronizationContext set above, but no message loop is pumping it yet (Application.Run
+        // hasn't started, no ShowDialog is open) - awaiting this directly would capture that context and
+        // deadlock the moment any inner await tries to post its continuation back to a queue nothing is
+        // draining. Running it on the thread pool sidesteps the captured context entirely.
+        Task.Run(() => userService.EnsureDefaultSuperAdminAsync()).GetAwaiter().GetResult();
 
-        host.StopAsync().GetAwaiter().GetResult();
+        using var loginForm = new LoginForm(userService);
+        if (loginForm.ShowDialog() == DialogResult.OK && loginForm.AuthenticatedUser is { } user)
+        {
+            Form mainForm = user.Role switch
+            {
+                UserRole.Operator => host.Services.GetRequiredService<AdminForm>(),
+                UserRole.Admin => host.Services.GetRequiredService<AdminPanelForm>(),
+                UserRole.SuperAdmin => host.Services.GetRequiredService<SuperAdminPanelForm>(),
+                _ => throw new InvalidOperationException($"Unknown role: {user.Role}")
+            };
+
+            WinFormsApp.Run(mainForm);
+        }
+
+        // Same Task.Run reasoning as the seed call above - the WinForms message loop has already ended by
+        // this point (Application.Run returned), so nothing pumps this thread's SynchronizationContext.
+        Task.Run(() => host.StopAsync()).GetAwaiter().GetResult();
     }
 }

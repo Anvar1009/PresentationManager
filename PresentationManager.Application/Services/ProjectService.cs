@@ -10,29 +10,46 @@ public sealed class ProjectService
 {
     private readonly IProjectRepository _projectRepository;
     private readonly IPresentationRepository _presentationRepository;
+    private readonly IPresenterRepository _presenterRepository;
     private readonly IFileStorageService _fileStorageService;
 
     public ProjectService(
         IProjectRepository projectRepository,
         IPresentationRepository presentationRepository,
+        IPresenterRepository presenterRepository,
         IFileStorageService fileStorageService)
     {
         _projectRepository = projectRepository;
         _presentationRepository = presentationRepository;
+        _presenterRepository = presenterRepository;
         _fileStorageService = fileStorageService;
     }
 
     public Task<List<Project>> GetAllAsync(CancellationToken ct = default) =>
         _projectRepository.GetAllAsync(ct);
 
-    public async Task<Project> CreateAsync(string name, CancellationToken ct = default)
+    public async Task<Project> CreateAsync(
+        string name, DateOnly eventStartDate, DateOnly eventEndDate, TimeOnly? eventTime, string? location,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
             throw new InvalidOperationException("Loyiha nomi bo'sh bo'lishi mumkin emas.");
         }
 
-        var project = new Project { Name = name.Trim() };
+        if (eventEndDate < eventStartDate)
+        {
+            throw new InvalidOperationException("Tugash sanasi boshlanish sanasidan oldin bo'lishi mumkin emas.");
+        }
+
+        var project = new Project
+        {
+            Name = name.Trim(),
+            EventStartDate = eventStartDate,
+            EventEndDate = eventEndDate,
+            EventTime = eventTime,
+            Location = string.IsNullOrWhiteSpace(location) ? null : location.Trim()
+        };
         return await _projectRepository.AddAsync(project, ct);
     }
 
@@ -40,6 +57,33 @@ public sealed class ProjectService
     /// UI to warn the operator before they confirm a delete that will take those presentations down with it.</summary>
     public async Task<int> CountPresentationsAsync(int projectId, CancellationToken ct = default) =>
         (await _presentationRepository.GetByProjectIdAsync(projectId, ct)).Count;
+
+    /// <summary>Every distinct presenter who has submitted at least one presentation to this project — the
+    /// Admin panel's "Qatnashchilar" table. Phone numbers only show up for presenters who registered through
+    /// the Telegram bot (<see cref="Presentation.PresenterId"/> is null for anything the operator added by
+    /// hand, so those just fall back to showing the plain <see cref="Presentation.FullName"/> text with no
+    /// phone).</summary>
+    public async Task<List<ProjectParticipant>> GetParticipantsAsync(int projectId, CancellationToken ct = default)
+    {
+        var presentations = await _presentationRepository.GetByProjectIdAsync(projectId, ct);
+        var presenters = await _presenterRepository.GetAllAsync(ct);
+        var presentersById = presenters.ToDictionary(p => p.Id);
+
+        return presentations
+            .GroupBy(p => p.PresenterId is int presenterId && presentersById.TryGetValue(presenterId, out var presenter)
+                ? presenter.FullName
+                : p.FullName)
+            .Select(group => new ProjectParticipant
+            {
+                FullName = group.Key,
+                PhoneNumber = group
+                    .Select(p => p.PresenterId is int id && presentersById.TryGetValue(id, out var presenter) ? presenter.PhoneNumber : null)
+                    .FirstOrDefault(phone => phone is not null),
+                PresentationCount = group.Count()
+            })
+            .OrderBy(p => p.FullName)
+            .ToList();
+    }
 
     public async Task DeleteAsync(int projectId, CancellationToken ct = default)
     {

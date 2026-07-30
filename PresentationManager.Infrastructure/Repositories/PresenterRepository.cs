@@ -14,6 +14,18 @@ public class PresenterRepository : IPresenterRepository
         _dbFactory = dbFactory;
     }
 
+    public async Task<List<Presenter>> GetAllAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Presenters.AsNoTracking().OrderBy(p => p.FullName).ToListAsync(ct);
+    }
+
+    public async Task<Presenter?> GetByIdAsync(int id, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Presenters.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
+    }
+
     public async Task<Presenter?> GetByTelegramChatIdAsync(long telegramChatId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
