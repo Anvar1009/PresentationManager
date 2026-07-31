@@ -65,7 +65,9 @@ public sealed class ProjectEditForm : Form
 
         var timePanel = new Panel { Dock = DockStyle.Fill };
         _timePicker.Dock = DockStyle.Fill;
-        var timeCheckWrap = new Panel { Dock = DockStyle.Left, Width = 90 };
+        // Padding on the wrapper itself (not Margin on the checkbox - a plain Panel ignores its Dock
+        // children's Margin) so the checkbox doesn't sit flush against the time picker next to it.
+        var timeCheckWrap = new Panel { Dock = DockStyle.Left, Width = 100, Padding = new Padding(0, 0, 10, 0) };
         timeCheckWrap.Controls.Add(_hasTimeCheck);
         timePanel.Controls.Add(_timePicker);
         timePanel.Controls.Add(timeCheckWrap);
@@ -78,9 +80,21 @@ public sealed class ProjectEditForm : Form
         AddRow(layout, 3, "Vaqti", timePanel);
         AddRow(layout, 4, "Manzili", _locationBox);
 
-        var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
-        var cancelButton = new Button { Text = "Bekor qilish", DialogResult = DialogResult.Cancel, Width = 90, FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary };
-        var saveButton = new Button { Text = "Saqlash", Width = 90, FlatStyle = FlatStyle.Flat, BackColor = LightColors.Accent, ForeColor = Color.White };
+        var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Margin = new Padding(0, 12, 0, 0) };
+        var cancelButton = new Button
+        {
+            Text = "Bekor qilish", DialogResult = DialogResult.Cancel, Width = 100, Height = 36,
+            Margin = new Padding(6, 0, 0, 0), FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary, Cursor = Cursors.Hand
+        };
+        cancelButton.FlatAppearance.BorderColor = LightColors.Border;
+        var saveButton = new Button
+        {
+            Text = "Saqlash", Width = 100, Height = 36, Margin = new Padding(6, 0, 6, 0),
+            FlatStyle = FlatStyle.Flat, BackColor = LightColors.Accent, ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), Cursor = Cursors.Hand
+        };
+        saveButton.FlatAppearance.BorderSize = 0;
         saveButton.Click += OnSaveClick;
         buttonPanel.Controls.Add(cancelButton);
         buttonPanel.Controls.Add(saveButton);

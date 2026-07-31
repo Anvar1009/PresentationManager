@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PresentationManager.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PresentationManager.Infrastructure.Persistence;
 namespace PresentationManager.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260731092333_AddProjectCreatedByUser")]
+    partial class AddProjectCreatedByUser
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -357,20 +360,11 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.Property<int>("Role")
                         .HasColumnType("integer");
 
-                    b.Property<long?>("TelegramChatId")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("TelegramUsername")
-                        .HasColumnType("text");
-
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("TelegramChatId")
-                        .IsUnique();
 
                     b.HasIndex("Username")
                         .IsUnique();

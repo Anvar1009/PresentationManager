@@ -23,6 +23,13 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2957.106" />
     <PackageReference Include="Microsoft.Office.Interop.PowerPoint" Version="15.0.4420.1018" />
     <PackageReference Include="PDFtoImage" Version="5.3.0" />
+    <!-- Dev-tooling only (dotnet ef migrations add) - EF tools require this on the STARTUP project even
+         though AppDbContext itself lives in PresentationManager.Infrastructure, since this is the project
+         whose Host/DI configuration (connection string, etc.) the tool resolves the design-time context from. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.10">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

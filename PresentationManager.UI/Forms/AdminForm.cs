@@ -1,21 +1,24 @@
 using System.Drawing.Drawing2D;
+using Microsoft.Extensions.Options;
+using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
 using PresentationManager.Domain.Enums;
+using PresentationManager.TelegramBot;
 using PresentationManager.UI.Controls;
-using PresentationManager.UI.Localization;
 using PresentationManager.UI.SlideDisplay;
 using PresentationManager.UI.Theme;
 
 namespace PresentationManager.UI.Forms;
 
 /// <summary>
-/// Operator dashboard — every control surface lives here (queue add/edit/delete/reorder/search, app
-/// settings, starting a presentation, and advancing it through discussion/next). <see cref="PresentationForm"/>
-/// (Namoyish Ekrani) is deliberately left with no controls of its own: it's the window actually shown or
-/// screen-shared to the audience, so it only ever displays the live timer and the slide — nothing an
-/// operator clicks.
+/// Operator dashboard — every control surface lives here (queue reorder/search, app settings, starting a
+/// presentation, and advancing it through discussion/next). The operator only views and runs the queue that
+/// the Telegram bot already populated — deliberately no add/edit/delete for presentations, since the operator's
+/// job is running the live event, not curating its content. <see cref="PresentationForm"/> (Namoyish Ekrani)
+/// is likewise left with no controls of its own: it's the window actually shown or screen-shared to the
+/// audience, so it only ever displays the live timer and the slide — nothing an operator clicks.
 /// </summary>
 public sealed class AdminForm : Form
 {
@@ -26,6 +29,13 @@ public sealed class AdminForm : Form
     private readonly PresentationQueueService _queueService;
     private readonly ProjectService _projectService;
     private readonly PresentationForm _presentationForm;
+    private readonly AdminLinkService _adminLinkService;
+    private readonly PresentationBotOptions _botOptions;
+
+    /// <summary>Set via <see cref="SetCurrentUser"/> right after this singleton form is resolved from DI in
+    /// Program.cs - lets <see cref="OnSettingsClick"/> pass this operator's own id through to
+    /// <c>SettingsForm</c>'s "Botga ulash" button.</summary>
+    private int? _currentUserId;
 
     private ListBox _queueListBox = null!;
     private TextBox _searchBox = null!;
@@ -35,8 +45,8 @@ public sealed class AdminForm : Form
     private Label _projectLabel = null!;
 
     /// <summary>Periodically reloads the active project's queue so presentations submitted via the Telegram
-    /// bot (a separate process-internal flow that never goes through this form's own Add button) show up on
-    /// their own, without the operator having to do anything.</summary>
+    /// bot (the only way presentations enter the queue — the operator has no add/edit/delete of their own)
+    /// show up on their own, without the operator having to do anything.</summary>
     private readonly System.Windows.Forms.Timer _botPollTimer;
 
     private Label _currentNameLabel = null!;
@@ -58,7 +68,9 @@ public sealed class AdminForm : Form
         IFileStorageService fileStorageService,
         PresentationQueueService queueService,
         ProjectService projectService,
-        PresentationForm presentationForm)
+        PresentationForm presentationForm,
+        AdminLinkService adminLinkService,
+        IOptions<PresentationBotOptions> botOptions)
     {
         _session = session;
         _historyRepository = historyRepository;
@@ -67,10 +79,12 @@ public sealed class AdminForm : Form
         _queueService = queueService;
         _projectService = projectService;
         _presentationForm = presentationForm;
+        _adminLinkService = adminLinkService;
+        _botOptions = botOptions.Value;
 
         Text = "Taqdimotlar Boshqaruvi - Administrator";
-        BackColor = AppColors.Background;
-        ForeColor = AppColors.TextPrimary;
+        BackColor = LightColors.Background;
+        ForeColor = LightColors.TextPrimary;
         Font = new Font("Segoe UI", 9.5f);
         StartPosition = FormStartPosition.Manual;
         MinimumSize = new Size(900, 600);
@@ -86,6 +100,10 @@ public sealed class AdminForm : Form
 
         Load += OnFormLoad;
     }
+
+    /// <summary>Called once, from Program.cs, right after this form is resolved from DI and before it's run -
+    /// see <see cref="_currentUserId"/>.</summary>
+    public void SetCurrentUser(User user) => _currentUserId = user.Id;
 
     /// <summary>No-op while no project is active or the DB is briefly unreachable - a missed tick just means
     /// a bot-submitted presentation shows up on the next one instead of instantly, which is an acceptable
@@ -109,7 +127,7 @@ public sealed class AdminForm : Form
 
     private void BuildMenu()
     {
-        var menu = new MenuStrip { BackColor = AppColors.Panel, ForeColor = AppColors.TextPrimary };
+        var menu = new MenuStrip { BackColor = LightColors.Panel, ForeColor = LightColors.TextPrimary };
 
         var projectsItem = new ToolStripMenuItem("Loyihalar");
         projectsItem.Click += (_, _) => OnProjectsClick();
@@ -133,7 +151,7 @@ public sealed class AdminForm : Form
     private async void OnSettingsClick()
     {
         var current = await _settingsRepository.GetAsync();
-        using var dialog = new SettingsForm(current);
+        using var dialog = new SettingsForm(current, _adminLinkService, _botOptions, _currentUserId);
         dialog.ShowDialog(this);
         if (dialog.DialogResult == DialogResult.OK)
         {
@@ -209,8 +227,7 @@ public sealed class AdminForm : Form
         await RefreshLogsAsync();
 
         // No usable project yet (first launch, or the last-active one was deleted since) - send the
-        // operator straight to Loyihalar instead of leaving them stuck on an empty queue with no obvious
-        // next step (Qo'shish stays disabled with no project selected - see OnAddClick).
+        // operator straight to Loyihalar instead of leaving them stuck on an empty, unexplained queue.
         if (startupProjectId is null)
         {
             OnProjectsClick();
@@ -269,23 +286,23 @@ public sealed class AdminForm : Form
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            BackColor = AppColors.Border,
+            BackColor = LightColors.Border,
             SplitterWidth = 6,
             FixedPanel = FixedPanel.Panel2
         };
-        outerSplit.Panel1.BackColor = AppColors.Background;
-        outerSplit.Panel2.BackColor = AppColors.Background;
+        outerSplit.Panel1.BackColor = LightColors.Background;
+        outerSplit.Panel2.BackColor = LightColors.Background;
 
         var innerSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Vertical,
-            BackColor = AppColors.Border,
+            BackColor = LightColors.Border,
             SplitterWidth = 6,
             FixedPanel = FixedPanel.Panel1
         };
-        innerSplit.Panel1.BackColor = AppColors.Background;
-        innerSplit.Panel2.BackColor = AppColors.Background;
+        innerSplit.Panel1.BackColor = LightColors.Background;
+        innerSplit.Panel2.BackColor = LightColors.Background;
 
         innerSplit.Panel1.Controls.Add(BuildLeftQueuePanel());
         innerSplit.Panel2.Controls.Add(BuildCenterPanel());
@@ -320,14 +337,14 @@ public sealed class AdminForm : Form
 
     private Control BuildLeftQueuePanel()
     {
-        var panel = new Panel { Dock = DockStyle.Fill, BackColor = AppColors.Panel, Padding = new Padding(14) };
+        var panel = new Panel { Dock = DockStyle.Fill, BackColor = LightColors.Panel, Padding = new Padding(14) };
 
         var header = new Label
         {
             Text = "TAQDIMOTLAR NAVBATI",
             Dock = DockStyle.Top,
             Height = 26,
-            ForeColor = AppColors.TextSecondary,
+            ForeColor = LightColors.TextSecondary,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
         };
 
@@ -336,45 +353,24 @@ public sealed class AdminForm : Form
             Text = "Loyiha tanlanmagan",
             Dock = DockStyle.Top,
             Height = 20,
-            ForeColor = AppColors.Accent,
+            ForeColor = LightColors.Accent,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold)
         };
 
         // A search box wrapper that owns its own top/bottom gap directly (rather than relying on Margin,
-        // which sibling Dock.Top controls don't reliably honor) so the toolbar below it never crowds it.
-        var searchWrap = new Panel { Dock = DockStyle.Top, Height = 54, Padding = new Padding(0, 8, 0, 22) };
+        // which sibling Dock.Top controls don't reliably honor) so the table header below it never crowds it.
+        var searchWrap = new Panel { Dock = DockStyle.Top, Height = 54, Padding = new Padding(0, 8, 0, 28) };
         _searchBox = new TextBox
         {
             Dock = DockStyle.Fill,
             PlaceholderText = "Taqdimotchini qidirish...",
-            BackColor = AppColors.PanelAlt,
-            ForeColor = AppColors.TextPrimary,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
             BorderStyle = BorderStyle.FixedSingle,
             Font = new Font("Segoe UI", 10f)
         };
         _searchBox.TextChanged += (_, _) => RefreshQueueList();
         searchWrap.Controls.Add(_searchBox);
-
-        // Same wrapper-owns-its-gap trick below the toolbar, so the table header/list underneath always
-        // sits a clear, fixed distance away regardless of what else changes around it.
-        var toolbarWrap = new Panel { Dock = DockStyle.Top, Height = 72, Padding = new Padding(0, 0, 0, 20) };
-        var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
-        for (var i = 0; i < 3; i++)
-        {
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
-        }
-
-        var addButton = ToolbarButton("+ Qo'shish", AppColors.Success);
-        addButton.Click += (_, _) => OnAddClick();
-        var editButton = ToolbarButton("Tahrirlash", AppColors.Accent);
-        editButton.Click += (_, _) => OnEditClick();
-        var deleteButton = ToolbarButton("O'chirish", AppColors.Danger);
-        deleteButton.Click += (_, _) => OnDeleteClick();
-
-        toolbar.Controls.Add(addButton, 0, 0);
-        toolbar.Controls.Add(editButton, 1, 0);
-        toolbar.Controls.Add(deleteButton, 2, 0);
-        toolbarWrap.Controls.Add(toolbar);
 
         // Column-header row so the queue reads like a table instead of a plain list, matching how
         // OnQueueDrawItem lays each row out below it.
@@ -385,27 +381,27 @@ public sealed class AdminForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(16, 0, 0, 0),
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = AppColors.TextSecondary,
+            ForeColor = LightColors.TextSecondary,
             Font = QueueHeaderFont
         };
         tableHeader.Controls.Add(headerName);
 
-        var tableHeaderRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = AppColors.Border, Margin = new Padding(0, 0, 0, 4) };
+        var tableHeaderRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border, Margin = new Padding(0, 0, 0, 4) };
 
         var selectHint = new Label
         {
             Text = "2 marta bosing - joriy/qayta tanlash",
             Dock = DockStyle.Top,
             Height = 20,
-            ForeColor = AppColors.TextSecondary,
+            ForeColor = LightColors.TextSecondary,
             Font = new Font("Segoe UI", 8f, FontStyle.Italic)
         };
 
         _queueListBox = new ListBox
         {
             Dock = DockStyle.Fill,
-            BackColor = AppColors.PanelAlt,
-            ForeColor = AppColors.TextPrimary,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
             BorderStyle = BorderStyle.None,
             IntegralHeight = false,
             Font = new Font("Segoe UI", 9.5f),
@@ -428,26 +424,10 @@ public sealed class AdminForm : Form
         panel.Controls.Add(selectHint);
         panel.Controls.Add(tableHeaderRule);
         panel.Controls.Add(tableHeader);
-        panel.Controls.Add(toolbarWrap);
         panel.Controls.Add(searchWrap);
         panel.Controls.Add(_projectLabel);
         panel.Controls.Add(header);
         return panel;
-    }
-
-    // Filled, rounded buttons (same family as the "BOSHLASH" start button) so add/edit/delete read as
-    // clearly-clickable actions instead of the low-contrast bordered-only buttons this used to be.
-    private static RoundedButton ToolbarButton(string text, Color accent)
-    {
-        return new RoundedButton
-        {
-            Text = text,
-            Dock = DockStyle.Fill,
-            Margin = new Padding(4, 0, 4, 0),
-            BackColor = accent,
-            CornerRadius = 10,
-            Font = new Font("Segoe UI", 10f, FontStyle.Bold)
-        };
     }
 
     /// <summary>Paints each queue row as a mini table: order number, a larger bold presenter name with the
@@ -471,10 +451,10 @@ public sealed class AdminForm : Form
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         var rowColor = isSelected
-            ? Blend(AppColors.PanelAlt, AppColors.Accent, 0.30f)
+            ? Blend(LightColors.PanelAlt, LightColors.Accent, 0.30f)
             : e.Index % 2 == 0
-                ? AppColors.PanelAlt
-                : Blend(AppColors.PanelAlt, AppColors.Panel, 0.5f);
+                ? LightColors.PanelAlt
+                : Blend(LightColors.PanelAlt, LightColors.Panel, 0.5f);
         using (var bgBrush = new SolidBrush(rowColor))
         {
             g.FillRectangle(bgBrush, bounds);
@@ -482,26 +462,26 @@ public sealed class AdminForm : Form
 
         if (isCurrent)
         {
-            using var barBrush = new SolidBrush(AppColors.Success);
+            using var barBrush = new SolidBrush(LightColors.Success);
             g.FillRectangle(barBrush, bounds.X, bounds.Y, 4, bounds.Height);
         }
         else if (isSelected)
         {
-            using var barBrush = new SolidBrush(AppColors.Accent);
+            using var barBrush = new SolidBrush(LightColors.Accent);
             g.FillRectangle(barBrush, bounds.X, bounds.Y, 4, bounds.Height);
         }
 
         var textLeft = bounds.X + 16;
         var orderRect = new Rectangle(textLeft, bounds.Y, 30, bounds.Height);
-        TextRenderer.DrawText(g, $"{p.OrderNumber + 1}.", QueueMetaFont, orderRect, AppColors.TextSecondary,
+        TextRenderer.DrawText(g, $"{p.OrderNumber + 1}.", QueueMetaFont, orderRect, LightColors.TextSecondary,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
 
         var nameRect = new Rectangle(textLeft + 28, bounds.Y + 7, bounds.Right - (textLeft + 28) - 16, 24);
-        TextRenderer.DrawText(g, p.FullName, QueueNameFont, nameRect, AppColors.TextPrimary,
+        TextRenderer.DrawText(g, p.FullName, QueueNameFont, nameRect, LightColors.TextPrimary,
             TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
 
         var titleRect = new Rectangle(textLeft + 28, bounds.Y + 33, bounds.Width - (textLeft + 28) - 12, 20);
-        TextRenderer.DrawText(g, p.Title, QueueTitleFont, titleRect, AppColors.TextSecondary,
+        TextRenderer.DrawText(g, p.Title, QueueTitleFont, titleRect, LightColors.TextSecondary,
             TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
     }
 
@@ -604,89 +584,6 @@ public sealed class AdminForm : Form
         }
     }
 
-    private async void OnAddClick()
-    {
-        if (_session.CurrentProjectId is not int projectId)
-        {
-            MessageBox.Show(this, "Avval \"Loyihalar\" menyusidan loyiha tanlang.", "Loyiha tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        using var dialog = new PresentationEditForm("Taqdimot qo'shish", requireFile: true);
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-        {
-            return;
-        }
-
-        try
-        {
-            await _queueService.AddAsync(
-                projectId, dialog.FullName, dialog.Title,
-                dialog.SelectedFilePath!, dialog.SelectedFileType!.Value,
-                dialog.PresentationTimeSeconds, dialog.DiscussionTimeSeconds);
-            await _session.ReloadQueueAsync();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, ex.Message, "Qo'shishda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-    }
-
-    private async void OnEditClick()
-    {
-        var selected = GetSelectedPresentation();
-        if (selected is null)
-        {
-            return;
-        }
-
-        using var dialog = new PresentationEditForm("Taqdimotni tahrirlash", requireFile: false);
-        dialog.LoadFrom(selected);
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-        {
-            return;
-        }
-
-        try
-        {
-            await _queueService.UpdateAsync(
-                selected.Id, dialog.FullName, dialog.Title,
-                dialog.PresentationTimeSeconds, dialog.DiscussionTimeSeconds,
-                dialog.SelectedFilePath, dialog.SelectedFileType);
-            await _session.ReloadQueueAsync();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, ex.Message, "Tahrirlashda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-    }
-
-    private async void OnDeleteClick()
-    {
-        var selected = GetSelectedPresentation();
-        if (selected is null)
-        {
-            return;
-        }
-
-        var confirm = MessageBox.Show(this, $"'{selected.FullName} - {selected.Title}' o'chirilsinmi?", "O'chirishni tasdiqlash",
-            MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-        if (confirm != DialogResult.Yes)
-        {
-            return;
-        }
-
-        try
-        {
-            await _queueService.DeleteAsync(selected.Id);
-            await _session.ReloadQueueAsync();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, ex.Message, "O'chirishda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-    }
-
     /// <summary>Widest the center "current presentation" card's content is ever allowed to stretch to — only
     /// kicks in on a genuinely huge (4K+/ultra-wide) monitor, so the slide preview still fills essentially
     /// all of the available width everywhere else instead of leaving it visibly letterboxed by dead panel
@@ -700,30 +597,30 @@ public sealed class AdminForm : Form
 
     private Control BuildCenterPanel()
     {
-        var panel = new Panel { Dock = DockStyle.Fill, BackColor = AppColors.Background, Padding = new Padding(20) };
+        var panel = new Panel { Dock = DockStyle.Fill, BackColor = LightColors.Background, Padding = new Padding(20) };
 
-        var card = new Panel { Dock = DockStyle.Fill, BackColor = AppColors.Panel };
+        var card = new Panel { Dock = DockStyle.Fill, BackColor = LightColors.Panel };
 
         // Not Dock.Fill — kept at a sane reading width and re-centered on every resize (see
         // RepositionCardContent) instead of stretching edge-to-edge on a wide admin monitor.
-        var content = new Panel { BackColor = AppColors.Panel, Padding = new Padding(24) };
+        var content = new Panel { BackColor = LightColors.Panel, Padding = new Padding(24) };
 
         _currentNameLabel = new Label
         {
             Dock = DockStyle.Top, Height = 46,
-            Font = new Font("Segoe UI", 20, FontStyle.Bold), ForeColor = AppColors.TextPrimary,
+            Font = new Font("Segoe UI", 20, FontStyle.Bold), ForeColor = LightColors.TextPrimary,
             TextAlign = ContentAlignment.MiddleCenter
         };
         _currentTitleLabel = new Label
         {
             Dock = DockStyle.Top, Height = 32,
-            Font = new Font("Segoe UI", 13, FontStyle.Italic), ForeColor = AppColors.Accent,
+            Font = new Font("Segoe UI", 13, FontStyle.Italic), ForeColor = LightColors.Accent,
             TextAlign = ContentAlignment.MiddleCenter
         };
         _currentStatusLabel = new Label
         {
             Dock = DockStyle.Top, Height = 34,
-            Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = AppColors.Warning,
+            Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = LightColors.Warning,
             TextAlign = ContentAlignment.MiddleCenter
         };
 
@@ -732,7 +629,7 @@ public sealed class AdminForm : Form
             Text = "BOSHLASH",
             Dock = DockStyle.Fill,
             Margin = new Padding(0, 0, 6, 0),
-            BackColor = AppColors.Success,
+            BackColor = LightColors.Success,
             Font = new Font("Segoe UI", 14, FontStyle.Bold)
         };
         _startButton.Click += (_, _) => OnStartClick();
@@ -745,7 +642,7 @@ public sealed class AdminForm : Form
             Text = "KEYINGI",
             Dock = DockStyle.Fill,
             Margin = new Padding(6, 0, 0, 0),
-            BackColor = AppColors.DiscussionAction,
+            BackColor = LightColors.DiscussionAction,
             Font = new Font("Segoe UI", 14, FontStyle.Bold)
         };
         _advanceButton.Click += (_, _) => OnAdvanceClick();
@@ -761,7 +658,7 @@ public sealed class AdminForm : Form
             Text = "Boshlangach, fayl Namoyish ekranida ochiladi - taymer shu yerda, ekranning o'zida hech qanday tugma bo'lmaydi.",
             Dock = DockStyle.Bottom,
             Height = 24,
-            ForeColor = AppColors.TextSecondary,
+            ForeColor = LightColors.TextSecondary,
             Font = new Font("Segoe UI", 9f, FontStyle.Italic),
             TextAlign = ContentAlignment.MiddleCenter
         };
@@ -769,11 +666,11 @@ public sealed class AdminForm : Form
         // Framed the same way the queue/logs panels frame their own content (PanelAlt fill, small gap from
         // the labels above and the hint/button below) so the preview reads as its own "slide" rather than a
         // random image floating on the card's background.
-        var previewWrap = new Panel { Dock = DockStyle.Fill, BackColor = AppColors.Panel, Padding = new Padding(0, 10, 0, 10) };
+        var previewWrap = new Panel { Dock = DockStyle.Fill, BackColor = LightColors.Panel, Padding = new Padding(0, 10, 0, 10) };
         _previewBox = new PictureBox
         {
             Dock = DockStyle.Fill,
-            BackColor = AppColors.PanelAlt,
+            BackColor = LightColors.PanelAlt,
             SizeMode = PictureBoxSizeMode.Zoom,
             BorderStyle = BorderStyle.FixedSingle
         };
@@ -807,22 +704,22 @@ public sealed class AdminForm : Form
 
     private Control BuildLogsPanel()
     {
-        var panel = new Panel { Dock = DockStyle.Fill, BackColor = AppColors.Panel, Padding = new Padding(10) };
+        var panel = new Panel { Dock = DockStyle.Fill, BackColor = LightColors.Panel, Padding = new Padding(10) };
 
         var header = new Label
         {
             Text = "JURNAL",
             Dock = DockStyle.Top,
             Height = 22,
-            ForeColor = AppColors.TextSecondary,
+            ForeColor = LightColors.TextSecondary,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
         };
 
         _logsListBox = new ListBox
         {
             Dock = DockStyle.Fill,
-            BackColor = AppColors.PanelAlt,
-            ForeColor = AppColors.TextSecondary,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextSecondary,
             BorderStyle = BorderStyle.None,
             IntegralHeight = false,
             Font = new Font("Consolas", 9f)

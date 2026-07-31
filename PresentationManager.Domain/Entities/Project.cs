@@ -17,6 +17,12 @@ public class Project
 
     public string? Location { get; set; }
 
+    /// <summary>The Admin who created this project - null for projects created before this field existed, or
+    /// created from the Operator's own "Loyihalar" dialog (<see cref="Enums.UserRole.Operator"/> accounts have
+    /// no creator-scoped project list, unlike Admin's). Used to scope each Admin's "Loyihalar" dropdown to
+    /// only the projects they created - see <c>IProjectRepository.GetByCreatorAsync</c>.</summary>
+    public int? CreatedByUserId { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

@@ -1,9 +1,10 @@
 using PresentationManager.Domain.Enums;
 
-namespace PresentationManager.UI.Localization;
+namespace PresentationManager.Application.Common;
 
-/// <summary>Central place for the handful of enum-to-display-text mappings shared between AdminForm and
-/// PresentationForm, so both screens describe the same status the same way.</summary>
+/// <summary>Central place for the handful of enum-to-display-text mappings shared between the desktop app
+/// (AdminForm/AdminPanelForm/PresentationForm) and the Telegram bot's admin reporting flow, so every surface
+/// describes the same status the same way.</summary>
 public static class UzbekText
 {
     /// <summary>Short status label used in the admin queue list and current-presentation panel.</summary>

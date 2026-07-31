@@ -18,6 +18,33 @@ public sealed class UserService
 
     public Task<List<User>> GetAllAsync(CancellationToken ct = default) => _userRepository.GetAllAsync(ct);
 
+    public Task<User?> GetByIdAsync(int id, CancellationToken ct = default) => _userRepository.GetByIdAsync(id, ct);
+
+    /// <summary>Looks up which Admin/Operator (if any) a Telegram chat is linked to - see
+    /// <see cref="User.TelegramChatId"/>.</summary>
+    public Task<User?> GetByTelegramChatIdAsync(long telegramChatId, CancellationToken ct = default) =>
+        _userRepository.GetByTelegramChatIdAsync(telegramChatId, ct);
+
+    /// <summary>Used by "Parolni unutdingizmi?" to find which account a Telegram @username belongs to - see
+    /// <see cref="User.TelegramUsername"/>.</summary>
+    public Task<User?> GetByTelegramUsernameAsync(string telegramUsername, CancellationToken ct = default) =>
+        _userRepository.GetByTelegramUsernameAsync(telegramUsername, ct);
+
+    public Task LinkTelegramChatAsync(int userId, long telegramChatId, string? telegramUsername, CancellationToken ct = default) =>
+        _userRepository.SetTelegramLinkAsync(userId, telegramChatId, telegramUsername, ct);
+
+    /// <summary>Used by the "Parolni unutdingizmi?" flow once the Telegram-delivered code has been verified
+    /// (<see cref="PasswordResetService"/>) - never called with an unverified code.</summary>
+    public async Task ResetPasswordAsync(int userId, string newPassword, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
+        {
+            throw new InvalidOperationException("Parol kamida 6 ta belgidan iborat bo'lishi kerak.");
+        }
+
+        await _userRepository.SetPasswordAsync(userId, PasswordHasher.Hash(newPassword), ct);
+    }
+
     public async Task<User?> ValidateLoginAsync(string username, string password, CancellationToken ct = default)
     {
         var user = await _userRepository.GetByUsernameAsync(username, ct);

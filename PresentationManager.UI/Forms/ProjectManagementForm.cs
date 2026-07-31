@@ -27,14 +27,14 @@ public sealed class ProjectManagementForm : Form
         SelectedActiveProjectId = currentActiveProjectId;
 
         Text = "Loyihalar";
-        BackColor = AppColors.Background;
-        ForeColor = AppColors.TextPrimary;
+        BackColor = LightColors.Background;
+        ForeColor = LightColors.TextPrimary;
         Font = new Font("Segoe UI", 9.5f);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(420, 420);
+        ClientSize = new Size(420, 460);
 
         var header = new Label
         {
@@ -42,43 +42,62 @@ public sealed class ProjectManagementForm : Form
             Dock = DockStyle.Top,
             Height = 28,
             Padding = new Padding(16, 10, 16, 0),
-            ForeColor = AppColors.TextSecondary,
+            ForeColor = LightColors.TextSecondary,
             Font = new Font("Segoe UI", 8.5f, FontStyle.Italic)
         };
 
         _listBox = new ListBox
         {
             Dock = DockStyle.Fill,
-            Margin = new Padding(16),
-            BackColor = AppColors.PanelAlt,
-            ForeColor = AppColors.TextPrimary,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
             BorderStyle = BorderStyle.FixedSingle,
             IntegralHeight = false,
             Font = new Font("Segoe UI", 10.5f)
         };
         _listBox.DoubleClick += (_, _) => OnActivateClick(this, EventArgs.Empty);
-        var listWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 4, 16, 4) };
+        var listWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 8, 16, 8) };
         listWrap.Controls.Add(_listBox);
 
-        var toolbarWrap = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(16, 0, 16, 8) };
+        var toolbarWrap = new Panel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(16, 0, 16, 8) };
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-        var createButton = new Button { Text = "+ Yangi loyiha", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = AppColors.Success, ForeColor = AppColors.Background, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+        var createButton = new Button
+        {
+            Text = "+ Yangi loyiha", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0), FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.Success, ForeColor = Color.White, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), Cursor = Cursors.Hand
+        };
+        createButton.FlatAppearance.BorderSize = 0;
         createButton.Click += OnCreateClick;
-        var deleteButton = new Button { Text = "O'chirish", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), FlatStyle = FlatStyle.Flat, BackColor = AppColors.Danger, ForeColor = AppColors.TextPrimary, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+        var deleteButton = new Button
+        {
+            Text = "O'chirish", Dock = DockStyle.Fill, Margin = new Padding(6, 0, 0, 0), FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.Danger, ForeColor = Color.White, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), Cursor = Cursors.Hand
+        };
+        deleteButton.FlatAppearance.BorderSize = 0;
         deleteButton.Click += OnDeleteClick;
         toolbar.Controls.Add(createButton, 0, 0);
         toolbar.Controls.Add(deleteButton, 1, 0);
         toolbarWrap.Controls.Add(toolbar);
 
-        var activateButton = new Button { Text = "Faol qilish", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat, BackColor = AppColors.Accent, ForeColor = AppColors.Background, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+        var activateButton = new Button
+        {
+            Text = "Faol qilish", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.Accent, ForeColor = Color.White, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), Cursor = Cursors.Hand
+        };
+        activateButton.FlatAppearance.BorderSize = 0;
         activateButton.Click += OnActivateClick;
-        var activateWrap = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(16, 0, 16, 8) };
+        var activateWrap = new Panel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(16, 0, 16, 8) };
         activateWrap.Controls.Add(activateButton);
 
-        var closeButton = new Button { Text = "Yopish", DialogResult = DialogResult.Cancel, Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat, BackColor = AppColors.PanelAlt, ForeColor = AppColors.TextPrimary };
-        var closeWrap = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(16, 0, 16, 12) };
+        var closeButton = new Button
+        {
+            Text = "Yopish", DialogResult = DialogResult.Cancel, Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary, Cursor = Cursors.Hand
+        };
+        closeButton.FlatAppearance.BorderColor = LightColors.Border;
+        var closeWrap = new Panel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(16, 0, 16, 12) };
         closeWrap.Controls.Add(closeButton);
 
         Controls.Add(listWrap);

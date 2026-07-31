@@ -6,4 +6,9 @@ namespace PresentationManager.TelegramBot;
 public sealed class PresentationBotOptions
 {
     public string Token { get; set; } = string.Empty;
+
+    /// <summary>The bot's @username (without the @), used only to build the "Botga ulash" deep link
+    /// (<c>https://t.me/{Username}?start={token}</c>) shown by <c>AdminPanelForm</c> - not required for the
+    /// bot itself to function.</summary>
+    public string Username { get; set; } = string.Empty;
 }

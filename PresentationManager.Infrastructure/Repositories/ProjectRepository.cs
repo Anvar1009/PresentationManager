@@ -20,6 +20,15 @@ public class ProjectRepository : IProjectRepository
         return await db.Projects.AsNoTracking().OrderBy(p => p.Name).ToListAsync(ct);
     }
 
+    public async Task<List<Project>> GetByCreatorAsync(int createdByUserId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Projects.AsNoTracking()
+            .Where(p => p.CreatedByUserId == createdByUserId || p.CreatedByUserId == null)
+            .OrderBy(p => p.Name)
+            .ToListAsync(ct);
+    }
+
     public async Task<Project?> GetByIdAsync(int id, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
+using PresentationManager.Domain.Entities;
 using PresentationManager.Domain.Enums;
 using PresentationManager.Infrastructure.Persistence;
 using PresentationManager.Infrastructure.Repositories;
@@ -71,7 +72,13 @@ static class Program
                 services.AddSingleton<CriterionService>();
                 services.AddSingleton<JudgeService>();
                 services.AddSingleton<ScoreService>();
-                services.AddHostedService<PresentationBotHostedService>();
+                services.AddSingleton<AdminLinkService>();
+                services.AddSingleton<PasswordResetService>();
+                // Registered as itself (not just via AddHostedService<T>) so ForgotPasswordForm can resolve it
+                // directly to push reset codes through TrySendMessageAsync - AddHostedService<T> alone only
+                // registers T as IHostedService, which isn't resolvable by its own concrete type.
+                services.AddSingleton<PresentationBotHostedService>();
+                services.AddHostedService(sp => sp.GetRequiredService<PresentationBotHostedService>());
 
                 services.AddSingleton<PresentationForm>();
                 services.AddSingleton<AdminForm>();
@@ -97,18 +104,39 @@ static class Program
         // draining. Running it on the thread pool sidesteps the captured context entirely.
         Task.Run(() => userService.EnsureDefaultSuperAdminAsync()).GetAwaiter().GetResult();
 
-        using var loginForm = new LoginForm(userService);
+        using var loginForm = new LoginForm(
+            userService,
+            host.Services.GetRequiredService<PasswordResetService>(),
+            host.Services.GetRequiredService<PresentationBotHostedService>());
         if (loginForm.ShowDialog() == DialogResult.OK && loginForm.AuthenticatedUser is { } user)
         {
             Form mainForm = user.Role switch
             {
-                UserRole.Operator => host.Services.GetRequiredService<AdminForm>(),
-                UserRole.Admin => host.Services.GetRequiredService<AdminPanelForm>(),
+                // AdminForm/AdminPanelForm are both DI singletons built before login happens, so neither has
+                // a way to receive the logged-in user through its constructor - SetCurrentUser wires it in
+                // here instead, before the form ever runs (AdminForm needs it for its own "Botga ulash" in
+                // Sozlamalar; AdminPanelForm needs it to scope "Loyihalar" to whichever Admin this is).
+                UserRole.Operator => WithCurrentOperatorUser(host.Services.GetRequiredService<AdminForm>(), user),
+                UserRole.Admin => WithCurrentAdminUser(host.Services.GetRequiredService<AdminPanelForm>(), user),
                 UserRole.SuperAdmin => host.Services.GetRequiredService<SuperAdminPanelForm>(),
                 _ => throw new InvalidOperationException($"Unknown role: {user.Role}")
             };
 
             WinFormsApp.Run(mainForm);
+        }
+
+        // Local functions can't be overloaded by parameter type the way regular methods can - hence the
+        // distinct names, even though both bodies are identical modulo the form type.
+        static AdminForm WithCurrentOperatorUser(AdminForm form, User user)
+        {
+            form.SetCurrentUser(user);
+            return form;
+        }
+
+        static AdminPanelForm WithCurrentAdminUser(AdminPanelForm form, User user)
+        {
+            form.SetCurrentUser(user);
+            return form;
         }
 
         // Same Task.Run reasoning as the seed call above - the WinForms message loop has already ended by

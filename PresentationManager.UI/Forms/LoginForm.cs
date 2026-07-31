@@ -1,5 +1,6 @@
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
+using PresentationManager.TelegramBot;
 using PresentationManager.UI.Controls;
 using PresentationManager.UI.Theme;
 
@@ -7,19 +8,24 @@ namespace PresentationManager.UI.Forms;
 
 /// <summary>The very first thing shown on launch — only Operator/Admin/SuperAdmin log in here (Presenters
 /// and Judges never touch the desktop app, only the Telegram bot). On success, <see cref="AuthenticatedUser"/>
-/// tells <c>Program.cs</c> which of the three role-specific main forms to run.</summary>
+/// tells <c>Program.cs</c> which of the three role-specific main forms to run. "Parolni unutdingizmi?" opens
+/// <see cref="ForgotPasswordForm"/> - a separate modal so this form's own layout stays simple.</summary>
 public sealed class LoginForm : Form
 {
     private readonly UserService _userService;
+    private readonly PasswordResetService _passwordResetService;
+    private readonly PresentationBotHostedService _botHostedService;
     private readonly TextBox _usernameBox;
     private readonly TextBox _passwordBox;
     private readonly Label _errorLabel;
 
     public User? AuthenticatedUser { get; private set; }
 
-    public LoginForm(UserService userService)
+    public LoginForm(UserService userService, PasswordResetService passwordResetService, PresentationBotHostedService botHostedService)
     {
         _userService = userService;
+        _passwordResetService = passwordResetService;
+        _botHostedService = botHostedService;
 
         Text = "Kirish";
         BackColor = AppColors.Background;
@@ -29,7 +35,7 @@ public sealed class LoginForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(360, 260);
+        ClientSize = new Size(360, 290);
 
         var title = new Label
         {
@@ -81,8 +87,24 @@ public sealed class LoginForm : Form
         var buttonWrap = new Panel { Dock = DockStyle.Top, Height = 58, Padding = new Padding(24, 12, 24, 0) };
         buttonWrap.Controls.Add(loginButton);
 
+        var forgotPasswordLink = new LinkLabel
+        {
+            Text = "Parolni unutdingizmi?",
+            Dock = DockStyle.Top,
+            Height = 24,
+            Padding = new Padding(24, 6, 24, 0),
+            TextAlign = ContentAlignment.MiddleLeft,
+            LinkColor = AppColors.Accent,
+            ActiveLinkColor = AppColors.Accent,
+            VisitedLinkColor = AppColors.Accent,
+            LinkBehavior = LinkBehavior.HoverUnderline,
+            Font = new Font("Segoe UI", 8.5f)
+        };
+        forgotPasswordLink.LinkClicked += (_, _) => OnForgotPasswordClick();
+
         Controls.Add(buttonWrap);
         Controls.Add(_errorLabel);
+        Controls.Add(forgotPasswordLink);
         Controls.Add(layout);
         Controls.Add(title);
 
@@ -141,5 +163,11 @@ public sealed class LoginForm : Form
         {
             _errorLabel.Text = ex.Message;
         }
+    }
+
+    private void OnForgotPasswordClick()
+    {
+        using var dialog = new ForgotPasswordForm(_userService, _passwordResetService, _botHostedService);
+        dialog.ShowDialog(this);
     }
 }

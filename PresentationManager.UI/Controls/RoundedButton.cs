@@ -23,7 +23,7 @@ public sealed class RoundedButton : Button
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
         TextAlign = ContentAlignment.MiddleCenter;
-        ForeColor = AppColors.Background;
+        ForeColor = LightColors.TextPrimary;
         Font = new Font("Segoe UI Semibold", 11f, FontStyle.Regular, GraphicsUnit.Point);
         Cursor = Cursors.Hand;
         Padding = new Padding(20, 10, 20, 10);
@@ -98,7 +98,7 @@ public sealed class RoundedButton : Button
         using var path = RoundedRectPath(rect, CornerRadius * scale);
 
         var fillColor = !Enabled
-            ? AppColors.PanelAlt
+            ? LightColors.PanelAlt
             : _pressed
                 ? ControlPaint.Dark(BackColor, 0.1f)
                 : _hovering
@@ -119,7 +119,7 @@ public sealed class RoundedButton : Button
 
         // Centered against the full ClientRectangle (not the inset stroke rect) so the border width never
         // nudges the text off-center.
-        var textColor = Enabled ? ForeColor : AppColors.TextSecondary;
+        var textColor = Enabled ? ForeColor : LightColors.TextSecondary;
         TextRenderer.DrawText(g, Text, Font, ClientRectangle, textColor,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
     }

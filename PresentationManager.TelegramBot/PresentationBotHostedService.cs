@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
@@ -14,17 +16,24 @@ using Telegram.Bot.Types.ReplyMarkups;
 
 namespace PresentationManager.TelegramBot;
 
-/// <summary>Two Telegram-only roles live here, routed purely by who's already known to the system when a
-/// chat says /start: a <b>Presenter</b> uploads presentations into a project's queue (see
+/// <summary>Three roles live here, routed purely by who's already known to the system when a chat says
+/// /start: a <b>Presenter</b> uploads presentations into a project's queue (see
 /// <see cref="HandleDocumentAsync"/>), a <b>Judge</b> scores presentations against a project's dynamic
-/// criteria (see <see cref="ShowJudgePresentationsAsync"/> onward). Both start from the same one-time
-/// registration (full name, then sharing a Telegram contact) and land as a Presenter — becoming a Judge only
-/// happens afterward, when Admin picks that already-registered person from the Admin panel's "Hakamlar"
-/// dialog (<c>JudgeService.AssignAsync</c>); this class subscribes to <c>JudgeService.JudgeAssigned</c> to
-/// push that person a notification the moment it happens (<see cref="OnJudgeAssignedAsync"/>). Runs embedded
-/// in the same process as the WinForms admin app (started via <c>Program.cs</c>'s host), reusing its
-/// existing service singletons - a submitted file lands in the database and managed file storage exactly
-/// the same way <c>AdminForm.OnAddClick</c> does.</summary>
+/// criteria (see <see cref="ShowJudgePresentationsAsync"/> onward), and a linked <b>Admin</b> gets a
+/// read/report + basic-management mirror of the desktop Admin panel (see
+/// <see cref="ShowAdminMainMenuAsync"/> onward) — the only one of the three that isn't Telegram-native: an
+/// Admin must first link their desktop account via the "Botga ulash" one-time code
+/// (<see cref="AdminLinkService"/>), whereas Presenter/Judge identities live entirely in Telegram-side tables.
+/// Presenter and Judge both start from the same one-time registration (full name, then sharing a Telegram
+/// contact) and land as a Presenter — becoming a Judge only happens afterward, when Admin picks that
+/// already-registered person from the Admin panel's "Hakamlar" dialog (<c>JudgeService.AssignAsync</c>); this
+/// class subscribes to <c>JudgeService.JudgeAssigned</c> to push that person a notification the moment it
+/// happens (<see cref="OnJudgeAssignedAsync"/>). Identity priority on a plain /start is Admin, then Judge,
+/// then Presenter (see <see cref="BeginAsync"/>) - mirrors the existing Judge-over-Presenter precedent for
+/// the same reason: whichever role this chat has always wins over the others. Runs embedded in the same
+/// process as the WinForms admin app (started via <c>Program.cs</c>'s host), reusing its existing service
+/// singletons - a submitted file lands in the database and managed file storage exactly the same way
+/// <c>AdminForm.OnAddClick</c> does.</summary>
 public sealed class PresentationBotHostedService : BackgroundService
 {
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase) { ".ppt", ".pptx", ".pdf" };
@@ -48,6 +57,16 @@ public sealed class PresentationBotHostedService : BackgroundService
 
     private const string JudgeProjectsButtonText = "📋 Loyihalar";
 
+    /// <summary>Persistent bottom panel shown to a linked Admin — mirrors <see cref="JudgeMainKeyboard"/>,
+    /// jumping straight back to <see cref="ShowAdminMainMenuAsync"/> without needing /start.</summary>
+    private static readonly ReplyKeyboardMarkup AdminMainKeyboard = new(
+        new[] { new KeyboardButton("🗂 Admin panel") })
+    {
+        ResizeKeyboard = true
+    };
+
+    private const string AdminMenuButtonText = "🗂 Admin panel";
+
     private readonly PresentationBotOptions _options;
     private readonly ProjectService _projectService;
     private readonly PresentationQueueService _queueService;
@@ -56,6 +75,8 @@ public sealed class PresentationBotHostedService : BackgroundService
     private readonly JudgeService _judgeService;
     private readonly ScoreService _scoreService;
     private readonly CriterionService _criterionService;
+    private readonly UserService _userService;
+    private readonly AdminLinkService _adminLinkService;
 
     /// <summary>Set once <see cref="ExecuteAsync"/> actually starts polling (i.e. a token is configured) -
     /// null otherwise, which <see cref="OnJudgeAssignedAsync"/> treats as "bot is off, nothing to push".</summary>
@@ -68,6 +89,9 @@ public sealed class PresentationBotHostedService : BackgroundService
     /// only ever in one flow at a time but the two shapes don't overlap.</summary>
     private readonly ConcurrentDictionary<long, JudgeSession> _judgeSessions = new();
 
+    /// <summary>Linked-Admin reporting/management flow state, per chat — see <see cref="AdminSession"/>.</summary>
+    private readonly ConcurrentDictionary<long, AdminSession> _adminSessions = new();
+
     public PresentationBotHostedService(
         IOptions<PresentationBotOptions> options,
         ProjectService projectService,
@@ -76,7 +100,9 @@ public sealed class PresentationBotHostedService : BackgroundService
         IPresenterRepository presenterRepository,
         JudgeService judgeService,
         ScoreService scoreService,
-        CriterionService criterionService)
+        CriterionService criterionService,
+        UserService userService,
+        AdminLinkService adminLinkService)
     {
         _options = options.Value;
         _projectService = projectService;
@@ -86,6 +112,8 @@ public sealed class PresentationBotHostedService : BackgroundService
         _judgeService = judgeService;
         _scoreService = scoreService;
         _criterionService = criterionService;
+        _userService = userService;
+        _adminLinkService = adminLinkService;
 
         _judgeService.JudgeAssigned += judge => _ = OnJudgeAssignedAsync(judge);
     }
@@ -148,11 +176,30 @@ public sealed class PresentationBotHostedService : BackgroundService
     {
         var chatId = message.Chat.Id;
 
-        if (message.Text is "/start" or "/cancel" or JudgeProjectsButtonText)
+        // A Telegram deep link (t.me/bot?start=TOKEN) arrives as literal text "/start TOKEN" - handled before
+        // the plain "/start" branch below, since that one deliberately ignores anything after the command.
+        if (message.Text is { } startText && startText.StartsWith("/start ", StringComparison.Ordinal))
+        {
+            var token = startText["/start ".Length..].Trim();
+            _sessions.TryRemove(chatId, out _);
+            _judgeSessions.TryRemove(chatId, out _);
+            _adminSessions.TryRemove(chatId, out _);
+            await HandleAdminLinkTokenAsync(botClient, chatId, token, message.From?.Username, ct);
+            return;
+        }
+
+        if (message.Text is "/start" or "/cancel" or JudgeProjectsButtonText or AdminMenuButtonText)
         {
             _sessions.TryRemove(chatId, out _);
             _judgeSessions.TryRemove(chatId, out _);
-            await BeginAsync(botClient, chatId, ct);
+            _adminSessions.TryRemove(chatId, out _);
+            await BeginAsync(botClient, chatId, message.From?.Username, ct);
+            return;
+        }
+
+        if (_adminSessions.ContainsKey(chatId))
+        {
+            await HandleAdminMessageAsync(botClient, chatId, message, ct);
             return;
         }
 
@@ -164,7 +211,7 @@ public sealed class PresentationBotHostedService : BackgroundService
 
         if (!_sessions.TryGetValue(chatId, out var session))
         {
-            await BeginAsync(botClient, chatId, ct);
+            await BeginAsync(botClient, chatId, message.From?.Username, ct);
             return;
         }
 
@@ -206,14 +253,32 @@ public sealed class PresentationBotHostedService : BackgroundService
         }
     }
 
-    /// <summary>Entry point for both the very first message from a chat and every subsequent /start. Judges
-    /// take priority (someone Admin already assigned always means judge, even if that same person also
-    /// uploads presentations elsewhere) - then already-registered presenters skip straight to project
-    /// selection - brand new chats go through the one-time full name + contact-share registration, which
-    /// always lands them as a Presenter (becoming a Judge only happens afterward, when Admin assigns them
-    /// from the Admin panel - see <see cref="OnJudgeAssignedAsync"/>).</summary>
-    private async Task BeginAsync(ITelegramBotClient botClient, long chatId, CancellationToken ct)
+    /// <summary>Entry point for both the very first message from a chat and every subsequent /start. A chat
+    /// already linked to an Admin account takes top priority, then judges (someone Admin already assigned
+    /// always means judge, even if that same person also uploads presentations elsewhere) - then
+    /// already-registered presenters skip straight to project selection - brand new chats go through the
+    /// one-time full name + contact-share registration, which always lands them as a Presenter (becoming a
+    /// Judge only happens afterward, when Admin assigns them from the Admin panel - see
+    /// <see cref="OnJudgeAssignedAsync"/>).</summary>
+    private async Task BeginAsync(ITelegramBotClient botClient, long chatId, string? telegramUsername, CancellationToken ct)
     {
+        var linkedUser = await _userService.GetByTelegramChatIdAsync(chatId, ct);
+        if (linkedUser is not null)
+        {
+            // Opportunistic self-heal: accounts linked before TelegramUsername started being captured (or
+            // whose Telegram username has since changed) get it filled in/refreshed right here, on any
+            // ordinary /start, instead of requiring the account to be re-linked from scratch.
+            if (!string.IsNullOrEmpty(telegramUsername) &&
+                !string.Equals(linkedUser.TelegramUsername, telegramUsername, StringComparison.OrdinalIgnoreCase))
+            {
+                await _userService.LinkTelegramChatAsync(linkedUser.Id, chatId, telegramUsername, ct);
+                linkedUser.TelegramUsername = telegramUsername;
+            }
+
+            await RouteLinkedUserAsync(botClient, chatId, linkedUser, ct);
+            return;
+        }
+
         var judgeAssignments = await _judgeService.GetLinkedAssignmentsByChatIdAsync(chatId, ct);
         if (judgeAssignments.Count > 0)
         {
@@ -236,6 +301,57 @@ public sealed class PresentationBotHostedService : BackgroundService
         await botClient.SendMessage(chatId,
             "Xush kelibsiz! Avval ro'yxatdan o'tamiz - bu faqat bir marta so'raladi.\nIsm-familyangizni kiriting:",
             cancellationToken: ct);
+    }
+
+    /// <summary>Routes an already-linked account to whatever it should see on a plain /start: the full
+    /// Admin reporting/management menu for <see cref="UserRole.Admin"/>, or just a quiet confirmation for
+    /// every other linked role (today, only <see cref="UserRole.Operator"/> - linked purely so
+    /// "Parolni unutdingizmi?" has somewhere to deliver a reset code, with no bot-side menu of its own).</summary>
+    private async Task RouteLinkedUserAsync(ITelegramBotClient botClient, long chatId, PresentationManager.Domain.Entities.User user, CancellationToken ct)
+    {
+        if (user.Role == UserRole.Admin)
+        {
+            await ShowAdminMainMenuAsync(botClient, chatId, user, ct);
+            return;
+        }
+
+        await botClient.SendMessage(chatId,
+            $"✅ Hisobingiz ({user.FullName}) ulangan. Parolni tiklash kodlari shu Telegram chatga yuboriladi.",
+            cancellationToken: ct);
+    }
+
+    /// <summary>Consumes a "Botga ulash" deep-link token (see <see cref="AdminLinkService"/>) and links this
+    /// chat to the Admin/Operator account that generated it. An invalid/expired token (e.g. the 15-minute
+    /// window lapsed, or it was already used) falls back to the normal <see cref="BeginAsync"/> flow rather
+    /// than leaving the chat stuck, since the token itself carries no other identity to recover.</summary>
+    private async Task HandleAdminLinkTokenAsync(ITelegramBotClient botClient, long chatId, string token, string? telegramUsername, CancellationToken ct)
+    {
+        if (!string.IsNullOrEmpty(token) && _adminLinkService.TryConsume(token, out var userId))
+        {
+            try
+            {
+                await _userService.LinkTelegramChatAsync(userId, chatId, telegramUsername, ct);
+                var user = await _userService.GetByIdAsync(userId, ct);
+                if (user is not null)
+                {
+                    await botClient.SendMessage(chatId, $"✅ Hisobingiz ({user.FullName}) muvaffaqiyatli ulandi!", cancellationToken: ct);
+                    await RouteLinkedUserAsync(botClient, chatId, user, ct);
+                    return;
+                }
+            }
+            catch (Exception)
+            {
+                // Most likely this chat is already linked to a DIFFERENT account (TelegramChatId is unique) -
+                // a fresh token from the account that actually owns this chat is the only fix, so send them
+                // back to the normal flow rather than silently doing nothing.
+                await botClient.SendMessage(chatId, "❌ Bu Telegram hisob allaqachon boshqa akkauntga ulangan.", cancellationToken: ct);
+                await BeginAsync(botClient, chatId, telegramUsername, ct);
+                return;
+            }
+        }
+
+        await botClient.SendMessage(chatId, "❌ Ulash havolasi yaroqsiz yoki muddati o'tgan. Admin paneldan qaytadan urinib ko'ring.", cancellationToken: ct);
+        await BeginAsync(botClient, chatId, telegramUsername, ct);
     }
 
     private async Task CompleteRegistrationAsync(
@@ -277,6 +393,30 @@ public sealed class PresentationBotHostedService : BackgroundService
             // Best-effort push notification - the assignment itself already succeeded regardless of whether
             // this message manages to reach them (e.g. they blocked the bot).
             Debug.WriteLine($"Failed to notify newly-assigned judge (chat {chatId}): {ex}");
+        }
+    }
+
+    /// <summary>Public entry point used from outside the bot's own update loop - specifically,
+    /// <c>ForgotPasswordForm</c> pushing a password-reset code to a linked chat. Registered in DI as itself
+    /// (not just as <see cref="IHostedService"/> - see Program.cs) so it's resolvable this way. Best-effort:
+    /// returns false rather than throwing if the bot is off or the send itself fails (e.g. the account blocked
+    /// the bot), letting the caller show its own error instead of crashing the desktop form.</summary>
+    public async Task<bool> TrySendMessageAsync(long chatId, string text, CancellationToken ct = default)
+    {
+        if (_botClient is not { } botClient)
+        {
+            return false;
+        }
+
+        try
+        {
+            await botClient.SendMessage(chatId, text, cancellationToken: ct);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to send message to chat {chatId}: {ex}");
+            return false;
         }
     }
 
@@ -623,6 +763,460 @@ public sealed class PresentationBotHostedService : BackgroundService
         await botClient.SendMessage(chatId, "Iltimos, tugmalardan birini tanlang.", cancellationToken: ct);
     }
 
+    // ---------- Admin reporting/management flow ----------
+
+    private async Task ShowAdminMainMenuAsync(ITelegramBotClient botClient, long chatId, PresentationManager.Domain.Entities.User user, CancellationToken ct)
+    {
+        _adminSessions[chatId] = new AdminSession { Step = AdminStep.MainMenu, UserId = user.Id };
+
+        var projects = await _projectService.GetByCreatorAsync(user.Id, ct);
+        var buttons = projects
+            .Select(p => new[] { InlineKeyboardButton.WithCallbackData(p.Name, $"aproj:{p.Id}") })
+            .ToList();
+        buttons.Add([InlineKeyboardButton.WithCallbackData("➕ Yangi loyiha", "anewproj")]);
+
+        await botClient.SendMessage(chatId, $"👋 Xush kelibsiz, {user.FullName}!", replyMarkup: AdminMainKeyboard, cancellationToken: ct);
+        await botClient.SendMessage(chatId, projects.Count == 0 ? "Hozircha loyihalaringiz yo'q." : "📁 Loyihalaringiz:",
+            replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
+    }
+
+    private async Task ShowAdminProjectMenuAsync(ITelegramBotClient botClient, long chatId, int projectId, string projectName, CancellationToken ct)
+    {
+        if (_adminSessions.TryGetValue(chatId, out var session))
+        {
+            session.ProjectId = projectId;
+            session.ProjectName = projectName;
+            session.Step = AdminStep.ProjectMenu;
+        }
+
+        var buttons = new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData("👥 Qatnashchilar", $"aparts:{projectId}") },
+            new[] { InlineKeyboardButton.WithCallbackData("📑 Taqdimotlar", $"apres:{projectId}") },
+            new[] { InlineKeyboardButton.WithCallbackData("🏆 Yakuniy baholar", $"ascores:{projectId}") },
+            new[] { InlineKeyboardButton.WithCallbackData("📐 Mezonlar", $"acrit:{projectId}") },
+            new[] { InlineKeyboardButton.WithCallbackData("⚖️ Hakamlar", $"ajudg:{projectId}") },
+            new[] { InlineKeyboardButton.WithCallbackData("⬅️ Loyihalar ro'yxati", "amain") }
+        };
+
+        await botClient.SendMessage(chatId, $"📁 {projectName}", replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
+    }
+
+    private async Task ShowAdminParticipantsAsync(ITelegramBotClient botClient, long chatId, int projectId, CancellationToken ct)
+    {
+        var project = (await _projectService.GetAllAsync(ct)).FirstOrDefault(p => p.Id == projectId);
+        var participants = await _projectService.GetParticipantsAsync(projectId, ct);
+
+        var text = participants.Count == 0
+            ? "Hozircha qatnashchilar yo'q."
+            : string.Join('\n', participants.Select((p, i) =>
+                $"{i + 1}. {p.FullName}{(p.PhoneNumber is { } phone ? $" — {phone}" : string.Empty)} ({p.PresentationCount} ta taqdimot)"));
+
+        await botClient.SendMessage(chatId, $"👥 {project?.Name} — Qatnashchilar\n\n{text}",
+            replyMarkup: BackToProjectKeyboard(projectId), cancellationToken: ct);
+    }
+
+    private async Task ShowAdminPresentationsAsync(ITelegramBotClient botClient, long chatId, int projectId, CancellationToken ct)
+    {
+        var project = (await _projectService.GetAllAsync(ct)).FirstOrDefault(p => p.Id == projectId);
+        var presentations = await _queueService.GetAllAsync(projectId, ct);
+
+        var text = presentations.Count == 0
+            ? "Hozircha taqdimotlar yo'q."
+            : string.Join('\n', presentations.Select(p =>
+                $"{p.OrderNumber + 1}. {p.FullName} — {p.Title} [{UzbekText.StatusLabel(p.Status)}]"));
+
+        await botClient.SendMessage(chatId, $"📑 {project?.Name} — Taqdimotlar\n\n{text}",
+            replyMarkup: BackToProjectKeyboard(projectId), cancellationToken: ct);
+    }
+
+    /// <summary>Mirrors <c>AdminPanelForm</c>'s "Yakuniy baholar" tab: per criterion, the average across every
+    /// judge who scored it (see <c>ScoreService.GetFinalScoresAsync</c>), plus the summed total.</summary>
+    private async Task ShowAdminScoresAsync(ITelegramBotClient botClient, long chatId, int projectId, CancellationToken ct)
+    {
+        var project = (await _projectService.GetAllAsync(ct)).FirstOrDefault(p => p.Id == projectId);
+        var criteria = await _criterionService.GetByProjectIdAsync(projectId, ct);
+        var summaries = await _scoreService.GetFinalScoresAsync(projectId, ct);
+
+        if (summaries.Count == 0)
+        {
+            await botClient.SendMessage(chatId, $"🏆 {project?.Name} — Yakuniy baholar\n\nHozircha taqdimotlar yo'q.",
+                replyMarkup: BackToProjectKeyboard(projectId), cancellationToken: ct);
+            return;
+        }
+
+        var lines = summaries.Select(s =>
+        {
+            var perCriterion = criteria.Count == 0
+                ? string.Empty
+                : "\n   " + string.Join(", ", criteria.Select(c => $"{c.Name}: {s.AverageByCriterionId.GetValueOrDefault(c.Id, 0):0.##}"));
+            return $"• {s.PresenterFullName} — {s.Title}{perCriterion}\n   Jami: {s.Total:0.##}";
+        });
+
+        await botClient.SendMessage(chatId, $"🏆 {project?.Name} — Yakuniy baholar\n\n{string.Join("\n\n", lines)}",
+            replyMarkup: BackToProjectKeyboard(projectId), cancellationToken: ct);
+    }
+
+    private async Task ShowAdminCriteriaAsync(ITelegramBotClient botClient, long chatId, int projectId, CancellationToken ct)
+    {
+        var criteria = await _criterionService.GetByProjectIdAsync(projectId, ct);
+        var text = criteria.Count == 0
+            ? "Hozircha mezonlar yo'q."
+            : string.Join('\n', criteria.Select((c, i) => $"{i + 1}. {c.Name} (max {c.MaxScore})"));
+
+        var buttons = new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData("➕ Mezon qo'shish", $"aaddcrit:{projectId}") },
+            new[] { InlineKeyboardButton.WithCallbackData("⬅️ Orqaga", $"aproj:{projectId}") }
+        };
+
+        await botClient.SendMessage(chatId, $"📐 Mezonlar\n\n{text}", replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
+    }
+
+    private async Task ShowAdminJudgesAsync(ITelegramBotClient botClient, long chatId, int projectId, CancellationToken ct)
+    {
+        var judges = await _judgeService.GetByProjectIdAsync(projectId, ct);
+        var text = judges.Count == 0
+            ? "Hozircha hakamlar yo'q."
+            : string.Join('\n', judges.Select((j, i) => $"{i + 1}. {j.FullName} — {j.PhoneNumber}"));
+
+        var buttons = new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData("➕ Hakam biriktirish", $"aaddjudg:{projectId}") },
+            new[] { InlineKeyboardButton.WithCallbackData("⬅️ Orqaga", $"aproj:{projectId}") }
+        };
+
+        await botClient.SendMessage(chatId, $"⚖️ Hakamlar\n\n{text}", replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
+    }
+
+    private static InlineKeyboardMarkup BackToProjectKeyboard(int projectId) =>
+        new(new[] { new[] { InlineKeyboardButton.WithCallbackData("⬅️ Orqaga", $"aproj:{projectId}") } });
+
+    private static bool TryParseDate(string? text, out DateOnly date)
+    {
+        date = default;
+        return !string.IsNullOrWhiteSpace(text)
+            && DateOnly.TryParseExact(text.Trim(), "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
+    }
+
+    /// <summary>Text-message dispatch for every multi-step Admin flow (new project, new criterion, judge
+    /// assignment by phone) — mirrors <see cref="HandleMessageAsync"/>'s <c>switch (session.Step)</c> for the
+    /// presenter flow, kept separate since the two step enums don't overlap.</summary>
+    private async Task HandleAdminMessageAsync(ITelegramBotClient botClient, long chatId, Message message, CancellationToken ct)
+    {
+        if (!_adminSessions.TryGetValue(chatId, out var session))
+        {
+            return;
+        }
+
+        var text = message.Text?.Trim();
+
+        switch (session.Step)
+        {
+            case AdminStep.CreatingProjectName when !string.IsNullOrWhiteSpace(text):
+                session.NewProjectName = text!;
+                session.Step = AdminStep.CreatingProjectStartDate;
+                await botClient.SendMessage(chatId, "Boshlanish sanasini kiriting (kun.oy.yil, masalan 15.08.2026):", cancellationToken: ct);
+                break;
+
+            case AdminStep.CreatingProjectStartDate when TryParseDate(text, out var startDate):
+                session.NewProjectStartDate = startDate;
+                session.Step = AdminStep.CreatingProjectEndDate;
+                await botClient.SendMessage(chatId,
+                    "Tugash sanasini kiriting (kun.oy.yil) — bir kunlik bo'lsa xuddi shu sanani qayta yuboring:", cancellationToken: ct);
+                break;
+
+            case AdminStep.CreatingProjectStartDate:
+                await botClient.SendMessage(chatId, "Sana formati noto'g'ri. Masalan: 15.08.2026", cancellationToken: ct);
+                break;
+
+            case AdminStep.CreatingProjectEndDate when TryParseDate(text, out var endDate) && endDate >= session.NewProjectStartDate:
+                session.NewProjectEndDate = endDate;
+                session.Step = AdminStep.CreatingProjectLocation;
+                await botClient.SendMessage(chatId, "Manzilni kiriting (yoki o'tkazib yuborish uchun \"-\" yuboring):", cancellationToken: ct);
+                break;
+
+            case AdminStep.CreatingProjectEndDate:
+                await botClient.SendMessage(chatId, "Sana formati noto'g'ri yoki boshlanish sanasidan oldin. Qaytadan kiriting:", cancellationToken: ct);
+                break;
+
+            case AdminStep.CreatingProjectLocation when !string.IsNullOrWhiteSpace(text):
+                await CreateProjectFromSessionAsync(botClient, chatId, session, text == "-" ? null : text, ct);
+                break;
+
+            case AdminStep.AddingCriterionName when !string.IsNullOrWhiteSpace(text):
+                session.NewCriterionName = text!;
+                session.Step = AdminStep.AddingCriterionMaxScore;
+                await botClient.SendMessage(chatId, "Maksimal ballni kiriting (masalan 10):", cancellationToken: ct);
+                break;
+
+            case AdminStep.AddingCriterionMaxScore when int.TryParse(text, out var maxScore):
+                await CreateCriterionFromSessionAsync(botClient, chatId, session, maxScore, ct);
+                break;
+
+            case AdminStep.AddingCriterionMaxScore:
+                await botClient.SendMessage(chatId, "Iltimos, butun son kiriting (masalan 10).", cancellationToken: ct);
+                break;
+
+            case AdminStep.AssigningJudgePhone when !string.IsNullOrWhiteSpace(text):
+                await SearchAndAssignJudgeAsync(botClient, chatId, session, text!, ct);
+                break;
+
+            default:
+                await botClient.SendMessage(chatId, "Iltimos, tugmalardan birini tanlang yoki so'ralgan ma'lumotni kiriting.", cancellationToken: ct);
+                break;
+        }
+    }
+
+    private async Task CreateProjectFromSessionAsync(ITelegramBotClient botClient, long chatId, AdminSession session, string? location, CancellationToken ct)
+    {
+        try
+        {
+            var project = await _projectService.CreateAsync(
+                session.NewProjectName, session.NewProjectStartDate, session.NewProjectEndDate, null, location,
+                session.UserId, ct);
+
+            await botClient.SendMessage(chatId, $"✅ \"{project.Name}\" loyihasi yaratildi!", cancellationToken: ct);
+            await ShowAdminProjectMenuAsync(botClient, chatId, project.Id, project.Name, ct);
+        }
+        catch (Exception ex)
+        {
+            session.Step = AdminStep.MainMenu;
+            await botClient.SendMessage(chatId, $"❌ {ex.Message}", cancellationToken: ct);
+        }
+    }
+
+    private async Task CreateCriterionFromSessionAsync(ITelegramBotClient botClient, long chatId, AdminSession session, int maxScore, CancellationToken ct)
+    {
+        try
+        {
+            await _criterionService.CreateAsync(session.ProjectId, session.NewCriterionName, maxScore, ct);
+            await botClient.SendMessage(chatId, "✅ Mezon qo'shildi.", cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            await botClient.SendMessage(chatId, $"❌ {ex.Message}", cancellationToken: ct);
+        }
+
+        session.Step = AdminStep.ProjectMenu;
+        await ShowAdminCriteriaAsync(botClient, chatId, session.ProjectId, ct);
+    }
+
+    /// <summary>Same candidate search <see cref="JudgeAssignForm"/> (the desktop equivalent) does - only
+    /// already bot-registered presenters, excluding whoever's already a judge on this project - narrowed by a
+    /// phone-number substring since the bot has no list-and-click UI as convenient as a desktop ListBox.</summary>
+    private async Task SearchAndAssignJudgeAsync(ITelegramBotClient botClient, long chatId, AdminSession session, string phoneQuery, CancellationToken ct)
+    {
+        var registered = await _presenterRepository.GetAllAsync(ct);
+        var existingJudges = await _judgeService.GetByProjectIdAsync(session.ProjectId, ct);
+        var alreadyAssignedChatIds = existingJudges.Select(j => j.TelegramChatId).ToHashSet();
+
+        var candidates = registered
+            .Where(p => !alreadyAssignedChatIds.Contains(p.TelegramChatId))
+            .Where(p => (p.PhoneNumber ?? string.Empty).Contains(phoneQuery, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            await botClient.SendMessage(chatId,
+                "Bunday raqam bilan ro'yxatdan o'tgan (va shu loyihaga hali tayinlanmagan) odam topilmadi. Avval kerakli odam botga /start bosib kontaktini ulashsin. Qaytadan urinib ko'ring yoki /cancel bosing:",
+                cancellationToken: ct);
+            return;
+        }
+
+        if (candidates.Count == 1)
+        {
+            await AssignJudgeAsync(botClient, chatId, session, candidates[0].Id, ct);
+            return;
+        }
+
+        var buttons = candidates
+            .Select(p => new[] { InlineKeyboardButton.WithCallbackData($"{p.FullName} — {p.PhoneNumber}", $"ajassign:{p.Id}") })
+            .ToArray();
+        await botClient.SendMessage(chatId, "Bir nechta mos odam topildi, birini tanlang:", replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
+    }
+
+    private async Task AssignJudgeAsync(ITelegramBotClient botClient, long chatId, AdminSession session, int presenterId, CancellationToken ct)
+    {
+        try
+        {
+            await _judgeService.AssignAsync(session.ProjectId, presenterId, ct);
+            await botClient.SendMessage(chatId, "✅ Hakam tayinlandi.", cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            await botClient.SendMessage(chatId, $"❌ {ex.Message}", cancellationToken: ct);
+        }
+
+        session.Step = AdminStep.ProjectMenu;
+        await ShowAdminJudgesAsync(botClient, chatId, session.ProjectId, ct);
+    }
+
+    // ---------- Admin callback dispatch ----------
+
+    private async Task HandleAdminMainCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, CancellationToken ct)
+    {
+        var chatId = callbackQuery.Message?.Chat.Id;
+        if (chatId is null)
+        {
+            return;
+        }
+
+        var user = await _userService.GetByTelegramChatIdAsync(chatId.Value, ct);
+        if (user is null)
+        {
+            await botClient.AnswerCallbackQuery(callbackQuery.Id, "Sessiya eskirgan, /start bosing.", cancellationToken: ct);
+            return;
+        }
+
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
+        await ShowAdminMainMenuAsync(botClient, chatId.Value, user, ct);
+    }
+
+    private async Task HandleAdminNewProjectCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, CancellationToken ct)
+    {
+        var chatId = callbackQuery.Message?.Chat.Id;
+        if (chatId is null || !_adminSessions.TryGetValue(chatId.Value, out var session))
+        {
+            return;
+        }
+
+        session.Step = AdminStep.CreatingProjectName;
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
+        await botClient.SendMessage(chatId.Value, "Yangi loyiha nomini kiriting:", cancellationToken: ct);
+    }
+
+    private async Task HandleAdminProjectCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
+    {
+        var chatId = callbackQuery.Message?.Chat.Id;
+        if (chatId is null || !int.TryParse(data["aproj:".Length..], out var projectId))
+        {
+            return;
+        }
+
+        var project = (await _projectService.GetAllAsync(ct)).FirstOrDefault(p => p.Id == projectId);
+        if (project is null)
+        {
+            await botClient.AnswerCallbackQuery(callbackQuery.Id, "Bu loyiha endi mavjud emas.", cancellationToken: ct);
+            return;
+        }
+
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
+        await ShowAdminProjectMenuAsync(botClient, chatId.Value, project.Id, project.Name, ct);
+    }
+
+    private async Task HandleAdminParticipantsCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
+    {
+        var chatId = callbackQuery.Message?.Chat.Id;
+        if (chatId is null || !int.TryParse(data["aparts:".Length..], out var projectId))
+        {
+            return;
+        }
+
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
+        await ShowAdminParticipantsAsync(botClient, chatId.Value, projectId, ct);
+    }
+
+    private async Task HandleAdminPresentationsCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
+    {
+        var chatId = callbackQuery.Message?.Chat.Id;
+        if (chatId is null || !int.TryParse(data["apres:".Length..], out var projectId))
+        {
+            return;
+        }
+
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
+        await ShowAdminPresentationsAsync(botClient, chatId.Value, projectId, ct);
+    }
+
+    private async Task HandleAdminScoresCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
+    {
+        var chatId = callbackQuery.Message?.Chat.Id;
+        if (chatId is null || !int.TryParse(data["ascores:".Length..], out var projectId))
+        {
+            return;
+        }
+
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
+        await ShowAdminScoresAsync(botClient, chatId.Value, projectId, ct);
+    }
+
+    private async Task HandleAdminCriteriaCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
+    {
+        var chatId = callbackQuery.Message?.Chat.Id;
+        if (chatId is null || !int.TryParse(data["acrit:".Length..], out var projectId))
+        {
+            return;
+        }
+
+        if (_adminSessions.TryGetValue(chatId.Value, out var session))
+        {
+            session.ProjectId = projectId;
+        }
+
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
+        await ShowAdminCriteriaAsync(botClient, chatId.Value, projectId, ct);
+    }
+
+    private async Task HandleAdminJudgesCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
+    {
+        var chatId = callbackQuery.Message?.Chat.Id;
+        if (chatId is null || !int.TryParse(data["ajudg:".Length..], out var projectId))
+        {
+            return;
+        }
+
+        if (_adminSessions.TryGetValue(chatId.Value, out var session))
+        {
+            session.ProjectId = projectId;
+        }
+
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
+        await ShowAdminJudgesAsync(botClient, chatId.Value, projectId, ct);
+    }
+
+    private async Task HandleAdminAddCriterionCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
+    {
+        var chatId = callbackQuery.Message?.Chat.Id;
+        if (chatId is null || !int.TryParse(data["aaddcrit:".Length..], out var projectId) || !_adminSessions.TryGetValue(chatId.Value, out var session))
+        {
+            return;
+        }
+
+        session.ProjectId = projectId;
+        session.Step = AdminStep.AddingCriterionName;
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
+        await botClient.SendMessage(chatId.Value, "Mezon nomini kiriting:", cancellationToken: ct);
+    }
+
+    private async Task HandleAdminAddJudgeCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
+    {
+        var chatId = callbackQuery.Message?.Chat.Id;
+        if (chatId is null || !int.TryParse(data["aaddjudg:".Length..], out var projectId) || !_adminSessions.TryGetValue(chatId.Value, out var session))
+        {
+            return;
+        }
+
+        session.ProjectId = projectId;
+        session.Step = AdminStep.AssigningJudgePhone;
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
+        await botClient.SendMessage(chatId.Value,
+            "Hakam etib tayinlash uchun ro'yxatdan o'tgan odamning telefon raqamini (yoki uning bir qismini) kiriting:",
+            cancellationToken: ct);
+    }
+
+    private async Task HandleAdminJudgeAssignCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
+    {
+        var chatId = callbackQuery.Message?.Chat.Id;
+        if (chatId is null || !_adminSessions.TryGetValue(chatId.Value, out var session) || !int.TryParse(data["ajassign:".Length..], out var presenterId))
+        {
+            return;
+        }
+
+        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
+        await AssignJudgeAsync(botClient, chatId.Value, session, presenterId, ct);
+    }
+
     // ---------- Callback dispatch ----------
 
     private async Task HandleCallbackQueryAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, CancellationToken ct)
@@ -660,6 +1254,50 @@ public sealed class PresentationBotHostedService : BackgroundService
         else if (data == "jdone")
         {
             await HandleJudgeDoneCallbackAsync(botClient, callbackQuery, ct);
+        }
+        else if (data == "amain")
+        {
+            await HandleAdminMainCallbackAsync(botClient, callbackQuery, ct);
+        }
+        else if (data == "anewproj")
+        {
+            await HandleAdminNewProjectCallbackAsync(botClient, callbackQuery, ct);
+        }
+        else if (data.StartsWith("aproj:", StringComparison.Ordinal))
+        {
+            await HandleAdminProjectCallbackAsync(botClient, callbackQuery, data, ct);
+        }
+        else if (data.StartsWith("aparts:", StringComparison.Ordinal))
+        {
+            await HandleAdminParticipantsCallbackAsync(botClient, callbackQuery, data, ct);
+        }
+        else if (data.StartsWith("apres:", StringComparison.Ordinal))
+        {
+            await HandleAdminPresentationsCallbackAsync(botClient, callbackQuery, data, ct);
+        }
+        else if (data.StartsWith("ascores:", StringComparison.Ordinal))
+        {
+            await HandleAdminScoresCallbackAsync(botClient, callbackQuery, data, ct);
+        }
+        else if (data.StartsWith("acrit:", StringComparison.Ordinal))
+        {
+            await HandleAdminCriteriaCallbackAsync(botClient, callbackQuery, data, ct);
+        }
+        else if (data.StartsWith("ajudg:", StringComparison.Ordinal))
+        {
+            await HandleAdminJudgesCallbackAsync(botClient, callbackQuery, data, ct);
+        }
+        else if (data.StartsWith("aaddcrit:", StringComparison.Ordinal))
+        {
+            await HandleAdminAddCriterionCallbackAsync(botClient, callbackQuery, data, ct);
+        }
+        else if (data.StartsWith("aaddjudg:", StringComparison.Ordinal))
+        {
+            await HandleAdminAddJudgeCallbackAsync(botClient, callbackQuery, data, ct);
+        }
+        else if (data.StartsWith("ajassign:", StringComparison.Ordinal))
+        {
+            await HandleAdminJudgeAssignCallbackAsync(botClient, callbackQuery, data, ct);
         }
     }
 }

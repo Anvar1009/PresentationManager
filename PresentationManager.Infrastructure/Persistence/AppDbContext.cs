@@ -39,6 +39,13 @@ public class AppDbContext : DbContext
             // ProjectService.CreateAsync always supplies real values for every new project going forward.
             b.Property(p => p.EventStartDate).HasDefaultValueSql("CURRENT_DATE");
             b.Property(p => p.EventEndDate).HasDefaultValueSql("CURRENT_DATE");
+            b.HasIndex(p => p.CreatedByUserId);
+            // SetNull, not Cascade: deleting the Admin who created a project shouldn't take the project (and
+            // everything in it - presentations, scores) down with it.
+            b.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(p => p.CreatedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Presentation>(b =>
@@ -91,6 +98,7 @@ public class AppDbContext : DbContext
             b.Property(u => u.PasswordHash).IsRequired();
             b.Property(u => u.FullName).IsRequired();
             b.HasIndex(u => u.Username).IsUnique();
+            b.HasIndex(u => u.TelegramChatId).IsUnique();
         });
 
         modelBuilder.Entity<EvaluationCriterion>(b =>

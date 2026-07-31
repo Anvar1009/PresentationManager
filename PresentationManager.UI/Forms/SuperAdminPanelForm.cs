@@ -1,8 +1,8 @@
 using System.Drawing.Drawing2D;
+using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
 using PresentationManager.UI.Controls;
-using PresentationManager.UI.Localization;
 using PresentationManager.UI.Theme;
 
 namespace PresentationManager.UI.Forms;

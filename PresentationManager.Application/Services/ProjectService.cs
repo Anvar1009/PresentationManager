@@ -28,9 +28,16 @@ public sealed class ProjectService
     public Task<List<Project>> GetAllAsync(CancellationToken ct = default) =>
         _projectRepository.GetAllAsync(ct);
 
+    /// <summary>Scoped project list for the Admin panel - see <see cref="Project.CreatedByUserId"/>. Every
+    /// other caller (Operator's own "Loyihalar" dialog, SuperAdmin, the Telegram bot) keeps using the
+    /// unscoped <see cref="GetAllAsync"/>, since only the Admin role's project list is meant to be
+    /// per-creator.</summary>
+    public Task<List<Project>> GetByCreatorAsync(int createdByUserId, CancellationToken ct = default) =>
+        _projectRepository.GetByCreatorAsync(createdByUserId, ct);
+
     public async Task<Project> CreateAsync(
         string name, DateOnly eventStartDate, DateOnly eventEndDate, TimeOnly? eventTime, string? location,
-        CancellationToken ct = default)
+        int? createdByUserId = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -48,7 +55,8 @@ public sealed class ProjectService
             EventStartDate = eventStartDate,
             EventEndDate = eventEndDate,
             EventTime = eventTime,
-            Location = string.IsNullOrWhiteSpace(location) ? null : location.Trim()
+            Location = string.IsNullOrWhiteSpace(location) ? null : location.Trim(),
+            CreatedByUserId = createdByUserId
         };
         return await _projectRepository.AddAsync(project, ct);
     }

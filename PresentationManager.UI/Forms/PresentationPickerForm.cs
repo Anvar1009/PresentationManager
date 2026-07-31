@@ -1,9 +1,9 @@
 using System.Drawing.Drawing2D;
+using PresentationManager.Application.Common;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
 using PresentationManager.Domain.Enums;
 using PresentationManager.UI.Controls;
-using PresentationManager.UI.Localization;
 using PresentationManager.UI.Theme;
 
 namespace PresentationManager.UI.Forms;
@@ -43,8 +43,8 @@ public sealed class PresentationPickerForm : Form
         _session = session;
 
         Text = "Keyingi taqdimotni tanlang";
-        BackColor = AppColors.Background;
-        ForeColor = AppColors.TextPrimary;
+        BackColor = LightColors.Background;
+        ForeColor = LightColors.TextPrimary;
         Font = new Font("Segoe UI", 9.5f);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         // Deliberately CenterScreen, not CenterParent — kept even now that the owner passed to ShowDialog is
@@ -62,7 +62,7 @@ public sealed class PresentationPickerForm : Form
             Text = "Keyingi taqdimotchini tanlang",
             Dock = DockStyle.Top,
             Height = 32,
-            ForeColor = AppColors.TextPrimary,
+            ForeColor = LightColors.TextPrimary,
             Font = new Font("Segoe UI", 16, FontStyle.Bold)
         };
 
@@ -74,15 +74,15 @@ public sealed class PresentationPickerForm : Form
             Text = "Ro'yxatdan birini tanlang, so'ng muhokamani yakunlab boshlang.",
             Dock = DockStyle.Top,
             Height = 44,
-            ForeColor = AppColors.TextSecondary,
+            ForeColor = LightColors.TextSecondary,
             Font = new Font("Segoe UI", 10)
         };
 
         _listBox = new ListBox
         {
             Dock = DockStyle.Fill,
-            BackColor = AppColors.Panel,
-            ForeColor = AppColors.TextPrimary,
+            BackColor = LightColors.Panel,
+            ForeColor = LightColors.TextPrimary,
             BorderStyle = BorderStyle.None,
             IntegralHeight = false,
             DrawMode = DrawMode.OwnerDrawFixed,
@@ -99,10 +99,10 @@ public sealed class PresentationPickerForm : Form
         };
         _listBox.MouseLeave += (_, _) => SetHoveredIndex(-1);
 
-        var listCard = new Panel { Dock = DockStyle.Fill, BackColor = AppColors.Panel };
+        var listCard = new Panel { Dock = DockStyle.Fill, BackColor = LightColors.Panel };
         listCard.Paint += (_, e) =>
         {
-            using var pen = new Pen(AppColors.Border);
+            using var pen = new Pen(LightColors.Border);
             e.Graphics.DrawRectangle(pen, 0, 0, listCard.Width - 1, listCard.Height - 1);
         };
         listCard.Controls.Add(_listBox);
@@ -116,7 +116,7 @@ public sealed class PresentationPickerForm : Form
         {
             Text = "BOSHLASH",
             Dock = DockStyle.Fill,
-            BackColor = AppColors.Success,
+            BackColor = LightColors.Success,
             Font = new Font("Segoe UI", 13, FontStyle.Bold),
             Enabled = false
         };
@@ -178,7 +178,7 @@ public sealed class PresentationPickerForm : Form
     {
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
 
-        using (var backBrush = new SolidBrush(AppColors.Panel))
+        using (var backBrush = new SolidBrush(LightColors.Panel))
         {
             e.Graphics.FillRectangle(backBrush, e.Bounds);
         }
@@ -193,7 +193,9 @@ public sealed class PresentationPickerForm : Form
         var hovered = e.Index == _hoveredIndex;
 
         var rowRect = Rectangle.Inflate(e.Bounds, -12, -RowSpacing / 2);
-        var rowColor = selected ? AppColors.PanelAlt : hovered ? ControlPaint.Light(AppColors.Panel, 0.08f) : AppColors.Panel;
+        // ControlPaint.Light can't lighten LightColors.Panel any further - it's already pure white - so the
+        // hover state needs to darken slightly instead, unlike the old dark-theme version of this row.
+        var rowColor = selected ? LightColors.PanelAlt : hovered ? ControlPaint.Dark(LightColors.Panel, 0.03f) : LightColors.Panel;
 
         using (var rowPath = RoundedRect(rowRect, CardCornerRadius))
         using (var rowBrush = new SolidBrush(rowColor))
@@ -203,18 +205,18 @@ public sealed class PresentationPickerForm : Form
 
         if (selected)
         {
-            using var accentBrush = new SolidBrush(AppColors.Accent);
+            using var accentBrush = new SolidBrush(LightColors.Accent);
             using var accentBarPath = RoundedRect(new Rectangle(rowRect.X, rowRect.Y, 4, rowRect.Height), 2);
             e.Graphics.FillPath(accentBrush, accentBarPath);
         }
 
         var badgeRect = new Rectangle(rowRect.X + 16, rowRect.Y + (rowRect.Height - BadgeDiameter) / 2, BadgeDiameter, BadgeDiameter);
-        using (var badgeBrush = new SolidBrush(AppColors.Accent))
+        using (var badgeBrush = new SolidBrush(LightColors.Accent))
         {
             e.Graphics.FillEllipse(badgeBrush, badgeRect);
         }
 
-        TextRenderer.DrawText(e.Graphics, (presentation.OrderNumber + 1).ToString(), _badgeFont, badgeRect, AppColors.Background,
+        TextRenderer.DrawText(e.Graphics, (presentation.OrderNumber + 1).ToString(), _badgeFont, badgeRect, LightColors.Background,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
 
         var statusText = UzbekText.StatusLabel(presentation.Status).ToUpperInvariant();
@@ -241,21 +243,21 @@ public sealed class PresentationPickerForm : Form
         var nameRect = new Rectangle(textLeft, blockTop, textWidth, nameHeight);
         var titleRect = new Rectangle(textLeft, blockTop + nameHeight + 2, textWidth, titleHeight);
 
-        TextRenderer.DrawText(e.Graphics, presentation.FullName, _nameFont, nameRect, AppColors.TextPrimary,
+        TextRenderer.DrawText(e.Graphics, presentation.FullName, _nameFont, nameRect, LightColors.TextPrimary,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-        TextRenderer.DrawText(e.Graphics, presentation.Title, _titleFont, titleRect, AppColors.TextSecondary,
+        TextRenderer.DrawText(e.Graphics, presentation.Title, _titleFont, titleRect, LightColors.TextSecondary,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
     private static Color StatusColor(PresentationStatus status) => status switch
     {
-        PresentationStatus.Running => AppColors.Success,
-        PresentationStatus.Paused => AppColors.Warning,
-        PresentationStatus.Discussion or PresentationStatus.DiscussionReady => AppColors.DiscussionAction,
-        PresentationStatus.DiscussionPaused => AppColors.Warning,
-        PresentationStatus.Ready => AppColors.Accent,
-        PresentationStatus.Finished or PresentationStatus.Skipped => AppColors.TextSecondary,
-        _ => AppColors.TextSecondary // Waiting
+        PresentationStatus.Running => LightColors.Success,
+        PresentationStatus.Paused => LightColors.Warning,
+        PresentationStatus.Discussion or PresentationStatus.DiscussionReady => LightColors.DiscussionAction,
+        PresentationStatus.DiscussionPaused => LightColors.Warning,
+        PresentationStatus.Ready => LightColors.Accent,
+        PresentationStatus.Finished or PresentationStatus.Skipped => LightColors.TextSecondary,
+        _ => LightColors.TextSecondary // Waiting
     };
 
     private static GraphicsPath RoundedRect(Rectangle bounds, float radius)

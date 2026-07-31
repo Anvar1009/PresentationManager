@@ -1,7 +1,9 @@
+using Microsoft.Extensions.Options;
+using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
-using PresentationManager.UI.Localization;
+using PresentationManager.TelegramBot;
 using PresentationManager.UI.Theme;
 
 namespace PresentationManager.UI.Forms;
@@ -19,12 +21,20 @@ public sealed class AdminPanelForm : Form
     private readonly ScoreService _scoreService;
     private readonly PresentationQueueService _queueService;
     private readonly IPresenterRepository _presenterRepository;
+    private readonly AdminLinkService _adminLinkService;
+    private readonly PresentationBotOptions _botOptions;
 
     private readonly ComboBox _projectCombo;
     private readonly DataGridView _participantsGrid;
     private readonly DataGridView _presentationsGrid;
     private readonly DataGridView _finalScoresGrid;
     private List<Project> _projects = [];
+
+    /// <summary>Set via <see cref="SetCurrentUser"/> right after this singleton form is resolved from DI in
+    /// Program.cs (it's constructed without any user context, since login happens after the DI container is
+    /// built) - scopes <see cref="LoadProjectsAsync"/> and <see cref="OnNewProjectClick"/> to this Admin's own
+    /// projects, per <see cref="Project.CreatedByUserId"/>.</summary>
+    private int? _currentUserId;
 
     private Project? SelectedProject => _projectCombo.SelectedItem as Project;
 
@@ -34,7 +44,9 @@ public sealed class AdminPanelForm : Form
         JudgeService judgeService,
         ScoreService scoreService,
         PresentationQueueService queueService,
-        IPresenterRepository presenterRepository)
+        IPresenterRepository presenterRepository,
+        AdminLinkService adminLinkService,
+        IOptions<PresentationBotOptions> botOptions)
     {
         _projectService = projectService;
         _criterionService = criterionService;
@@ -42,6 +54,8 @@ public sealed class AdminPanelForm : Form
         _scoreService = scoreService;
         _queueService = queueService;
         _presenterRepository = presenterRepository;
+        _adminLinkService = adminLinkService;
+        _botOptions = botOptions.Value;
 
         Text = "Admin paneli";
         BackColor = LightColors.Background;
@@ -53,12 +67,13 @@ public sealed class AdminPanelForm : Form
 
         var topPanel = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(20, 12, 20, 12), BackColor = LightColors.Panel };
         var topPanelRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
-        var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 1 };
+        var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 1 };
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
 
         var projectLabel = new Label { Text = "Loyiha:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = LightColors.TextSecondary, Font = new Font("Segoe UI", 10.5f) };
         _projectCombo = new ComboBox
@@ -78,14 +93,19 @@ public sealed class AdminPanelForm : Form
         var criteriaButton = new Button { Text = "Baholash mezonlari", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.Accent, ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
         criteriaButton.Click += OnCriteriaClick;
 
-        var judgesButton = new Button { Text = "Hakamlar", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(124, 58, 237), ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
+        var judgesButton = new Button { Text = "Hakamlar", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(124, 58, 237), ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
         judgesButton.Click += OnJudgesClick;
+
+        var linkBotButton = new Button { Text = "🤖 Botga ulash", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
+        linkBotButton.FlatAppearance.BorderColor = LightColors.Border;
+        linkBotButton.Click += OnLinkBotClick;
 
         topLayout.Controls.Add(projectLabel, 0, 0);
         topLayout.Controls.Add(_projectCombo, 1, 0);
         topLayout.Controls.Add(newProjectButton, 2, 0);
         topLayout.Controls.Add(criteriaButton, 3, 0);
         topLayout.Controls.Add(judgesButton, 4, 0);
+        topLayout.Controls.Add(linkBotButton, 5, 0);
         topPanel.Controls.Add(topLayout);
 
         var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10.5f) };
@@ -113,6 +133,10 @@ public sealed class AdminPanelForm : Form
         Load += async (_, _) => await LoadProjectsAsync();
     }
 
+    /// <summary>Called once, from Program.cs, right after this form is resolved from DI and before it's run -
+    /// see <see cref="_currentUserId"/>.</summary>
+    public void SetCurrentUser(User user) => _currentUserId = user.Id;
+
     private static DataGridView LightGrid() => DataGridViewTheme.CreateReadOnlyGrid(
         background: LightColors.Panel,
         alternatingBackground: LightColors.PanelAlt,
@@ -126,7 +150,9 @@ public sealed class AdminPanelForm : Form
     private async Task LoadProjectsAsync()
     {
         var selectedId = SelectedProject?.Id;
-        _projects = await _projectService.GetAllAsync();
+        _projects = _currentUserId is int userId
+            ? await _projectService.GetByCreatorAsync(userId)
+            : await _projectService.GetAllAsync();
 
         _projectCombo.DataSource = null;
         _projectCombo.DataSource = _projects;
@@ -217,7 +243,8 @@ public sealed class AdminPanelForm : Form
         try
         {
             await _projectService.CreateAsync(
-                dialog.ProjectName, dialog.EventStartDate, dialog.EventEndDate, dialog.EventTime, dialog.Location);
+                dialog.ProjectName, dialog.EventStartDate, dialog.EventEndDate, dialog.EventTime, dialog.Location,
+                _currentUserId);
             await LoadProjectsAsync();
         }
         catch (Exception ex)
@@ -252,4 +279,12 @@ public sealed class AdminPanelForm : Form
         using var dialog = new JudgeManagementForm(_judgeService, _presenterRepository, project.Id, project.Name);
         dialog.ShowDialog(this);
     }
+
+    /// <summary>Generates a one-time, 15-minute deep-link code (<see cref="AdminLinkService"/>, via
+    /// <see cref="BotLinkHelper"/>) that links this Admin's desktop account to whichever Telegram chat opens
+    /// it - after that, the bot shows them the same projects/participants/presentations/final scores this
+    /// panel does, plus basic project/criteria/judge management, and it's also what lets "Parolni
+    /// unutdingizmi?" deliver reset codes to this account.</summary>
+    private void OnLinkBotClick(object? sender, EventArgs e) =>
+        BotLinkHelper.ShowLinkDialog(this, _adminLinkService, _botOptions, _currentUserId);
 }
