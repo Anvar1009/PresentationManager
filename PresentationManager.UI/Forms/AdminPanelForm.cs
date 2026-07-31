@@ -120,7 +120,18 @@ public sealed class AdminPanelForm : Form
 
         _finalScoresGrid = LightGrid();
         var finalScoresTab = new TabPage("Yakuniy baholar") { BackColor = LightColors.Background };
+        var exportToolbar = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(12, 8, 12, 8) };
+        var exportButton = new Button
+        {
+            Text = "📊 Excel'ga eksport", Dock = DockStyle.Left, Width = 190, FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.Success, ForeColor = Color.White, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Cursor = Cursors.Hand
+        };
+        exportButton.FlatAppearance.BorderSize = 0;
+        exportButton.Click += OnExportFinalScoresClick;
+        exportToolbar.Controls.Add(exportButton);
         finalScoresTab.Controls.Add(_finalScoresGrid);
+        finalScoresTab.Controls.Add(exportToolbar);
 
         tabs.TabPages.Add(participantsTab);
         tabs.TabPages.Add(presentationsTab);
@@ -287,4 +298,41 @@ public sealed class AdminPanelForm : Form
     /// unutdingizmi?" deliver reset codes to this account.</summary>
     private void OnLinkBotClick(object? sender, EventArgs e) =>
         BotLinkHelper.ShowLinkDialog(this, _adminLinkService, _botOptions, _currentUserId);
+
+    private void OnExportFinalScoresClick(object? sender, EventArgs e)
+    {
+        var project = SelectedProject;
+        if (project is null)
+        {
+            MessageBox.Show(this, "Avval loyihani tanlang.", "Loyiha tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (_finalScoresGrid.Rows.Count == 0)
+        {
+            MessageBox.Show(this, "Eksport qilish uchun ma'lumot yo'q.", "Bo'sh jadval", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var safeName = string.Join("_", project.Name.Split(Path.GetInvalidFileNameChars()));
+        using var dialog = new SaveFileDialog
+        {
+            Filter = "Excel fayli (*.xlsx)|*.xlsx",
+            FileName = $"{safeName} - Yakuniy baholar.xlsx"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            ExcelExportHelper.ExportGrid(_finalScoresGrid, dialog.FileName, "Yakuniy baholar");
+            MessageBox.Show(this, "Excel fayli muvaffaqiyatli saqlandi.", "Eksport", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Eksport qilishda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
 }
