@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Options;
 using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
@@ -22,6 +23,7 @@ public sealed class AdminPanelForm : Form
     private readonly PresentationQueueService _queueService;
     private readonly IPresenterRepository _presenterRepository;
     private readonly AdminLinkService _adminLinkService;
+    private readonly IFileStorageService _fileStorageService;
     private readonly PresentationBotOptions _botOptions;
 
     private readonly ComboBox _projectCombo;
@@ -29,6 +31,11 @@ public sealed class AdminPanelForm : Form
     private readonly DataGridView _presentationsGrid;
     private readonly DataGridView _finalScoresGrid;
     private List<Project> _projects = [];
+
+    /// <summary>Mirrors <see cref="_presentationsGrid"/>'s bound rows in the same order, since the grid is
+    /// bound to an anonymous-object projection (display-only) that loses <see cref="Presentation.FilePath"/> -
+    /// this is what a selected row is resolved back to for <see cref="OnOpenPresentationFileClick"/>.</summary>
+    private List<Presentation> _currentPresentations = [];
 
     /// <summary>Set via <see cref="SetCurrentUser"/> right after this singleton form is resolved from DI in
     /// Program.cs (it's constructed without any user context, since login happens after the DI container is
@@ -46,6 +53,7 @@ public sealed class AdminPanelForm : Form
         PresentationQueueService queueService,
         IPresenterRepository presenterRepository,
         AdminLinkService adminLinkService,
+        IFileStorageService fileStorageService,
         IOptions<PresentationBotOptions> botOptions)
     {
         _projectService = projectService;
@@ -55,6 +63,7 @@ public sealed class AdminPanelForm : Form
         _queueService = queueService;
         _presenterRepository = presenterRepository;
         _adminLinkService = adminLinkService;
+        _fileStorageService = fileStorageService;
         _botOptions = botOptions.Value;
 
         Text = "Admin paneli";
@@ -115,8 +124,20 @@ public sealed class AdminPanelForm : Form
         participantsTab.Controls.Add(_participantsGrid);
 
         _presentationsGrid = LightGrid();
+        _presentationsGrid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) OnOpenPresentationFileClick(null, EventArgs.Empty); };
         var presentationsTab = new TabPage("Taqdimotlar") { BackColor = LightColors.Background };
+        var presentationsToolbar = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(12, 8, 12, 8) };
+        var openFileButton = new Button
+        {
+            Text = "📂 Faylni ochish", Dock = DockStyle.Left, Width = 190, FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.Accent, ForeColor = Color.White, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Cursor = Cursors.Hand
+        };
+        openFileButton.FlatAppearance.BorderSize = 0;
+        openFileButton.Click += OnOpenPresentationFileClick;
+        presentationsToolbar.Controls.Add(openFileButton);
         presentationsTab.Controls.Add(_presentationsGrid);
+        presentationsTab.Controls.Add(presentationsToolbar);
 
         _finalScoresGrid = LightGrid();
         var finalScoresTab = new TabPage("Yakuniy baholar") { BackColor = LightColors.Background };
@@ -206,15 +227,47 @@ public sealed class AdminPanelForm : Form
     private async Task RefreshPresentationsAsync(int projectId)
     {
         var presentations = await _queueService.GetAllAsync(projectId);
+        _currentPresentations = presentations;
         _presentationsGrid.DataSource = presentations
             .Select(p => new
             {
                 Taqdimotchi = p.FullName,
                 Sarlavha = p.Title,
                 Holat = UzbekText.StatusLabel(p.Status),
-                QoshilganVaqt = p.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                QoshilganVaqt = p.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
+                Fayl = Path.GetFileName(p.FilePath)
             })
             .ToList();
+    }
+
+    /// <summary>Opens the selected presentation's uploaded file with the OS's default viewer - the same file
+    /// the presenter submitted via the Telegram bot, resolved from managed storage exactly as the operator's
+    /// live preview does (see <c>AdminForm.UpdatePreviewAsync</c>).</summary>
+    private void OnOpenPresentationFileClick(object? sender, EventArgs e)
+    {
+        var rowIndex = _presentationsGrid.CurrentCell?.RowIndex ?? -1;
+        if (rowIndex < 0 || rowIndex >= _currentPresentations.Count)
+        {
+            MessageBox.Show(this, "Avval taqdimotni tanlang.", "Taqdimot tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var presentation = _currentPresentations[rowIndex];
+        var absolutePath = _fileStorageService.GetAbsolutePath(presentation.FilePath);
+        if (!File.Exists(absolutePath))
+        {
+            MessageBox.Show(this, "Fayl topilmadi.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(absolutePath) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Faylni ochishda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private async Task RefreshFinalScoresAsync(int projectId)
