@@ -14,11 +14,12 @@ namespace PresentationManager.UI.Forms;
 
 /// <summary>
 /// Operator dashboard — every control surface lives here (queue reorder/search, app settings, starting a
-/// presentation, and advancing it through discussion/next). The operator only views and runs the queue that
-/// the Telegram bot already populated — deliberately no add/edit/delete for presentations, since the operator's
-/// job is running the live event, not curating its content. <see cref="PresentationForm"/> (Namoyish Ekrani)
-/// is likewise left with no controls of its own: it's the window actually shown or screen-shared to the
-/// audience, so it only ever displays the live timer and the slide — nothing an operator clicks.
+/// presentation, and advancing it through discussion/next). Presentations normally arrive via the Telegram
+/// bot, but the "Taqdimotlar" menu (<see cref="OnPresentationsClick"/>) also lets the operator add/edit/delete
+/// them directly, across every project — not just whichever one is currently active in the live queue.
+/// <see cref="PresentationForm"/> (Namoyish Ekrani) is left with no controls of its own: it's the window
+/// actually shown or screen-shared to the audience, so it only ever displays the live timer and the slide —
+/// nothing an operator clicks.
 /// </summary>
 public sealed class AdminForm : Form
 {
@@ -45,8 +46,8 @@ public sealed class AdminForm : Form
     private Label _projectLabel = null!;
 
     /// <summary>Periodically reloads the active project's queue so presentations submitted via the Telegram
-    /// bot (the only way presentations enter the queue — the operator has no add/edit/delete of their own)
-    /// show up on their own, without the operator having to do anything.</summary>
+    /// bot show up on their own, without the operator having to do anything (on top of the explicit refresh
+    /// already run right after the operator's own add/edit/delete via <see cref="OnPresentationsClick"/>).</summary>
     private readonly System.Windows.Forms.Timer _botPollTimer;
 
     private Label _currentNameLabel = null!;
@@ -127,25 +128,58 @@ public sealed class AdminForm : Form
 
     private void BuildMenu()
     {
-        var menu = new MenuStrip { BackColor = LightColors.Panel, ForeColor = LightColors.TextPrimary };
+        var menu = new MenuStrip
+        {
+            BackColor = LightColors.Panel,
+            ForeColor = LightColors.TextPrimary,
+            Font = new Font("Segoe UI Semibold", 11.5f, FontStyle.Regular, GraphicsUnit.Point),
+            Padding = new Padding(12, 6, 8, 6),
+            Renderer = new ToolStripProfessionalRenderer(new MenuStripColorTable())
+        };
 
-        var projectsItem = new ToolStripMenuItem("Loyihalar");
+        var projectsItem = new ToolStripMenuItem("Loyihalar") { Padding = new Padding(14, 6, 14, 6), Margin = new Padding(0, 0, 4, 0) };
         projectsItem.Click += (_, _) => OnProjectsClick();
         menu.Items.Add(projectsItem);
 
-        var settingsItem = new ToolStripMenuItem("Sozlamalar");
+        var presentationsItem = new ToolStripMenuItem("Taqdimotlar") { Padding = new Padding(14, 6, 14, 6), Margin = new Padding(0, 0, 4, 0) };
+        presentationsItem.Click += (_, _) => OnPresentationsClick();
+        menu.Items.Add(presentationsItem);
+
+        var settingsItem = new ToolStripMenuItem("Sozlamalar") { Padding = new Padding(14, 6, 14, 6), Margin = new Padding(0, 0, 4, 0) };
         settingsItem.Click += (_, _) => OnSettingsClick();
         menu.Items.Add(settingsItem);
 
         // Replaces the close (X) button that used to float directly on Namoyish Ekrani — that screen has no
         // controls of its own anymore (it's the one actually shown/shared to the audience), so hiding it is
         // now an explicit operator action from here instead.
-        var hideScreenItem = new ToolStripMenuItem("Namoyish ekranini yashirish");
+        var hideScreenItem = new ToolStripMenuItem("Namoyish ekranini yashirish") { Padding = new Padding(14, 6, 14, 6) };
         hideScreenItem.Click += (_, _) => _presentationForm.HideAll();
         menu.Items.Add(hideScreenItem);
 
         MainMenuStrip = menu;
         Controls.Add(menu); // added after the Fill split layout so it correctly claims the top strip
+    }
+
+    /// <summary>Recolors <see cref="MenuStrip"/>'s hover/selected/pressed state to this dashboard's own
+    /// accent instead of the OS's default Aero blue - <see cref="ToolStripProfessionalRenderer"/> otherwise
+    /// paints selection with a fixed system-blue gradient regardless of the control's own BackColor/ForeColor,
+    /// which looked out of place next to <see cref="LightColors"/>'s palette everywhere else in this form.</summary>
+    private sealed class MenuStripColorTable : ProfessionalColorTable
+    {
+        public override Color MenuStripGradientBegin => LightColors.Panel;
+        public override Color MenuStripGradientEnd => LightColors.Panel;
+        public override Color MenuItemSelected => LightColors.PanelAlt;
+        public override Color MenuItemSelectedGradientBegin => LightColors.PanelAlt;
+        public override Color MenuItemSelectedGradientEnd => LightColors.PanelAlt;
+        public override Color MenuItemPressedGradientBegin => Blend(LightColors.Panel, LightColors.Accent, 0.16f);
+        public override Color MenuItemPressedGradientEnd => Blend(LightColors.Panel, LightColors.Accent, 0.16f);
+        public override Color MenuItemBorder => LightColors.Accent;
+        public override Color MenuBorder => LightColors.Border;
+
+        private static Color Blend(Color from, Color to, float amount) => Color.FromArgb(
+            (int)(from.R + (to.R - from.R) * amount),
+            (int)(from.G + (to.G - from.G) * amount),
+            (int)(from.B + (to.B - from.B) * amount));
     }
 
     private async void OnSettingsClick()
@@ -174,6 +208,26 @@ public sealed class AdminForm : Form
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Loyihalarda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>Opens the cross-project "Taqdimotlar" dialog - any add/edit/delete there could affect the
+    /// currently active project's own queue (or, for an add/edit into that project, wouldn't otherwise be
+    /// reflected until the next <see cref="OnBotPollTick"/>), so the active queue is reloaded unconditionally
+    /// once it closes, mirroring <see cref="OnProjectsClick"/>'s reconciliation.</summary>
+    private async void OnPresentationsClick()
+    {
+        try
+        {
+            using var dialog = new PresentationManagementForm(_queueService, _projectService);
+            dialog.ShowDialog(this);
+            await _session.ReloadQueueAsync();
+            RefreshQueueList();
+            RefreshCurrentPanel();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Taqdimotlarda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
