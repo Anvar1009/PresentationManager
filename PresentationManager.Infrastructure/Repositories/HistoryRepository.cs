@@ -38,4 +38,10 @@ public class HistoryRepository : IHistoryRepository
             .OrderBy(h => h.Timestamp)
             .ToListAsync(ct);
     }
+
+    public async Task ClearAllAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        await db.HistoryEntries.ExecuteDeleteAsync(ct);
+    }
 }

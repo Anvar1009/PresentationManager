@@ -24,4 +24,7 @@ public interface IUserRepository
     Task SetTelegramLinkAsync(int userId, long telegramChatId, string? telegramUsername, CancellationToken ct = default);
 
     Task SetPasswordAsync(int userId, string passwordHash, CancellationToken ct = default);
+
+    /// <summary>SuperAdmin-driven login change — see <see cref="PresentationManager.Application.Services.UserService.EditUserAsync"/>.</summary>
+    Task SetUsernameAsync(int userId, string username, CancellationToken ct = default);
 }

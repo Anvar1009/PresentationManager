@@ -86,4 +86,17 @@ public class UserRepository : IUserRepository
         user.PasswordHash = passwordHash;
         await db.SaveChangesAsync(ct);
     }
+
+    public async Task SetUsernameAsync(int userId, string username, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var user = await db.Users.FindAsync([userId], ct);
+        if (user is null)
+        {
+            return;
+        }
+
+        user.Username = username;
+        await db.SaveChangesAsync(ct);
+    }
 }

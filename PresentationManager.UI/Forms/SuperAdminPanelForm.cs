@@ -40,7 +40,9 @@ public sealed class SuperAdminPanelForm : Form
     private readonly Label _rowCountLabel;
     private readonly DataGridView _grid;
     private readonly RoundedButton _addUserButton;
+    private readonly RoundedButton _editUserButton;
     private readonly RoundedButton _openFileButton;
+    private readonly RoundedButton _clearHistoryButton;
     private readonly ModernOutlineButton _refreshButton;
 
     /// <summary>Mirrors <see cref="_grid"/>'s bound rows, in the same order, whenever the "Taqdimotlar"
@@ -49,6 +51,10 @@ public sealed class SuperAdminPanelForm : Form
     /// <see cref="OnOpenPresentationFileClick"/>. Left stale (not cleared) when another section is loaded,
     /// same as <c>AdminPanelForm._currentPresentations</c> — harmless since the button is hidden then.</summary>
     private List<Presentation> _currentPresentations = [];
+
+    /// <summary>Same idea as <see cref="_currentPresentations"/>, for the "Foydalanuvchilar" section — lets a
+    /// selected grid row be resolved back to its <see cref="User"/> for <see cref="OnEditUserClick"/>.</summary>
+    private List<User> _currentUsers = [];
 
     public SuperAdminPanelForm(
         ProjectService projectService,
@@ -160,7 +166,9 @@ public sealed class SuperAdminPanelForm : Form
         var cardHeaderLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
         cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        // Wide enough to fit two of the section-action buttons side by side (Foydalanuvchilar shows both
+        // _addUserButton and _editUserButton at once) - see the FlowLayoutPanel below.
+        cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 420));
 
         _sectionTitleLabel = new Label
         {
@@ -183,34 +191,70 @@ public sealed class SuperAdminPanelForm : Form
         _addUserButton = new RoundedButton
         {
             Text = "+ Foydalanuvchi qo'shish",
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0, 13, 0, 13),
+            Margin = new Padding(6, 8, 0, 8),
             BackColor = LightColors.Success,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             CornerRadius = 8,
             Visible = false
         };
+        _addUserButton.AutoFitToText();
         _addUserButton.Click += OnAddUserClick;
 
-        _openFileButton = new RoundedButton
+        _editUserButton = new RoundedButton
         {
-            Text = "📂 Faylni ochish",
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0, 13, 0, 13),
+            Text = "✏️ Login/parolni tiklash",
+            Margin = new Padding(6, 8, 0, 8),
             BackColor = LightColors.Accent,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             CornerRadius = 8,
             Visible = false
         };
+        _editUserButton.AutoFitToText();
+        _editUserButton.Click += OnEditUserClick;
+
+        _openFileButton = new RoundedButton
+        {
+            Text = "📂 Faylni ochish",
+            Margin = new Padding(6, 8, 0, 8),
+            BackColor = LightColors.Accent,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            CornerRadius = 8,
+            Visible = false
+        };
+        _openFileButton.AutoFitToText();
         _openFileButton.Click += OnOpenPresentationFileClick;
+
+        _clearHistoryButton = new RoundedButton
+        {
+            Text = "🗑️ Jurnalni tozalash",
+            Margin = new Padding(6, 8, 0, 8),
+            BackColor = LightColors.Danger,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            CornerRadius = 8,
+            Visible = false
+        };
+        _clearHistoryButton.AutoFitToText();
+        _clearHistoryButton.Click += OnClearHistoryClick;
+
+        // RightToLeft flow so _addUserButton (added first) lands at the same far-right spot it always has;
+        // _editUserButton then takes the slot immediately to its left when Foydalanuvchilar shows both at
+        // once. _openFileButton/_clearHistoryButton never appear alongside either (different sections), so
+        // their position among them doesn't matter.
+        var sectionActionsPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            AutoSize = false
+        };
+        sectionActionsPanel.Controls.Add(_addUserButton);
+        sectionActionsPanel.Controls.Add(_editUserButton);
+        sectionActionsPanel.Controls.Add(_openFileButton);
+        sectionActionsPanel.Controls.Add(_clearHistoryButton);
 
         cardHeaderLayout.Controls.Add(_sectionTitleLabel, 0, 0);
         cardHeaderLayout.Controls.Add(_rowCountLabel, 1, 0);
-        // Shares column 2 with _addUserButton — the two are mutually exclusive (only one section's action
-        // button is ever visible at a time), so stacking them in the same cell and toggling Visible avoids
-        // reworking the header into a 4-column layout for what's otherwise a single always-empty slot.
-        cardHeaderLayout.Controls.Add(_addUserButton, 2, 0);
-        cardHeaderLayout.Controls.Add(_openFileButton, 2, 0);
+        cardHeaderLayout.Controls.Add(sectionActionsPanel, 2, 0);
         cardHeader.Controls.Add(cardHeaderLayout);
 
         var cardHeaderRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
@@ -224,7 +268,7 @@ public sealed class SuperAdminPanelForm : Form
             accent: LightColors.Accent,
             selectionForeground: Color.White,
             gridLines: LightColors.Border);
-        _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) OnOpenPresentationFileClick(null, EventArgs.Empty); };
+        _grid.CellDoubleClick += OnGridCellDoubleClick;
         var gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16) };
         gridWrap.Controls.Add(_grid);
 
@@ -341,7 +385,9 @@ public sealed class SuperAdminPanelForm : Form
 
         _sectionTitleLabel.Text = $"{icon} {label}";
         _addUserButton.Visible = label == "Foydalanuvchilar";
+        _editUserButton.Visible = label == "Foydalanuvchilar";
         _openFileButton.Visible = label == "Taqdimotlar";
+        _clearHistoryButton.Visible = label == "Jurnal";
 
         try
         {
@@ -413,6 +459,26 @@ public sealed class SuperAdminPanelForm : Form
             .ToList();
     }
 
+    /// <summary>Routes a grid row double-click to whichever action the currently selected section actually
+    /// supports — the same shared <see cref="_grid"/> is reused across all sections, so only one of these two
+    /// ever applies at a time (mirrored by which action button is <see cref="Control.Visible"/>).</summary>
+    private void OnGridCellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0)
+        {
+            return;
+        }
+
+        if (_openFileButton.Visible)
+        {
+            OnOpenPresentationFileClick(null, EventArgs.Empty);
+        }
+        else if (_editUserButton.Visible)
+        {
+            OnEditUserClick(null, EventArgs.Empty);
+        }
+    }
+
     /// <summary>Opens the selected presentation's uploaded file with the OS's default viewer — same mechanism
     /// as <c>AdminPanelForm.OnOpenPresentationFileClick</c>.</summary>
     private void OnOpenPresentationFileClick(object? sender, EventArgs e)
@@ -480,6 +546,7 @@ public sealed class SuperAdminPanelForm : Form
     private async Task LoadUsersAsync()
     {
         var users = await _userService.GetAllAsync();
+        _currentUsers = users;
         _grid.DataSource = users
             .Select(u => new
             {
@@ -536,6 +603,70 @@ public sealed class SuperAdminPanelForm : Form
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Foydalanuvchi qo'shishda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>Account-recovery action for a user who forgot their login/password — lets the SuperAdmin
+    /// change the selected account's login and, optionally, reset its password.</summary>
+    private async void OnEditUserClick(object? sender, EventArgs e)
+    {
+        if (!_editUserButton.Visible)
+        {
+            return;
+        }
+
+        var rowIndex = _grid.CurrentCell?.RowIndex ?? -1;
+        if (rowIndex < 0 || rowIndex >= _currentUsers.Count)
+        {
+            MessageBox.Show(this, "Avval foydalanuvchini tanlang.", "Foydalanuvchi tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var user = _currentUsers[rowIndex];
+        using var dialog = new EditUserForm(user);
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            await _userService.EditUserAsync(user.Id, dialog.Username, string.IsNullOrEmpty(dialog.NewPassword) ? null : dialog.NewPassword);
+            await LoadUsersAsync();
+            _rowCountLabel.Text = $"{_grid.RowCount} ta yozuv";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Foydalanuvchini tahrirlashda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>Bulk-deletes every <see cref="Domain.Entities.HistoryEntry"/> — this table logs every queue/
+    /// timer event and has no retention limit, so it's the one place in the app that grows unbounded and
+    /// needs a manual way to clear it out.</summary>
+    private async void OnClearHistoryClick(object? sender, EventArgs e)
+    {
+        var confirm = MessageBox.Show(
+            this,
+            "Jurnaldagi barcha yozuvlar butunlay o'chiriladi. Bu amalni orqaga qaytarib bo'lmaydi. Davom etasizmi?",
+            "Jurnalni tozalash",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (confirm != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            await _historyRepository.ClearAllAsync();
+            await LoadHistoryAsync();
+            _rowCountLabel.Text = $"{_grid.RowCount} ta yozuv";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Jurnalni tozalashda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 }

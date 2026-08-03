@@ -48,14 +48,18 @@ public class ModernOutlineButton : Button
             ControlStyles.AllPaintingInWmPaint
             | ControlStyles.UserPaint
             | ControlStyles.OptimizedDoubleBuffer
-            | ControlStyles.ResizeRedraw
-            | ControlStyles.SupportsTransparentBackColor,
+            | ControlStyles.ResizeRedraw,
             true);
         DoubleBuffered = true;
 
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
-        BackColor = Color.Transparent;
+        // Transparent (relying on ControlStyles.SupportsTransparentBackColor) used to be the fill for the
+        // "resting" state below, but nothing ever actually cleared the button's paint buffer with it (the
+        // fill brush itself was transparent, and OnPaintBackground is a no-op) - on first show, before any
+        // repaint happened to redraw whatever was underneath, that left the button briefly showing stale/
+        // garbage pixels. An explicit opaque white fill avoids that entirely.
+        BackColor = Color.White;
         ForeColor = TextColor;
         Font = new Font("Segoe UI Semibold", 11f, FontStyle.Regular, GraphicsUnit.Point);
         Cursor = Cursors.Hand;
@@ -159,7 +163,7 @@ public class ModernOutlineButton : Button
     {
         if (!Enabled)
         {
-            return (Color.Transparent, DisabledBorderColor, DisabledTextColor);
+            return (Color.White, DisabledBorderColor, DisabledTextColor);
         }
 
         if (_isPressed)
@@ -172,7 +176,7 @@ public class ModernOutlineButton : Button
             return (HoverBackColor, HoverBorderColor, TextColor);
         }
 
-        return (Color.Transparent, BorderColor, TextColor);
+        return (Color.White, BorderColor, TextColor);
     }
 
     /// <summary>A soft, barely-there elevation cue (a few translucent rounded rects stacked with increasing

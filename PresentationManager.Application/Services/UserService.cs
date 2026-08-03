@@ -79,6 +79,37 @@ public sealed class UserService
         return await _userRepository.AddAsync(user, ct);
     }
 
+    /// <summary>SuperAdmin panel's "Login/parolni tiklash" action on an existing account — the recovery path
+    /// for a user who forgot their login/password and has no Telegram link for the bot-side "Parolni
+    /// unutdingizmi?" flow. <paramref name="newPassword"/> null/blank keeps the current password unchanged;
+    /// the login is always updated.</summary>
+    public async Task EditUserAsync(int userId, string newUsername, string? newPassword, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(newUsername))
+        {
+            throw new InvalidOperationException("Login bo'sh bo'lishi mumkin emas.");
+        }
+
+        var trimmedUsername = newUsername.Trim();
+        var existing = await _userRepository.GetByUsernameAsync(trimmedUsername, ct);
+        if (existing is not null && existing.Id != userId)
+        {
+            throw new InvalidOperationException("Bu login band.");
+        }
+
+        await _userRepository.SetUsernameAsync(userId, trimmedUsername, ct);
+
+        if (!string.IsNullOrWhiteSpace(newPassword))
+        {
+            if (newPassword.Length < 6)
+            {
+                throw new InvalidOperationException("Parol kamida 6 ta belgidan iborat bo'lishi kerak.");
+            }
+
+            await _userRepository.SetPasswordAsync(userId, PasswordHasher.Hash(newPassword), ct);
+        }
+    }
+
     /// <summary>Bootstraps the very first account so the newly-added login requirement doesn't lock everyone
     /// out on an empty database — called once at startup. Every account after this one is created from the
     /// SuperAdmin panel's Users tab.</summary>
