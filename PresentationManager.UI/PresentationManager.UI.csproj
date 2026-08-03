@@ -9,10 +9,46 @@
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <!-- `dotnet publish -c Release` produces a single self-contained .exe (the .NET runtime itself gets
+       bundled in, so target machines don't need the .NET 8 runtime installed separately). Two things still
+       can't be bundled and must already be present on the target machine: PowerPoint desktop (COM interop -
+       see the "office" Reference below) and the WebView2 Runtime (present by default on Windows 10/11, but
+       not on older/stripped-down installs). These only take effect for `publish`, not the everyday `build`. -->
+  <PropertyGroup>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <!-- Release publish only: no .pdb debug symbols - end users distributing this to other machines have no
+       use for them, and libSkiaSharp's alone outweighs the actual .exe. -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <!-- Trims the publish folder down to just the two files an end user actually needs (the .exe and
+       appsettings.json) after every `dotnet publish`: .pdb debug symbols (DebugType=none above stops most,
+       but referenced projects and the native SkiaSharp.pdb content asset still land here regardless) and
+       WebView2's IntelliSense .xml docs are dev-only noise; appsettings.Local.json is this developer's own
+       gitignored file carrying real secrets (DB password, Telegram bot token, loaded only when present -
+       see Program.cs) that must never leave this machine, let alone ship to whoever ends up running the
+       published .exe. -->
+  <Target Name="TrimPublishOutputForDistribution" AfterTargets="Publish">
+    <ItemGroup>
+      <_FilesToRemoveFromPublish Include="$(PublishDir)*.pdb" />
+      <_FilesToRemoveFromPublish Include="$(PublishDir)Microsoft.Web.WebView2.*.xml" />
+      <_FilesToRemoveFromPublish Include="$(PublishDir)appsettings.Local.json" />
+    </ItemGroup>
+    <Delete Files="@(_FilesToRemoveFromPublish)" />
+  </Target>
+
   <ItemGroup>
-    <Content Include="appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <!-- Baked into the exe itself (not copied alongside it) - it's only ever the placeholder template that
+         Program.cs seeds into %LocalAppData%\PresentationManager\appsettings.json on first run; the file
+         actually read at runtime lives there, not next to the exe. See EnsureAppDataConfigSeeded. -->
+    <EmbeddedResource Include="appsettings.json" />
     <Content Include="appsettings.Local.json" Condition="Exists('appsettings.Local.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

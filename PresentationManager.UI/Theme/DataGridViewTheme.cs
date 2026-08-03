@@ -55,7 +55,14 @@ public static class DataGridViewTheme
         grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = headerForeground;
         grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
         grid.ColumnHeadersDefaultCellStyle.Padding = new Padding(10, 8, 10, 8);
-        grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+        // AutoSize computes the header row's height from its content the first time the grid lays out - if
+        // that first layout happens while the control is still effectively 0x0 (e.g. SuperAdminPanelForm
+        // binds its grid from Form.Load, before the Maximized window has actually been sized on screen), the
+        // header row gets stuck at that collapsed height and the header text never becomes visible, even
+        // after later resizes recompute everything else. A fixed height sidesteps that timing dependency
+        // entirely - tall enough for the bold 9pt header font plus its 8px top/bottom padding above.
+        grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        grid.ColumnHeadersHeight = 40;
         grid.EnableHeadersVisualStyles = false;
 
         grid.AlternatingRowsDefaultCellStyle.BackColor = alternatingBackground;

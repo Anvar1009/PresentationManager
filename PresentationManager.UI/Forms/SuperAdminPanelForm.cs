@@ -164,17 +164,30 @@ public sealed class SuperAdminPanelForm : Form
 
         var cardHeader = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(20, 0, 16, 0) };
         var cardHeaderLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
-        cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        // Fixed, not AutoSize: _sectionTitleLabel below is Dock=Fill (needed to vertically center its text
+        // in the row via TextAlign), and an AutoSize column paired with a Dock=Fill child is a circular
+        // layout dependency WinForms doesn't resolve reliably - in practice the column could end up sized
+        // for whatever text was set at the very first (pre-Maximize) layout pass and not grow for a longer
+        // label typed in later, clipping it down to just the icon (seen with "👥 Foydalanuvchilar"/
+        // "📁 Loyihalar" after switching sections). Wide enough for the longest label, "Foydalanuvchilar".
+        cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280));
         cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         // Wide enough to fit two of the section-action buttons side by side (Foydalanuvchilar shows both
         // _addUserButton and _editUserButton at once) - see the FlowLayoutPanel below.
         cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 420));
 
+        // TopLeft + an explicit top Padding, not MiddleLeft: vertically centering this text depends on
+        // accurately measuring its own height, and the color emoji glyph mixed into the same string/font as
+        // the bold Latin title text throws that measurement off (its em-box commonly sits lower/taller than
+        // the surrounding Latin text's) - the label kept ending up low enough to crowd into cardHeaderRule
+        // right below it (looked "stuck to" the grid's own header row). Pinning to a fixed offset from the
+        // top instead sidesteps that measurement entirely, independent of exactly how tall the row ends up.
         _sectionTitleLabel = new Label
         {
             Dock = DockStyle.Fill,
             AutoSize = false,
-            TextAlign = ContentAlignment.MiddleLeft,
+            TextAlign = ContentAlignment.TopLeft,
+            Padding = new Padding(0, 6, 0, 0),
             Font = new Font("Segoe UI", 13, FontStyle.Bold),
             ForeColor = LightColors.TextPrimary
         };
@@ -182,8 +195,8 @@ public sealed class SuperAdminPanelForm : Form
         {
             Dock = DockStyle.Fill,
             AutoSize = false,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(12, 0, 0, 0),
+            TextAlign = ContentAlignment.TopLeft,
+            Padding = new Padding(12, 10, 0, 0),
             Font = new Font("Segoe UI", 9.5f),
             ForeColor = LightColors.TextSecondary
         };

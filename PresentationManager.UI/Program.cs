@@ -37,11 +37,22 @@ static class Program
         var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PresentationManager");
         Directory.CreateDirectory(appDataDir);
 
+        // Lets the published .exe be a single standalone file with truly nothing else to hand over (e.g.
+        // dropped straight on a Desktop) - its actual settings (DB connection string, Telegram bot token)
+        // live here instead of next to the exe, seeded from the placeholder template embedded in the exe
+        // itself the first time it runs on a given machine. Whoever deploys it then edits this one file
+        // (not the exe, not anything that has to travel with it) to point at the real database/bot.
+        var appDataConfigPath = Path.Combine(appDataDir, "appsettings.json");
+        EnsureAppDataConfigSeeded(appDataConfigPath);
+
         using var host = Host.CreateDefaultBuilder()
             .ConfigureAppConfiguration(config =>
             {
+                config.AddJsonFile(appDataConfigPath, optional: true, reloadOnChange: false);
+
                 // Real secrets (DB password, Telegram bot token) never live in appsettings.json (checked
-                // into git) - this optional file overrides them locally and is gitignored.
+                // into git) - this optional file, when present next to the exe, overrides the above and is
+                // gitignored. Kept for local dev convenience; deployed machines use appDataConfigPath instead.
                 config.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
             })
             .ConfigureServices((context, services) =>
@@ -87,9 +98,25 @@ static class Program
             })
             .Build();
 
-        using (var db = host.Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext())
+        // A bad/placeholder connection string (e.g. the freshly-seeded appDataConfigPath template, still
+        // carrying "Password=CHANGE_ME", on a machine's very first launch) throws here - before any Form
+        // has ever been shown, on a WinExe subsystem with no console attached. Left uncaught, that's a
+        // silent crash: the exe flashes and disappears with zero visible explanation, on this machine's
+        // first run *and* on every future one until someone happens to check the Windows Event Log. A
+        // message box naming the actual file to go edit turns that into something self-service-fixable.
+        try
         {
+            using var db = host.Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext();
             db.Database.Migrate();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Ma'lumotlar bazasiga ulanib bo'lmadi.\n\nSozlamalar fayli:\n{appDataConfigPath}\n\nXatolik: {ex.Message}",
+                "Ulanishda xatolik",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return;
         }
 
         // Starts registered IHostedServices - notably PresentationBotHostedService, which otherwise would
@@ -142,5 +169,22 @@ static class Program
         // Same Task.Run reasoning as the seed call above - the WinForms message loop has already ended by
         // this point (Application.Run returned), so nothing pumps this thread's SynchronizationContext.
         Task.Run(() => host.StopAsync()).GetAwaiter().GetResult();
+    }
+
+    /// <summary>Writes the placeholder config template (embedded in the exe as a resource, so the published
+    /// app needs no companion file to do this) to <paramref name="appDataConfigPath"/> the first time this
+    /// app runs on a given machine - never overwrites an existing file, so whatever real values get filled
+    /// in there afterward survive every future launch/update.</summary>
+    private static void EnsureAppDataConfigSeeded(string appDataConfigPath)
+    {
+        if (File.Exists(appDataConfigPath))
+        {
+            return;
+        }
+
+        using var resourceStream = typeof(Program).Assembly.GetManifestResourceStream("PresentationManager.UI.appsettings.json")
+            ?? throw new InvalidOperationException("Embedded default appsettings.json resource is missing.");
+        using var fileStream = File.Create(appDataConfigPath);
+        resourceStream.CopyTo(fileStream);
     }
 }
