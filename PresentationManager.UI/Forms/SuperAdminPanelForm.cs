@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
+using PresentationManager.Domain.Entities;
 using PresentationManager.UI.Controls;
 using PresentationManager.UI.Theme;
 
@@ -31,13 +33,22 @@ public sealed class SuperAdminPanelForm : Form
     private readonly CriterionService _criterionService;
     private readonly ScoreService _scoreService;
     private readonly IHistoryRepository _historyRepository;
+    private readonly IFileStorageService _fileStorageService;
 
     private readonly ListBox _sectionList;
     private readonly Label _sectionTitleLabel;
     private readonly Label _rowCountLabel;
     private readonly DataGridView _grid;
     private readonly RoundedButton _addUserButton;
+    private readonly RoundedButton _openFileButton;
     private readonly ModernOutlineButton _refreshButton;
+
+    /// <summary>Mirrors <see cref="_grid"/>'s bound rows, in the same order, whenever the "Taqdimotlar"
+    /// section is loaded — the grid is bound to an anonymous-object projection (display-only) that loses
+    /// <see cref="Presentation.FilePath"/>, so this is what a selected row is resolved back to for
+    /// <see cref="OnOpenPresentationFileClick"/>. Left stale (not cleared) when another section is loaded,
+    /// same as <c>AdminPanelForm._currentPresentations</c> — harmless since the button is hidden then.</summary>
+    private List<Presentation> _currentPresentations = [];
 
     public SuperAdminPanelForm(
         ProjectService projectService,
@@ -47,7 +58,8 @@ public sealed class SuperAdminPanelForm : Form
         UserService userService,
         CriterionService criterionService,
         ScoreService scoreService,
-        IHistoryRepository historyRepository)
+        IHistoryRepository historyRepository,
+        IFileStorageService fileStorageService)
     {
         _projectService = projectService;
         _queueService = queueService;
@@ -57,6 +69,7 @@ public sealed class SuperAdminPanelForm : Form
         _criterionService = criterionService;
         _scoreService = scoreService;
         _historyRepository = historyRepository;
+        _fileStorageService = fileStorageService;
 
         Text = "SuperAdmin paneli";
         BackColor = LightColors.Background;
@@ -179,9 +192,25 @@ public sealed class SuperAdminPanelForm : Form
         };
         _addUserButton.Click += OnAddUserClick;
 
+        _openFileButton = new RoundedButton
+        {
+            Text = "📂 Faylni ochish",
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 13, 0, 13),
+            BackColor = LightColors.Accent,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            CornerRadius = 8,
+            Visible = false
+        };
+        _openFileButton.Click += OnOpenPresentationFileClick;
+
         cardHeaderLayout.Controls.Add(_sectionTitleLabel, 0, 0);
         cardHeaderLayout.Controls.Add(_rowCountLabel, 1, 0);
+        // Shares column 2 with _addUserButton — the two are mutually exclusive (only one section's action
+        // button is ever visible at a time), so stacking them in the same cell and toggling Visible avoids
+        // reworking the header into a 4-column layout for what's otherwise a single always-empty slot.
         cardHeaderLayout.Controls.Add(_addUserButton, 2, 0);
+        cardHeaderLayout.Controls.Add(_openFileButton, 2, 0);
         cardHeader.Controls.Add(cardHeaderLayout);
 
         var cardHeaderRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
@@ -195,6 +224,7 @@ public sealed class SuperAdminPanelForm : Form
             accent: LightColors.Accent,
             selectionForeground: Color.White,
             gridLines: LightColors.Border);
+        _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) OnOpenPresentationFileClick(null, EventArgs.Empty); };
         var gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16) };
         gridWrap.Controls.Add(_grid);
 
@@ -311,6 +341,7 @@ public sealed class SuperAdminPanelForm : Form
 
         _sectionTitleLabel.Text = $"{icon} {label}";
         _addUserButton.Visible = label == "Foydalanuvchilar";
+        _openFileButton.Visible = label == "Taqdimotlar";
 
         try
         {
@@ -368,6 +399,7 @@ public sealed class SuperAdminPanelForm : Form
         var presentations = await _queueService.GetAllAsync();
         var projects = (await _projectService.GetAllAsync()).ToDictionary(p => p.Id, p => p.Name);
 
+        _currentPresentations = presentations;
         _grid.DataSource = presentations
             .Select(p => new
             {
@@ -375,9 +407,44 @@ public sealed class SuperAdminPanelForm : Form
                 Taqdimotchi = p.FullName,
                 Sarlavha = p.Title,
                 Holat = UzbekText.StatusLabel(p.Status),
-                QoshilganVaqt = p.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                QoshilganVaqt = p.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
+                Fayl = Path.GetFileName(p.FilePath)
             })
             .ToList();
+    }
+
+    /// <summary>Opens the selected presentation's uploaded file with the OS's default viewer — same mechanism
+    /// as <c>AdminPanelForm.OnOpenPresentationFileClick</c>.</summary>
+    private void OnOpenPresentationFileClick(object? sender, EventArgs e)
+    {
+        if (!_openFileButton.Visible)
+        {
+            return;
+        }
+
+        var rowIndex = _grid.CurrentCell?.RowIndex ?? -1;
+        if (rowIndex < 0 || rowIndex >= _currentPresentations.Count)
+        {
+            MessageBox.Show(this, "Avval taqdimotni tanlang.", "Taqdimot tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var presentation = _currentPresentations[rowIndex];
+        var absolutePath = _fileStorageService.GetAbsolutePath(presentation.FilePath);
+        if (!File.Exists(absolutePath))
+        {
+            MessageBox.Show(this, "Fayl topilmadi.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(absolutePath) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Faylni ochishda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private async Task LoadPresentersAsync()
