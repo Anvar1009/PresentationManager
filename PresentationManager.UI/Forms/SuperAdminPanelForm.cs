@@ -98,9 +98,8 @@ public sealed class SuperAdminPanelForm : Form
         // ---------- Top header ----------
         var header = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = LightColors.Panel, Padding = new Padding(28, 0, 24, 0) };
         var headerBottomRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
-        var headerLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        var headerLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
         headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 165));
 
         var titleStack = new Panel { Dock = DockStyle.Fill };
@@ -139,25 +138,8 @@ public sealed class SuperAdminPanelForm : Form
         };
         _refreshButton.Click += async (_, _) => await RefreshSelectedSectionAsync();
 
-        // Populated once the logged-in user is known - see SetCurrentUser.
-        _userMenuButton = new Button
-        {
-            Text = "👤",
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0, 24, 12, 24),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = LightColors.PanelAlt,
-            ForeColor = LightColors.TextPrimary,
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-            Cursor = Cursors.Hand,
-            AutoEllipsis = true
-        };
-        _userMenuButton.FlatAppearance.BorderColor = LightColors.Border;
-        _userMenuButton.Click += (_, _) => _userMenu.Show(_userMenuButton, new Point(0, _userMenuButton.Height));
-
         headerLayout.Controls.Add(titleStack, 0, 0);
-        headerLayout.Controls.Add(_userMenuButton, 1, 0);
-        headerLayout.Controls.Add(_refreshButton, 2, 0);
+        headerLayout.Controls.Add(_refreshButton, 1, 0);
         header.Controls.Add(headerLayout);
 
         // ---------- Left nav ----------
@@ -179,8 +161,32 @@ public sealed class SuperAdminPanelForm : Form
         _sectionList.MouseMove += (_, e) => SetHoveredIndex(_sectionList.IndexFromPoint(e.Location));
         _sectionList.MouseLeave += (_, _) => SetHoveredIndex(-1);
 
+        // Populated once the logged-in user is known - see SetCurrentUser. Sits below the section list
+        // (Loyihalar/.../Jurnal) rather than up in the header, so account info/Chiqish reads as belonging to
+        // this nav column instead of floating next to Yangilash.
+        _userMenuButton = new Button
+        {
+            Text = "👤",
+            Dock = DockStyle.Fill,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            AutoEllipsis = true
+        };
+        _userMenuButton.FlatAppearance.BorderColor = LightColors.Border;
+        // AboveRight, not the default below-the-control placement: this button sits at the very bottom of a
+        // maximized window, so a downward-opening popup would routinely be clipped by (or fall behind) the
+        // taskbar.
+        _userMenuButton.Click += (_, _) => _userMenu.Show(_userMenuButton, new Point(0, 0), ToolStripDropDownDirection.AboveRight);
+
+        var userMenuWrap = new Panel { Dock = DockStyle.Bottom, Height = 52, Padding = new Padding(0, 12, 0, 0) };
+        userMenuWrap.Controls.Add(_userMenuButton);
+
         var navWrap = new Panel { Dock = DockStyle.Left, Width = 232, BackColor = LightColors.Panel, Padding = new Padding(10, 16, 10, 16) };
         navWrap.Controls.Add(_sectionList);
+        navWrap.Controls.Add(userMenuWrap);
 
         var navDivider = new Panel { Dock = DockStyle.Left, Width = 1, BackColor = LightColors.Border };
 

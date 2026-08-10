@@ -54,6 +54,12 @@ static class Program
                 // into git) - this optional file, when present next to the exe, overrides the above and is
                 // gitignored. Kept for local dev convenience; deployed machines use appDataConfigPath instead.
                 config.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+
+                // Re-added last (Host.CreateDefaultBuilder already adds environment variables once, earlier
+                // in this same pipeline) so a ConnectionStrings__DefaultConnection env var - set directly on
+                // this machine, never written to any file - wins over both JSON sources above instead of
+                // being silently shadowed by whichever of them happens to also set the same key.
+                config.AddEnvironmentVariables();
             })
             .ConfigureServices((context, services) =>
             {

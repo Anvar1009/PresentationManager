@@ -43,8 +43,8 @@ public sealed class AdminPanelForm : Form
     /// projects, per <see cref="Project.CreatedByUserId"/>.</summary>
     private int? _currentUserId;
 
-    /// <summary>Profile-info/Chiqish popup shown by <see cref="_userMenuButton"/> - populated once the
-    /// logged-in user is known, see <see cref="SetCurrentUser"/>.</summary>
+    /// <summary>Profile-info/Chiqish popup shown by <see cref="_userMenuButton"/>, in its own strip along the
+    /// bottom of the window - populated once the logged-in user is known, see <see cref="SetCurrentUser"/>.</summary>
     private readonly ContextMenuStrip _userMenu = new();
     private readonly Button _userMenuButton;
 
@@ -81,14 +81,13 @@ public sealed class AdminPanelForm : Form
 
         var topPanel = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(20, 12, 20, 12), BackColor = LightColors.Panel };
         var topPanelRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
-        var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 7, RowCount = 1 };
+        var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 1 };
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
 
         var projectLabel = new Label { Text = "Loyiha:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = LightColors.TextSecondary, Font = new Font("Segoe UI", 10.5f) };
         _projectCombo = new ComboBox
@@ -111,16 +110,32 @@ public sealed class AdminPanelForm : Form
         var judgesButton = new Button { Text = "Hakamlar", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(124, 58, 237), ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
         judgesButton.Click += OnJudgesClick;
 
-        var linkBotButton = new Button { Text = "🤖 Botga ulash", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
+        var linkBotButton = new Button { Text = "🤖 Botga ulash", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
         linkBotButton.FlatAppearance.BorderColor = LightColors.Border;
         linkBotButton.Click += OnLinkBotClick;
+
+        topLayout.Controls.Add(projectLabel, 0, 0);
+        topLayout.Controls.Add(_projectCombo, 1, 0);
+        topLayout.Controls.Add(newProjectButton, 2, 0);
+        topLayout.Controls.Add(criteriaButton, 3, 0);
+        topLayout.Controls.Add(judgesButton, 4, 0);
+        topLayout.Controls.Add(linkBotButton, 5, 0);
+        topPanel.Controls.Add(topLayout);
+
+        // ---------- Bottom bar: account info / Chiqish ----------
+        // This form has no left nav column the way SuperAdminPanelForm does, so "bottom" here means its own
+        // full-width strip along the foot of the window instead - the button itself still only takes up the
+        // left portion of it (Dock.Left, not Fill) so it doesn't visually try to fill unrelated width.
+        var bottomPanel = new Panel { Dock = DockStyle.Bottom, Height = 52, Padding = new Padding(20, 8, 20, 8), BackColor = LightColors.Panel };
+        var bottomPanelRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
+        bottomPanel.Controls.Add(bottomPanelRule);
 
         // Populated once the logged-in user is known - see SetCurrentUser.
         _userMenuButton = new Button
         {
             Text = "👤",
-            Dock = DockStyle.Fill,
-            Margin = new Padding(4, 0, 0, 0),
+            Dock = DockStyle.Left,
+            Width = 220,
             FlatStyle = FlatStyle.Flat,
             BackColor = LightColors.PanelAlt,
             ForeColor = LightColors.TextPrimary,
@@ -129,16 +144,11 @@ public sealed class AdminPanelForm : Form
             AutoEllipsis = true
         };
         _userMenuButton.FlatAppearance.BorderColor = LightColors.Border;
-        _userMenuButton.Click += (_, _) => _userMenu.Show(_userMenuButton, new Point(0, _userMenuButton.Height));
-
-        topLayout.Controls.Add(projectLabel, 0, 0);
-        topLayout.Controls.Add(_projectCombo, 1, 0);
-        topLayout.Controls.Add(newProjectButton, 2, 0);
-        topLayout.Controls.Add(criteriaButton, 3, 0);
-        topLayout.Controls.Add(judgesButton, 4, 0);
-        topLayout.Controls.Add(linkBotButton, 5, 0);
-        topLayout.Controls.Add(_userMenuButton, 6, 0);
-        topPanel.Controls.Add(topLayout);
+        // AboveRight, not the default below-the-control placement: this bar sits flush with the bottom of a
+        // maximized window, so a downward-opening popup would routinely be clipped by (or fall behind) the
+        // taskbar.
+        _userMenuButton.Click += (_, _) => _userMenu.Show(_userMenuButton, new Point(0, 0), ToolStripDropDownDirection.AboveRight);
+        bottomPanel.Controls.Add(_userMenuButton);
 
         var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10.5f) };
 
@@ -182,6 +192,7 @@ public sealed class AdminPanelForm : Form
         tabs.TabPages.Add(finalScoresTab);
 
         Controls.Add(tabs);
+        Controls.Add(bottomPanel);
         Controls.Add(topPanelRule);
         Controls.Add(topPanel);
 

@@ -38,10 +38,10 @@ public sealed class AdminForm : Form
     /// <c>SettingsForm</c>'s "Botga ulash" button.</summary>
     private int? _currentUserId;
 
-    /// <summary>Right-aligned menu item showing "👤 {FullName}" with the profile-info/Chiqish dropdown built
-    /// by <see cref="UserMenuHelper"/> - created empty in <see cref="BuildMenu"/> (the user isn't known yet at
-    /// construction time) and populated once <see cref="SetCurrentUser"/> runs.</summary>
-    private ToolStripMenuItem _userMenuItem = null!;
+    /// <summary>Profile-info/Chiqish popup shown by <see cref="_userMenuButton"/>, at the bottom of the queue
+    /// panel (see <see cref="BuildLeftQueuePanel"/>) - populated once <see cref="SetCurrentUser"/> runs.</summary>
+    private readonly ContextMenuStrip _userMenu = new();
+    private Button _userMenuButton = null!;
 
     private ListBox _queueListBox = null!;
     private TextBox _searchBox = null!;
@@ -112,9 +112,9 @@ public sealed class AdminForm : Form
     public void SetCurrentUser(User user)
     {
         _currentUserId = user.Id;
-        _userMenuItem.Text = $"👤 {user.FullName}";
-        _userMenuItem.DropDownItems.Clear();
-        _userMenuItem.DropDownItems.AddRange(UserMenuHelper.BuildItems(user, this));
+        _userMenuButton.Text = $"👤 {user.FullName}";
+        _userMenu.Items.Clear();
+        _userMenu.Items.AddRange(UserMenuHelper.BuildItems(user, this));
     }
 
     /// <summary>No-op while no project is active or the DB is briefly unreachable - a missed tick just means
@@ -166,10 +166,6 @@ public sealed class AdminForm : Form
         var hideScreenItem = new ToolStripMenuItem("Namoyish ekranini yashirish") { Padding = new Padding(14, 6, 14, 6) };
         hideScreenItem.Click += (_, _) => _presentationForm.HideAll();
         menu.Items.Add(hideScreenItem);
-
-        // Populated once the logged-in user is known - see SetCurrentUser.
-        _userMenuItem = new ToolStripMenuItem("👤") { Alignment = ToolStripItemAlignment.Right, Padding = new Padding(14, 6, 14, 6) };
-        menu.Items.Add(_userMenuItem);
 
         MainMenuStrip = menu;
         Controls.Add(menu); // added after the Fill split layout so it correctly claims the top strip
@@ -489,7 +485,30 @@ public sealed class AdminForm : Form
         // only whatever the session already considers "current".
         _queueListBox.SelectedIndexChanged += (_, _) => RefreshCurrentPanel();
 
+        // Populated once the logged-in user is known - see SetCurrentUser. Bottom of this queue panel (the
+        // form's own "left column") rather than up in the menu strip, matching SuperAdminPanelForm's own
+        // account info/Chiqish placement at the foot of its nav column.
+        _userMenuButton = new Button
+        {
+            Text = "👤",
+            Dock = DockStyle.Fill,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            AutoEllipsis = true
+        };
+        _userMenuButton.FlatAppearance.BorderColor = LightColors.Border;
+        // AboveRight, not the default below-the-control placement: this panel sits flush with the bottom of
+        // a maximized window, so a downward-opening popup would routinely be clipped by (or fall behind) the
+        // taskbar.
+        _userMenuButton.Click += (_, _) => _userMenu.Show(_userMenuButton, new Point(0, 0), ToolStripDropDownDirection.AboveRight);
+        var userMenuWrap = new Panel { Dock = DockStyle.Bottom, Height = 52, Padding = new Padding(0, 12, 0, 0) };
+        userMenuWrap.Controls.Add(_userMenuButton);
+
         panel.Controls.Add(_queueListBox);
+        panel.Controls.Add(userMenuWrap);
         panel.Controls.Add(selectHint);
         panel.Controls.Add(tableHeaderRule);
         panel.Controls.Add(tableHeader);
