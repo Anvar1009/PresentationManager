@@ -43,6 +43,11 @@ public sealed class AdminPanelForm : Form
     /// projects, per <see cref="Project.CreatedByUserId"/>.</summary>
     private int? _currentUserId;
 
+    /// <summary>Profile-info/Chiqish popup shown by <see cref="_userMenuButton"/> - populated once the
+    /// logged-in user is known, see <see cref="SetCurrentUser"/>.</summary>
+    private readonly ContextMenuStrip _userMenu = new();
+    private readonly Button _userMenuButton;
+
     private Project? SelectedProject => _projectCombo.SelectedItem as Project;
 
     public AdminPanelForm(
@@ -76,13 +81,14 @@ public sealed class AdminPanelForm : Form
 
         var topPanel = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(20, 12, 20, 12), BackColor = LightColors.Panel };
         var topPanelRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
-        var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 1 };
+        var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 7, RowCount = 1 };
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
 
         var projectLabel = new Label { Text = "Loyiha:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = LightColors.TextSecondary, Font = new Font("Segoe UI", 10.5f) };
         _projectCombo = new ComboBox
@@ -105,9 +111,25 @@ public sealed class AdminPanelForm : Form
         var judgesButton = new Button { Text = "Hakamlar", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(124, 58, 237), ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
         judgesButton.Click += OnJudgesClick;
 
-        var linkBotButton = new Button { Text = "🤖 Botga ulash", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
+        var linkBotButton = new Button { Text = "🤖 Botga ulash", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
         linkBotButton.FlatAppearance.BorderColor = LightColors.Border;
         linkBotButton.Click += OnLinkBotClick;
+
+        // Populated once the logged-in user is known - see SetCurrentUser.
+        _userMenuButton = new Button
+        {
+            Text = "👤",
+            Dock = DockStyle.Fill,
+            Margin = new Padding(4, 0, 0, 0),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            AutoEllipsis = true
+        };
+        _userMenuButton.FlatAppearance.BorderColor = LightColors.Border;
+        _userMenuButton.Click += (_, _) => _userMenu.Show(_userMenuButton, new Point(0, _userMenuButton.Height));
 
         topLayout.Controls.Add(projectLabel, 0, 0);
         topLayout.Controls.Add(_projectCombo, 1, 0);
@@ -115,6 +137,7 @@ public sealed class AdminPanelForm : Form
         topLayout.Controls.Add(criteriaButton, 3, 0);
         topLayout.Controls.Add(judgesButton, 4, 0);
         topLayout.Controls.Add(linkBotButton, 5, 0);
+        topLayout.Controls.Add(_userMenuButton, 6, 0);
         topPanel.Controls.Add(topLayout);
 
         var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10.5f) };
@@ -167,7 +190,13 @@ public sealed class AdminPanelForm : Form
 
     /// <summary>Called once, from Program.cs, right after this form is resolved from DI and before it's run -
     /// see <see cref="_currentUserId"/>.</summary>
-    public void SetCurrentUser(User user) => _currentUserId = user.Id;
+    public void SetCurrentUser(User user)
+    {
+        _currentUserId = user.Id;
+        _userMenuButton.Text = $"👤 {user.FullName}";
+        _userMenu.Items.Clear();
+        _userMenu.Items.AddRange(UserMenuHelper.BuildItems(user, this));
+    }
 
     private static DataGridView LightGrid() => DataGridViewTheme.CreateReadOnlyGrid(
         background: LightColors.Panel,

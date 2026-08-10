@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
@@ -78,6 +79,64 @@ public sealed class UserService
         };
         return await _userRepository.AddAsync(user, ct);
     }
+
+    /// <summary>SuperAdmin panel's "+ Foydalanuvchi qo'shish" action — creates a login account for someone who
+    /// already registered through the Telegram bot as a <see cref="Presenter"/>, instead of retyping their name
+    /// and inventing a login/password by hand. Username and password are both generated here and must be
+    /// delivered to the presenter out of band (the caller sends them over the Telegram chat this presenter
+    /// already registered from) since nothing about them is chosen or memorable.</summary>
+    public async Task<(User User, string GeneratedPassword)> CreateFromPresenterAsync(Presenter presenter, UserRole role, CancellationToken ct = default)
+    {
+        var existing = await _userRepository.GetByTelegramChatIdAsync(presenter.TelegramChatId, ct);
+        if (existing is not null)
+        {
+            throw new InvalidOperationException("Bu taqdimotchi allaqachon tizim foydalanuvchisi.");
+        }
+
+        var username = await GenerateUniqueUsernameAsync(presenter.PhoneNumber, ct);
+        var password = GenerateRandomPassword();
+
+        var user = new User
+        {
+            Username = username,
+            PasswordHash = PasswordHasher.Hash(password),
+            FullName = presenter.FullName,
+            Role = role,
+            TelegramChatId = presenter.TelegramChatId,
+            TelegramUsername = presenter.TelegramUsername
+        };
+
+        var created = await _userRepository.AddAsync(user, ct);
+        return (created, password);
+    }
+
+    private async Task<string> GenerateUniqueUsernameAsync(string? phoneNumber, CancellationToken ct)
+    {
+        var digits = phoneNumber is null ? "" : new string(phoneNumber.Where(char.IsDigit).ToArray());
+        var baseUsername = digits.Length > 0 ? digits : "user";
+
+        var candidate = baseUsername;
+        var suffix = 1;
+        while (await _userRepository.GetByUsernameAsync(candidate, ct) is not null)
+        {
+            candidate = $"{baseUsername}{++suffix}";
+        }
+
+        return candidate;
+    }
+
+    /// <summary>8 random characters from an unambiguous alphabet (no 0/O/1/I/l) since this is read off a phone
+    /// screen and typed once, not chosen or memorized.</summary>
+    private static string GenerateRandomPassword()
+    {
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+        return new string(RandomNumberGenerator.GetBytes(8).Select(b => chars[b % chars.Length]).ToArray());
+    }
+
+    /// <summary>SuperAdmin panel's Rol dropdown on an existing account — the only way a role ever changes after
+    /// creation.</summary>
+    public Task ChangeRoleAsync(int userId, UserRole newRole, CancellationToken ct = default) =>
+        _userRepository.SetRoleAsync(userId, newRole, ct);
 
     /// <summary>SuperAdmin panel's "Login/parolni tiklash" action on an existing account — the recovery path
     /// for a user who forgot their login/password and has no Telegram link for the bot-side "Parolni

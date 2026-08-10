@@ -4,6 +4,7 @@ using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
+using PresentationManager.TelegramBot;
 using PresentationManager.UI.Controls;
 using PresentationManager.UI.Theme;
 
@@ -34,6 +35,7 @@ public sealed class SuperAdminPanelForm : Form
     private readonly ScoreService _scoreService;
     private readonly IHistoryRepository _historyRepository;
     private readonly IFileStorageService _fileStorageService;
+    private readonly PresentationBotHostedService _presentationBot;
 
     private readonly ListBox _sectionList;
     private readonly Label _sectionTitleLabel;
@@ -44,6 +46,12 @@ public sealed class SuperAdminPanelForm : Form
     private readonly RoundedButton _openFileButton;
     private readonly RoundedButton _clearHistoryButton;
     private readonly ModernOutlineButton _refreshButton;
+
+    /// <summary>Profile-info/Chiqish popup shown by <see cref="_userMenuButton"/> - populated once the
+    /// logged-in user is known, see <see cref="SetCurrentUser"/>. Unlike AdminForm/AdminPanelForm, this form
+    /// previously had no <c>SetCurrentUser</c> at all - Program.cs is updated alongside this to call it.</summary>
+    private readonly ContextMenuStrip _userMenu = new();
+    private readonly Button _userMenuButton;
 
     /// <summary>Mirrors <see cref="_grid"/>'s bound rows, in the same order, whenever the "Taqdimotlar"
     /// section is loaded — the grid is bound to an anonymous-object projection (display-only) that loses
@@ -65,7 +73,8 @@ public sealed class SuperAdminPanelForm : Form
         CriterionService criterionService,
         ScoreService scoreService,
         IHistoryRepository historyRepository,
-        IFileStorageService fileStorageService)
+        IFileStorageService fileStorageService,
+        PresentationBotHostedService presentationBot)
     {
         _projectService = projectService;
         _queueService = queueService;
@@ -76,6 +85,7 @@ public sealed class SuperAdminPanelForm : Form
         _scoreService = scoreService;
         _historyRepository = historyRepository;
         _fileStorageService = fileStorageService;
+        _presentationBot = presentationBot;
 
         Text = "SuperAdmin paneli";
         BackColor = LightColors.Background;
@@ -88,8 +98,9 @@ public sealed class SuperAdminPanelForm : Form
         // ---------- Top header ----------
         var header = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = LightColors.Panel, Padding = new Padding(28, 0, 24, 0) };
         var headerBottomRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
-        var headerLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        var headerLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
         headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
         headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 165));
 
         var titleStack = new Panel { Dock = DockStyle.Fill };
@@ -128,8 +139,25 @@ public sealed class SuperAdminPanelForm : Form
         };
         _refreshButton.Click += async (_, _) => await RefreshSelectedSectionAsync();
 
+        // Populated once the logged-in user is known - see SetCurrentUser.
+        _userMenuButton = new Button
+        {
+            Text = "👤",
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 24, 12, 24),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            AutoEllipsis = true
+        };
+        _userMenuButton.FlatAppearance.BorderColor = LightColors.Border;
+        _userMenuButton.Click += (_, _) => _userMenu.Show(_userMenuButton, new Point(0, _userMenuButton.Height));
+
         headerLayout.Controls.Add(titleStack, 0, 0);
-        headerLayout.Controls.Add(_refreshButton, 1, 0);
+        headerLayout.Controls.Add(_userMenuButton, 1, 0);
+        headerLayout.Controls.Add(_refreshButton, 2, 0);
         header.Controls.Add(headerLayout);
 
         // ---------- Left nav ----------
@@ -297,6 +325,16 @@ public sealed class SuperAdminPanelForm : Form
         Controls.Add(header);
 
         Load += (_, _) => _sectionList.SelectedIndex = 0;
+    }
+
+    /// <summary>Called once, from Program.cs, right after this form is resolved from DI and before it's run -
+    /// mirrors AdminForm/AdminPanelForm's own <c>SetCurrentUser</c>, which this form never had before since
+    /// nothing here previously needed to know who was logged in.</summary>
+    public void SetCurrentUser(User user)
+    {
+        _userMenuButton.Text = $"👤 {user.FullName}";
+        _userMenu.Items.Clear();
+        _userMenu.Items.AddRange(UserMenuHelper.BuildItems(user, this));
     }
 
     private int _hoveredSectionIndex = -1;
@@ -599,9 +637,30 @@ public sealed class SuperAdminPanelForm : Form
             .ToList();
     }
 
+    /// <summary>Promotes someone who already registered through the Telegram bot (a <see cref="Presenter"/>)
+    /// to a desktop login account — nothing is typed by hand, only picked: which presenter, and which role.
+    /// The generated login/password (see <see cref="UserService.CreateFromPresenterAsync"/>) are delivered to
+    /// that person over the same Telegram chat, not shown for the SuperAdmin to relay manually unless that
+    /// delivery fails.</summary>
     private async void OnAddUserClick(object? sender, EventArgs e)
     {
-        using var dialog = new AddUserForm();
+        var presenters = await _presenterRepository.GetAllAsync();
+        var users = await _userService.GetAllAsync();
+        var linkedChatIds = users.Where(u => u.TelegramChatId.HasValue).Select(u => u.TelegramChatId!.Value).ToHashSet();
+        var availablePresenters = presenters.Where(p => !linkedChatIds.Contains(p.TelegramChatId)).ToList();
+
+        if (availablePresenters.Count == 0)
+        {
+            MessageBox.Show(
+                this,
+                "Telegram bot orqali ro'yxatdan o'tgan, hali foydalanuvchi qilib belgilanmagan taqdimotchi yo'q.",
+                "Foydalanuvchi qo'shish",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dialog = new AddUserForm(availablePresenters);
         if (dialog.ShowDialog(this) != DialogResult.OK)
         {
             return;
@@ -609,9 +668,23 @@ public sealed class SuperAdminPanelForm : Form
 
         try
         {
-            await _userService.CreateAsync(dialog.Username, dialog.Password, dialog.FullName, dialog.Role);
+            var (user, generatedPassword) = await _userService.CreateFromPresenterAsync(dialog.SelectedPresenter, dialog.Role);
+
+            var sent = user.TelegramChatId is { } chatId && await _presentationBot.TrySendMessageAsync(
+                chatId,
+                $"✅ Sizga \"{user.Role}\" huquqi berildi!\n\nDastur uchun kirish ma'lumotlaringiz:\nLogin: {user.Username}\nParol: {generatedPassword}\n\nXavfsizlik uchun birinchi kirishdan so'ng parolni o'zgartirishingiz tavsiya etiladi.");
+
             await LoadUsersAsync();
             _rowCountLabel.Text = $"{_grid.RowCount} ta yozuv";
+
+            MessageBox.Show(
+                this,
+                sent
+                    ? $"Foydalanuvchi yaratildi. Login va parol Telegram orqali {user.FullName}ga yuborildi."
+                    : $"Foydalanuvchi yaratildi, lekin Telegram orqali xabar yuborib bo'lmadi.\n\nLogin: {user.Username}\nParol: {generatedPassword}\n\nBuni foydalanuvchiga qo'lda yetkazing.",
+                "Foydalanuvchi qo'shildi",
+                MessageBoxButtons.OK,
+                sent ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (Exception ex)
         {
@@ -619,8 +692,9 @@ public sealed class SuperAdminPanelForm : Form
         }
     }
 
-    /// <summary>Account-recovery action for a user who forgot their login/password — lets the SuperAdmin
-    /// change the selected account's login and, optionally, reset its password.</summary>
+    /// <summary>Two SuperAdmin actions on an existing account, both picked from the grid and never retyped:
+    /// account recovery (login/password reset) for someone who forgot their credentials, and changing their
+    /// role.</summary>
     private async void OnEditUserClick(object? sender, EventArgs e)
     {
         if (!_editUserButton.Visible)
@@ -645,6 +719,11 @@ public sealed class SuperAdminPanelForm : Form
         try
         {
             await _userService.EditUserAsync(user.Id, dialog.Username, string.IsNullOrEmpty(dialog.NewPassword) ? null : dialog.NewPassword);
+            if (dialog.Role != user.Role)
+            {
+                await _userService.ChangeRoleAsync(user.Id, dialog.Role);
+            }
+
             await LoadUsersAsync();
             _rowCountLabel.Text = $"{_grid.RowCount} ta yozuv";
         }

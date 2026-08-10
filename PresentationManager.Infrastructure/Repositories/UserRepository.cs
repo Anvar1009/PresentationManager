@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
+using PresentationManager.Domain.Enums;
 using PresentationManager.Infrastructure.Persistence;
 
 namespace PresentationManager.Infrastructure.Repositories;
@@ -97,6 +98,19 @@ public class UserRepository : IUserRepository
         }
 
         user.Username = username;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task SetRoleAsync(int userId, UserRole role, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var user = await db.Users.FindAsync([userId], ct);
+        if (user is null)
+        {
+            return;
+        }
+
+        user.Role = role;
         await db.SaveChangesAsync(ct);
     }
 }

@@ -38,6 +38,11 @@ public sealed class AdminForm : Form
     /// <c>SettingsForm</c>'s "Botga ulash" button.</summary>
     private int? _currentUserId;
 
+    /// <summary>Right-aligned menu item showing "👤 {FullName}" with the profile-info/Chiqish dropdown built
+    /// by <see cref="UserMenuHelper"/> - created empty in <see cref="BuildMenu"/> (the user isn't known yet at
+    /// construction time) and populated once <see cref="SetCurrentUser"/> runs.</summary>
+    private ToolStripMenuItem _userMenuItem = null!;
+
     private ListBox _queueListBox = null!;
     private TextBox _searchBox = null!;
     private List<Presentation> _displayedQueue = [];
@@ -104,7 +109,13 @@ public sealed class AdminForm : Form
 
     /// <summary>Called once, from Program.cs, right after this form is resolved from DI and before it's run -
     /// see <see cref="_currentUserId"/>.</summary>
-    public void SetCurrentUser(User user) => _currentUserId = user.Id;
+    public void SetCurrentUser(User user)
+    {
+        _currentUserId = user.Id;
+        _userMenuItem.Text = $"👤 {user.FullName}";
+        _userMenuItem.DropDownItems.Clear();
+        _userMenuItem.DropDownItems.AddRange(UserMenuHelper.BuildItems(user, this));
+    }
 
     /// <summary>No-op while no project is active or the DB is briefly unreachable - a missed tick just means
     /// a bot-submitted presentation shows up on the next one instead of instantly, which is an acceptable
@@ -155,6 +166,10 @@ public sealed class AdminForm : Form
         var hideScreenItem = new ToolStripMenuItem("Namoyish ekranini yashirish") { Padding = new Padding(14, 6, 14, 6) };
         hideScreenItem.Click += (_, _) => _presentationForm.HideAll();
         menu.Items.Add(hideScreenItem);
+
+        // Populated once the logged-in user is known - see SetCurrentUser.
+        _userMenuItem = new ToolStripMenuItem("👤") { Alignment = ToolStripItemAlignment.Right, Padding = new Padding(14, 6, 14, 6) };
+        menu.Items.Add(_userMenuItem);
 
         MainMenuStrip = menu;
         Controls.Add(menu); // added after the Fill split layout so it correctly claims the top strip

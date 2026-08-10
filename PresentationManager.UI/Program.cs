@@ -139,13 +139,14 @@ static class Program
         {
             Form mainForm = user.Role switch
             {
-                // AdminForm/AdminPanelForm are both DI singletons built before login happens, so neither has
-                // a way to receive the logged-in user through its constructor - SetCurrentUser wires it in
+                // All three role forms are DI singletons built before login happens, so none of them has a
+                // way to receive the logged-in user through its constructor - SetCurrentUser wires it in
                 // here instead, before the form ever runs (AdminForm needs it for its own "Botga ulash" in
-                // Sozlamalar; AdminPanelForm needs it to scope "Loyihalar" to whichever Admin this is).
+                // Sozlamalar; AdminPanelForm needs it to scope "Loyihalar" to whichever Admin this is; all
+                // three need it for the profile-info/Chiqish menu built by UserMenuHelper).
                 UserRole.Operator => WithCurrentOperatorUser(host.Services.GetRequiredService<AdminForm>(), user),
                 UserRole.Admin => WithCurrentAdminUser(host.Services.GetRequiredService<AdminPanelForm>(), user),
-                UserRole.SuperAdmin => host.Services.GetRequiredService<SuperAdminPanelForm>(),
+                UserRole.SuperAdmin => WithCurrentSuperAdminUser(host.Services.GetRequiredService<SuperAdminPanelForm>(), user),
                 _ => throw new InvalidOperationException($"Unknown role: {user.Role}")
             };
 
@@ -153,7 +154,7 @@ static class Program
         }
 
         // Local functions can't be overloaded by parameter type the way regular methods can - hence the
-        // distinct names, even though both bodies are identical modulo the form type.
+        // distinct names, even though all three bodies are identical modulo the form type.
         static AdminForm WithCurrentOperatorUser(AdminForm form, User user)
         {
             form.SetCurrentUser(user);
@@ -161,6 +162,12 @@ static class Program
         }
 
         static AdminPanelForm WithCurrentAdminUser(AdminPanelForm form, User user)
+        {
+            form.SetCurrentUser(user);
+            return form;
+        }
+
+        static SuperAdminPanelForm WithCurrentSuperAdminUser(SuperAdminPanelForm form, User user)
         {
             form.SetCurrentUser(user);
             return form;

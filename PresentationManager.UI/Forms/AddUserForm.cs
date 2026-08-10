@@ -1,23 +1,23 @@
+using PresentationManager.Domain.Entities;
 using PresentationManager.Domain.Enums;
 using PresentationManager.UI.Theme;
 
 namespace PresentationManager.UI.Forms;
 
-/// <summary>SuperAdmin's "+ Foydalanuvchi qo'shish" dialog — the one place new Operator/Admin/SuperAdmin
-/// login accounts get created.</summary>
+/// <summary>SuperAdmin's "+ Foydalanuvchi qo'shish" dialog — the one place new Operator/Admin/SuperAdmin login
+/// accounts get created. Nothing is typed by hand: the person must already have registered through the
+/// Telegram bot (as a <see cref="Presenter"/>), so this only ever asks which of them to promote and to what
+/// role — see <see cref="Application.Services.UserService.CreateFromPresenterAsync"/> for how the actual
+/// login/password get generated from that choice.</summary>
 public sealed class AddUserForm : Form
 {
-    private readonly TextBox _usernameBox;
-    private readonly TextBox _passwordBox;
-    private readonly TextBox _fullNameBox;
+    private readonly ComboBox _presenterCombo;
     private readonly ComboBox _roleCombo;
 
-    public string Username => _usernameBox.Text.Trim();
-    public string Password => _passwordBox.Text;
-    public string FullName => _fullNameBox.Text.Trim();
+    public Presenter SelectedPresenter => ((PresenterOption)_presenterCombo.SelectedItem!).Presenter;
     public UserRole Role => (UserRole)_roleCombo.SelectedItem!;
 
-    public AddUserForm()
+    public AddUserForm(List<Presenter> availablePresenters)
     {
         Text = "Yangi foydalanuvchi";
         BackColor = LightColors.Background;
@@ -27,16 +27,22 @@ public sealed class AddUserForm : Form
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(380, 280);
+        ClientSize = new Size(380, 200);
 
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 5, Padding = new Padding(16) };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(16) };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        _usernameBox = FieldTextBox();
-        _passwordBox = FieldTextBox();
-        _passwordBox.UseSystemPasswordChar = true;
-        _fullNameBox = FieldTextBox();
+        _presenterCombo = new ComboBox
+        {
+            Dock = DockStyle.Fill,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary
+        };
+        _presenterCombo.Items.AddRange(availablePresenters.Select(p => (object)new PresenterOption(p)).ToArray());
+        _presenterCombo.SelectedIndex = 0;
+
         _roleCombo = new ComboBox
         {
             Dock = DockStyle.Fill,
@@ -47,10 +53,8 @@ public sealed class AddUserForm : Form
         _roleCombo.Items.AddRange([UserRole.Operator, UserRole.Admin, UserRole.SuperAdmin]);
         _roleCombo.SelectedIndex = 0;
 
-        AddRow(layout, 0, "Login *", _usernameBox);
-        AddRow(layout, 1, "Parol *", _passwordBox);
-        AddRow(layout, 2, "Ism-familya *", _fullNameBox);
-        AddRow(layout, 3, "Rol *", _roleCombo);
+        AddRow(layout, 0, "Taqdimotchi *", _presenterCombo);
+        AddRow(layout, 1, "Rol *", _roleCombo);
 
         var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         var cancelButton = new Button { Text = "Bekor qilish", DialogResult = DialogResult.Cancel, Width = 90, FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary };
@@ -58,7 +62,8 @@ public sealed class AddUserForm : Form
         saveButton.Click += OnSaveClick;
         buttonPanel.Controls.Add(cancelButton);
         buttonPanel.Controls.Add(saveButton);
-        layout.Controls.Add(buttonPanel, 0, 4);
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        layout.Controls.Add(buttonPanel, 0, 2);
         layout.SetColumnSpan(buttonPanel, 2);
 
         Controls.Add(layout);
@@ -73,22 +78,24 @@ public sealed class AddUserForm : Form
         layout.Controls.Add(control, 1, row);
     }
 
-    private static TextBox FieldTextBox() => new()
-    {
-        Dock = DockStyle.Fill,
-        BackColor = LightColors.PanelAlt,
-        ForeColor = LightColors.TextPrimary,
-        BorderStyle = BorderStyle.FixedSingle
-    };
-
     private void OnSaveClick(object? sender, EventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(Username) || string.IsNullOrWhiteSpace(Password) || string.IsNullOrWhiteSpace(FullName))
+        if (_presenterCombo.SelectedItem is null)
         {
-            MessageBox.Show(this, "Barcha maydonlar to'ldirilishi shart.", "Tekshiruv", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "Taqdimotchini tanlang.", "Tekshiruv", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         DialogResult = DialogResult.OK;
+    }
+
+    /// <summary>Wraps a <see cref="Presenter"/> only so the combo box shows something more useful than its
+    /// type name — <see cref="ComboBox"/> renders items via <c>ToString()</c> and <see cref="Presenter"/>
+    /// itself has no reason to own a display format.</summary>
+    private sealed record PresenterOption(Presenter Presenter)
+    {
+        public override string ToString() => string.IsNullOrWhiteSpace(Presenter.PhoneNumber)
+            ? Presenter.FullName
+            : $"{Presenter.FullName} — {Presenter.PhoneNumber}";
     }
 }
