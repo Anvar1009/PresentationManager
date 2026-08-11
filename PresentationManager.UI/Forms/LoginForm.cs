@@ -14,18 +14,18 @@ public sealed class LoginForm : Form
 {
     private readonly UserService _userService;
     private readonly PasswordResetService _passwordResetService;
-    private readonly PresentationBotHostedService _botHostedService;
+    private readonly TelegramNotifier _telegramNotifier;
     private readonly TextBox _usernameBox;
     private readonly TextBox _passwordBox;
     private readonly Label _errorLabel;
 
     public User? AuthenticatedUser { get; private set; }
 
-    public LoginForm(UserService userService, PasswordResetService passwordResetService, PresentationBotHostedService botHostedService)
+    public LoginForm(UserService userService, PasswordResetService passwordResetService, TelegramNotifier telegramNotifier)
     {
         _userService = userService;
         _passwordResetService = passwordResetService;
-        _botHostedService = botHostedService;
+        _telegramNotifier = telegramNotifier;
 
         Text = "Kirish";
         BackColor = AppColors.Background;
@@ -167,7 +167,7 @@ public sealed class LoginForm : Form
 
     private void OnForgotPasswordClick()
     {
-        using var dialog = new ForgotPasswordForm(_userService, _passwordResetService, _botHostedService);
+        using var dialog = new ForgotPasswordForm(_userService, _passwordResetService, _telegramNotifier);
         dialog.ShowDialog(this);
     }
 }

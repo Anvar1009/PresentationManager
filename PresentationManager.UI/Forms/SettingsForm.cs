@@ -138,8 +138,8 @@ public sealed class SettingsForm : Form
     /// <summary>Same one-time deep-link mechanism as <c>AdminPanelForm</c>'s "Botga ulash" (see
     /// <see cref="BotLinkHelper"/>) - links this Operator's account so "Parolni unutdingizmi?" has a Telegram
     /// chat to deliver reset codes to (Operators get no bot-side menu of their own from this, unlike Admin).</summary>
-    private void OnLinkBotClick(object? sender, EventArgs e) =>
-        BotLinkHelper.ShowLinkDialog(this, _adminLinkService, _botOptions, _currentUserId);
+    private async void OnLinkBotClick(object? sender, EventArgs e) =>
+        await BotLinkHelper.ShowLinkDialogAsync(this, _adminLinkService, _botOptions, _currentUserId);
 
     private void OnBrowseAlarmClick(object? sender, EventArgs e)
     {

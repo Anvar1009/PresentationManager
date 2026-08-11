@@ -35,7 +35,7 @@ public sealed class SuperAdminPanelForm : Form
     private readonly ScoreService _scoreService;
     private readonly IHistoryRepository _historyRepository;
     private readonly IFileStorageService _fileStorageService;
-    private readonly PresentationBotHostedService _presentationBot;
+    private readonly TelegramNotifier _telegramNotifier;
 
     private readonly ListBox _sectionList;
     private readonly Label _sectionTitleLabel;
@@ -74,7 +74,7 @@ public sealed class SuperAdminPanelForm : Form
         ScoreService scoreService,
         IHistoryRepository historyRepository,
         IFileStorageService fileStorageService,
-        PresentationBotHostedService presentationBot)
+        TelegramNotifier telegramNotifier)
     {
         _projectService = projectService;
         _queueService = queueService;
@@ -85,7 +85,7 @@ public sealed class SuperAdminPanelForm : Form
         _scoreService = scoreService;
         _historyRepository = historyRepository;
         _fileStorageService = fileStorageService;
-        _presentationBot = presentationBot;
+        _telegramNotifier = telegramNotifier;
 
         Text = "SuperAdmin paneli";
         BackColor = LightColors.Background;
@@ -676,7 +676,7 @@ public sealed class SuperAdminPanelForm : Form
         {
             var (user, generatedPassword) = await _userService.CreateFromPresenterAsync(dialog.SelectedPresenter, dialog.Role);
 
-            var sent = user.TelegramChatId is { } chatId && await _presentationBot.TrySendMessageAsync(
+            var sent = user.TelegramChatId is { } chatId && await _telegramNotifier.TrySendMessageAsync(
                 chatId,
                 $"✅ Sizga \"{user.Role}\" huquqi berildi!\n\nDastur uchun kirish ma'lumotlaringiz:\nLogin: {user.Username}\nParol: {generatedPassword}\n\nXavfsizlik uchun birinchi kirishdan so'ng parolni o'zgartirishingiz tavsiya etiladi.");
 

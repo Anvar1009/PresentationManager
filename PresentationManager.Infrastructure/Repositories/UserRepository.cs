@@ -75,6 +75,26 @@ public class UserRepository : IUserRepository
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task SetTelegramLinkTokenAsync(int userId, string? token, DateTime? expiresAtUtc, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var user = await db.Users.FindAsync([userId], ct);
+        if (user is null)
+        {
+            return;
+        }
+
+        user.TelegramLinkToken = token;
+        user.TelegramLinkTokenExpiresAtUtc = expiresAtUtc;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<User?> GetByTelegramLinkTokenAsync(string token, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.TelegramLinkToken == token, ct);
+    }
+
     public async Task SetPasswordAsync(int userId, string passwordHash, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

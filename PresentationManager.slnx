@@ -1,6 +1,8 @@
 <Solution>
   <Project Path="PresentationManager.Application/PresentationManager.Application.csproj" />
+  <Project Path="PresentationManager.BotService/PresentationManager.BotService.csproj" />
   <Project Path="PresentationManager.Domain/PresentationManager.Domain.csproj" />
   <Project Path="PresentationManager.Infrastructure/PresentationManager.Infrastructure.csproj" />
+  <Project Path="PresentationManager.TelegramBot/PresentationManager.TelegramBot.csproj" />
   <Project Path="PresentationManager.UI/PresentationManager.UI.csproj" />
 </Solution>

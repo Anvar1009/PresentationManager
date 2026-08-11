@@ -24,6 +24,14 @@ public interface IUserRepository
     /// <see cref="User.TelegramChatId"/>/<see cref="User.TelegramUsername"/>.</summary>
     Task SetTelegramLinkAsync(int userId, long telegramChatId, string? telegramUsername, CancellationToken ct = default);
 
+    /// <summary>Stores (or clears, passing null for both) the pending "Botga ulash" deep-link token - see
+    /// <see cref="User.TelegramLinkToken"/>.</summary>
+    Task SetTelegramLinkTokenAsync(int userId, string? token, DateTime? expiresAtUtc, CancellationToken ct = default);
+
+    /// <summary>Looks up whichever user currently holds this pending link token - does not check expiry
+    /// itself, since <c>AdminLinkService</c> needs the expiry timestamp to decide that.</summary>
+    Task<User?> GetByTelegramLinkTokenAsync(string token, CancellationToken ct = default);
+
     Task SetPasswordAsync(int userId, string passwordHash, CancellationToken ct = default);
 
     /// <summary>SuperAdmin-driven login change — see <see cref="PresentationManager.Application.Services.UserService.EditUserAsync"/>.</summary>

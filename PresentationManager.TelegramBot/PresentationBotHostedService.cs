@@ -49,7 +49,9 @@ public sealed class PresentationBotHostedService : BackgroundService
     /// <see cref="ContactRequestKeyboard"/>, so it stays docked at the bottom of the chat across every
     /// message) — tapping "📋 Loyihalar" jumps straight back to the project/presentation menu without
     /// needing /start.</summary>
-    private static readonly ReplyKeyboardMarkup JudgeMainKeyboard = new(
+    /// <summary>Internal (not private) so <see cref="JudgeAssignmentNotifier"/> can reuse the exact same
+    /// keyboard when pushing a judge-assignment notification, instead of duplicating this definition.</summary>
+    internal static readonly ReplyKeyboardMarkup JudgeMainKeyboard = new(
         new[] { new KeyboardButton("📋 Loyihalar") })
     {
         ResizeKeyboard = true
@@ -77,10 +79,6 @@ public sealed class PresentationBotHostedService : BackgroundService
     private readonly CriterionService _criterionService;
     private readonly UserService _userService;
     private readonly AdminLinkService _adminLinkService;
-
-    /// <summary>Set once <see cref="ExecuteAsync"/> actually starts polling (i.e. a token is configured) -
-    /// null otherwise, which <see cref="OnJudgeAssignedAsync"/> treats as "bot is off, nothing to push".</summary>
-    private ITelegramBotClient? _botClient;
 
     /// <summary>Presenter upload flow state, per chat.</summary>
     private readonly ConcurrentDictionary<long, ChatSession> _sessions = new();
@@ -114,8 +112,6 @@ public sealed class PresentationBotHostedService : BackgroundService
         _criterionService = criterionService;
         _userService = userService;
         _adminLinkService = adminLinkService;
-
-        _judgeService.JudgeAssigned += judge => _ = OnJudgeAssignedAsync(judge);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -129,7 +125,6 @@ public sealed class PresentationBotHostedService : BackgroundService
         }
 
         var botClient = new TelegramBotClient(_options.Token);
-        _botClient = botClient;
         var receiverOptions = new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery] };
 
         botClient.StartReceiving(HandleUpdateAsync, HandlePollingErrorAsync, receiverOptions, stoppingToken);
@@ -326,7 +321,7 @@ public sealed class PresentationBotHostedService : BackgroundService
     /// than leaving the chat stuck, since the token itself carries no other identity to recover.</summary>
     private async Task HandleAdminLinkTokenAsync(ITelegramBotClient botClient, long chatId, string token, string? telegramUsername, CancellationToken ct)
     {
-        if (!string.IsNullOrEmpty(token) && _adminLinkService.TryConsume(token, out var userId))
+        if (!string.IsNullOrEmpty(token) && await _adminLinkService.TryConsumeAsync(token, ct) is { } userId)
         {
             try
             {
@@ -367,57 +362,6 @@ public sealed class PresentationBotHostedService : BackgroundService
 
         await botClient.SendMessage(chatId, "✅ Ro'yxatdan o'tish yakunlandi!", replyMarkup: new ReplyKeyboardRemove(), cancellationToken: ct);
         await ShowProjectListAsync(botClient, chatId, presenter.Id, presenter.FullName, ct);
-    }
-
-    /// <summary>Fired by <c>JudgeService.AssignAsync</c> the moment Admin assigns an already-registered
-    /// person as a judge - pushes them a notification immediately instead of leaving them to discover it
-    /// only if/when they happen to press /start again on their own.</summary>
-    private async Task OnJudgeAssignedAsync(Judge judge)
-    {
-        if (_botClient is not { } botClient || judge.TelegramChatId is not { } chatId)
-        {
-            return;
-        }
-
-        try
-        {
-            var projects = await _projectService.GetAllAsync();
-            var projectName = projects.FirstOrDefault(p => p.Id == judge.ProjectId)?.Name ?? "loyiha";
-
-            await botClient.SendMessage(chatId,
-                $"🎉 Tabriklaymiz! Siz \"{projectName}\" loyihasi uchun hakam etib tayinlandingiz.\nPastdagi \"📋 Loyihalar\" tugmasi orqali istalgan vaqt boshlashingiz mumkin.",
-                replyMarkup: JudgeMainKeyboard);
-        }
-        catch (Exception ex)
-        {
-            // Best-effort push notification - the assignment itself already succeeded regardless of whether
-            // this message manages to reach them (e.g. they blocked the bot).
-            Debug.WriteLine($"Failed to notify newly-assigned judge (chat {chatId}): {ex}");
-        }
-    }
-
-    /// <summary>Public entry point used from outside the bot's own update loop - specifically,
-    /// <c>ForgotPasswordForm</c> pushing a password-reset code to a linked chat. Registered in DI as itself
-    /// (not just as <see cref="IHostedService"/> - see Program.cs) so it's resolvable this way. Best-effort:
-    /// returns false rather than throwing if the bot is off or the send itself fails (e.g. the account blocked
-    /// the bot), letting the caller show its own error instead of crashing the desktop form.</summary>
-    public async Task<bool> TrySendMessageAsync(long chatId, string text, CancellationToken ct = default)
-    {
-        if (_botClient is not { } botClient)
-        {
-            return false;
-        }
-
-        try
-        {
-            await botClient.SendMessage(chatId, text, cancellationToken: ct);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to send message to chat {chatId}: {ex}");
-            return false;
-        }
     }
 
     // ---------- Presenter upload flow ----------

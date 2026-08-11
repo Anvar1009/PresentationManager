@@ -78,7 +78,7 @@ static class Program
                 services.AddSingleton<ICriterionRepository, CriterionRepository>();
                 services.AddSingleton<IJudgeRepository, JudgeRepository>();
                 services.AddSingleton<IScoreRepository, ScoreRepository>();
-                services.AddSingleton<IFileStorageService>(_ => new FileStorageService(Path.Combine(appDataDir, "Files")));
+                services.AddSingleton<IFileStorageService>(_ => new FileStorageService(ResolveStorageRoot(context.Configuration, appDataDir)));
                 services.AddSingleton<IAlarmSoundService, AlarmSoundService>();
 
                 services.AddSingleton<TimerEngine>();
@@ -91,11 +91,15 @@ static class Program
                 services.AddSingleton<ScoreService>();
                 services.AddSingleton<AdminLinkService>();
                 services.AddSingleton<PasswordResetService>();
-                // Registered as itself (not just via AddHostedService<T>) so ForgotPasswordForm can resolve it
-                // directly to push reset codes through TrySendMessageAsync - AddHostedService<T> alone only
-                // registers T as IHostedService, which isn't resolvable by its own concrete type.
-                services.AddSingleton<PresentationBotHostedService>();
-                services.AddHostedService(sp => sp.GetRequiredService<PresentationBotHostedService>());
+
+                // The bot's long-polling receive loop (PresentationBotHostedService) no longer runs in this
+                // process at all - Telegram only allows one getUpdates consumer per bot token, so exactly one
+                // always-on copy of it runs in the separate PresentationManager.BotService worker instead,
+                // shared by every operator machine. This process only ever sends (password reset codes, judge
+                // assignment pushes, role-grant credentials) - see TelegramNotifier, which any number of
+                // processes can use independently since outbound sendMessage has no such restriction.
+                services.AddSingleton<TelegramNotifier>();
+                services.AddSingleton<JudgeAssignmentNotifier>();
 
                 services.AddSingleton<PresentationForm>();
                 services.AddSingleton<AdminForm>();
@@ -125,9 +129,14 @@ static class Program
             return;
         }
 
-        // Starts registered IHostedServices - notably PresentationBotHostedService, which otherwise would
-        // never run (this host was previously only ever used as a DI container, never actually started).
+        // No IHostedService is registered in this process anymore (the bot's receive loop moved to
+        // PresentationManager.BotService) - Start()/StopAsync() are kept as harmless no-ops rather than
+        // removed, so this host still behaves correctly if a future hosted service is ever added here.
         host.Start();
+
+        // Eagerly resolved (nothing else in this process constructs it by injection) so its constructor's
+        // JudgeService.JudgeAssigned subscription is live for the whole session - see JudgeAssignmentNotifier.
+        host.Services.GetRequiredService<JudgeAssignmentNotifier>();
 
         var userService = host.Services.GetRequiredService<UserService>();
         // Task.Run, not a direct blocking await: the main thread's SynchronizationContext is already the
@@ -140,7 +149,7 @@ static class Program
         using var loginForm = new LoginForm(
             userService,
             host.Services.GetRequiredService<PasswordResetService>(),
-            host.Services.GetRequiredService<PresentationBotHostedService>());
+            host.Services.GetRequiredService<TelegramNotifier>());
         if (loginForm.ShowDialog() == DialogResult.OK && loginForm.AuthenticatedUser is { } user)
         {
             Form mainForm = user.Role switch
@@ -200,4 +209,15 @@ static class Program
         using var fileStream = File.Create(appDataConfigPath);
         resourceStream.CopyTo(fileStream);
     }
+
+    /// <summary>Resolves where uploaded presentation files are stored - a "Storage:RootPath" config value
+    /// (set via appsettings/the Storage__RootPath env var, same override convention as
+    /// ConnectionStrings:DefaultConnection) pointing at a shared network location, or the pre-existing
+    /// per-machine "Files" folder under AppData when unset, so a single-machine setup with no such config
+    /// keeps behaving exactly as it always has. Every process reading uploaded files (this app and
+    /// PresentationManager.BotService) must be pointed at the same value for a shared deployment to work.</summary>
+    private static string ResolveStorageRoot(IConfiguration config, string appDataDir) =>
+        config["Storage:RootPath"] is { Length: > 0 } configured
+            ? configured
+            : Path.Combine(appDataDir, "Files");
 }

@@ -99,6 +99,7 @@ public class AppDbContext : DbContext
             b.Property(u => u.FullName).IsRequired();
             b.HasIndex(u => u.Username).IsUnique();
             b.HasIndex(u => u.TelegramChatId).IsUnique();
+            b.HasIndex(u => u.TelegramLinkToken);
         });
 
         modelBuilder.Entity<EvaluationCriterion>(b =>

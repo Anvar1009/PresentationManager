@@ -10,7 +10,7 @@ namespace PresentationManager.UI.Forms;
 /// so the account can be opened and linked from Telegram.</summary>
 internal static class BotLinkHelper
 {
-    public static void ShowLinkDialog(IWin32Window owner, AdminLinkService adminLinkService, PresentationBotOptions botOptions, int? userId)
+    public static async Task ShowLinkDialogAsync(IWin32Window owner, AdminLinkService adminLinkService, PresentationBotOptions botOptions, int? userId)
     {
         if (userId is not int id)
         {
@@ -25,7 +25,7 @@ internal static class BotLinkHelper
             return;
         }
 
-        var token = adminLinkService.CreateToken(id);
+        var token = await adminLinkService.CreateTokenAsync(id);
         var link = $"https://t.me/{botOptions.Username}?start={token}";
 
         try

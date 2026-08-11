@@ -389,8 +389,8 @@ public sealed class AdminPanelForm : Form
     /// it - after that, the bot shows them the same projects/participants/presentations/final scores this
     /// panel does, plus basic project/criteria/judge management, and it's also what lets "Parolni
     /// unutdingizmi?" deliver reset codes to this account.</summary>
-    private void OnLinkBotClick(object? sender, EventArgs e) =>
-        BotLinkHelper.ShowLinkDialog(this, _adminLinkService, _botOptions, _currentUserId);
+    private async void OnLinkBotClick(object? sender, EventArgs e) =>
+        await BotLinkHelper.ShowLinkDialogAsync(this, _adminLinkService, _botOptions, _currentUserId);
 
     private void OnExportFinalScoresClick(object? sender, EventArgs e)
     {
