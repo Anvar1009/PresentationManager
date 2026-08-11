@@ -61,6 +61,7 @@ public sealed class AdminForm : Form
     private PictureBox _previewBox = null!;
     private RoundedButton _startButton = null!;
     private RoundedButton _advanceButton = null!;
+    private RoundedButton _hideScreenButton = null!;
 
     /// <summary>Id of whichever presentation <see cref="_previewBox"/> currently shows a thumbnail for —
     /// guards against re-rendering the same file's first page on every <see cref="RefreshCurrentPanel"/>
@@ -159,13 +160,6 @@ public sealed class AdminForm : Form
         var settingsItem = new ToolStripMenuItem("Sozlamalar") { Padding = new Padding(14, 6, 14, 6), Margin = new Padding(0, 0, 4, 0) };
         settingsItem.Click += (_, _) => OnSettingsClick();
         menu.Items.Add(settingsItem);
-
-        // Replaces the close (X) button that used to float directly on Namoyish Ekrani — that screen has no
-        // controls of its own anymore (it's the one actually shown/shared to the audience), so hiding it is
-        // now an explicit operator action from here instead.
-        var hideScreenItem = new ToolStripMenuItem("Namoyish ekranini yashirish") { Padding = new Padding(14, 6, 14, 6) };
-        hideScreenItem.Click += (_, _) => _presentationForm.HideAll();
-        menu.Items.Add(hideScreenItem);
 
         MainMenuStrip = menu;
         Controls.Add(menu); // added after the Fill split layout so it correctly claims the top strip
@@ -729,17 +723,32 @@ public sealed class AdminForm : Form
         {
             Text = "KEYINGI",
             Dock = DockStyle.Fill,
-            Margin = new Padding(6, 0, 0, 0),
+            Margin = new Padding(6, 0, 6, 0),
             BackColor = LightColors.DiscussionAction,
             Font = new Font("Segoe UI", 14, FontStyle.Bold)
         };
         _advanceButton.Click += (_, _) => OnAdvanceClick();
 
-        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 64, ColumnCount = 2, RowCount = 1 };
-        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        // Moved here from what used to be a top-menu item ("Namoyish ekranini yashirish") — grouped with
+        // Boshlash/Keyingi so the operator has every action for the shared/projector screen in one row
+        // instead of hunting through the menu strip.
+        _hideScreenButton = new RoundedButton
+        {
+            Text = "NAMOYISH EKRANINI YOPISH",
+            Dock = DockStyle.Fill,
+            Margin = new Padding(6, 0, 0, 0),
+            BackColor = LightColors.PanelAlt,
+            Font = new Font("Segoe UI", 12, FontStyle.Bold)
+        };
+        _hideScreenButton.Click += (_, _) => _presentationForm.HideAll();
+
+        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 64, ColumnCount = 3, RowCount = 1 };
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34f));
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
         actionRow.Controls.Add(_startButton, 0, 0);
         actionRow.Controls.Add(_advanceButton, 1, 0);
+        actionRow.Controls.Add(_hideScreenButton, 2, 0);
 
         var hint = new Label
         {
