@@ -323,6 +323,13 @@ public sealed class AdminForm : Form
             {
                 _ = ConfirmAndStartDiscussionAsync();
             }
+
+            // Mirrors the DiscussionReady prompt above, one phase later — reached only when the discussion
+            // clock ran out on a presentation that actually has extra discussion time configured.
+            if (status == PresentationStatus.ExtraDiscussionReady)
+            {
+                _ = ConfirmAndStartExtraDiscussionAsync();
+            }
         });
     }
 
@@ -901,6 +908,7 @@ public sealed class AdminForm : Form
         _advanceButton.Text = _session.Status switch
         {
             PresentationStatus.Running or PresentationStatus.Paused => "MUHOKAMAGA O'TISH",
+            PresentationStatus.ExtraDiscussionReady => "QO'SHIMCHA VAQTNI BOSHLASH",
             _ => "KEYINGI"
         };
 
@@ -993,7 +1001,14 @@ public sealed class AdminForm : Form
                 return;
             }
 
-            var inDiscussion = _session.ActiveTimerMode == TimerMode.Discussion;
+            if (_session.Status == PresentationStatus.ExtraDiscussionReady)
+            {
+                // Same fallback role as the DiscussionReady branch above, for the optional extra phase.
+                await ConfirmAndStartExtraDiscussionAsync();
+                return;
+            }
+
+            var inDiscussion = _session.ActiveTimerMode is TimerMode.Discussion or TimerMode.ExtraDiscussion;
 
             if (!inDiscussion)
             {
@@ -1012,7 +1027,11 @@ public sealed class AdminForm : Form
                 return;
             }
 
-            if (_session.DiscussionRemainingSeconds > 0)
+            var remainingSeconds = _session.ActiveTimerMode == TimerMode.ExtraDiscussion
+                ? _session.ExtraDiscussionRemainingSeconds
+                : _session.DiscussionRemainingSeconds;
+
+            if (remainingSeconds > 0)
             {
                 var confirm = MessageBox.Show(this,
                     "Muhokama vaqti hali tugamagan. Keyingi taqdimotchiga o'tishni xohlaysizmi?",
@@ -1051,6 +1070,24 @@ public sealed class AdminForm : Form
         }
 
         await _session.StartDiscussionAsync();
+    }
+
+    /// <summary>The optional extra-time counterpart to <see cref="ConfirmAndStartDiscussionAsync"/> — fired
+    /// automatically as soon as <see cref="PresentationStatus.ExtraDiscussionReady"/> is reached (see
+    /// WireSessionEvents), which only happens when the presentation actually has extra discussion time
+    /// configured. Declining leaves the state parked; <see cref="OnAdvanceClick"/>'s ExtraDiscussionReady
+    /// branch calls this same method again if the operator then clicks "Keyingi" to retry.</summary>
+    private async Task ConfirmAndStartExtraDiscussionAsync()
+    {
+        var confirm = MessageBox.Show(this,
+            "Qo'shimcha muhokama vaqtini boshlashni tasdiqlaysizmi?",
+            "Qo'shimcha muhokama", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (confirm != DialogResult.Yes)
+        {
+            return;
+        }
+
+        await _session.StartExtraDiscussionAsync();
     }
 
     /// <summary>Shown once a discussion is finished — lets the operator choose which queued presentation

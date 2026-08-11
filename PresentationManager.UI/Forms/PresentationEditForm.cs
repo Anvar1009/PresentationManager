@@ -18,6 +18,7 @@ public sealed class PresentationEditForm : Form
     private readonly TextBox _filePathBox;
     private readonly NumericUpDown _presentationMinutes;
     private readonly NumericUpDown _discussionMinutes;
+    private readonly NumericUpDown _extraDiscussionMinutes;
 
     public int? ProjectId => _projectCombo.SelectedItem is Project p ? p.Id : null;
     public string FullName => _fullNameBox.Text.Trim();
@@ -26,6 +27,7 @@ public sealed class PresentationEditForm : Form
     public PresentationFileType? SelectedFileType { get; private set; }
     public int PresentationTimeSeconds => (int)_presentationMinutes.Value * 60;
     public int DiscussionTimeSeconds => (int)_discussionMinutes.Value * 60;
+    public int ExtraDiscussionTimeSeconds => (int)_extraDiscussionMinutes.Value * 60;
 
     /// <summary><paramref name="requireFile"/> doubles as "this is Add mode" — Edit mode (false) makes the
     /// project combo read-only for the same reason the file picker becomes optional in it.</summary>
@@ -41,13 +43,13 @@ public sealed class PresentationEditForm : Form
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(460, 356);
+        ClientSize = new Size(460, 392);
 
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 7,
+            RowCount = 8,
             Padding = new Padding(16)
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
@@ -72,6 +74,8 @@ public sealed class PresentationEditForm : Form
         _presentationMinutes.Value = 3;
         _discussionMinutes = LightNumericUpDown();
         _discussionMinutes.Value = 2;
+        _extraDiscussionMinutes = LightNumericUpDown(minimum: 0);
+        _extraDiscussionMinutes.Value = 0;
 
         var browseButton = new Button { Text = "Ko'rib chiqish...", Dock = DockStyle.Right, Width = 120, FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary, Font = new Font("Segoe UI", 8.5f) };
         browseButton.Click += OnBrowseClick;
@@ -86,6 +90,7 @@ public sealed class PresentationEditForm : Form
         AddRow(layout, 3, "Fayl (.ppt/.pptx/.pdf) *", filePanel);
         AddRow(layout, 4, "Taqdimot (daqiqa)", _presentationMinutes);
         AddRow(layout, 5, "Muhokama (daqiqa)", _discussionMinutes);
+        AddRow(layout, 6, "Qo'shimcha muhokama (daqiqa)", _extraDiscussionMinutes);
 
         var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         var cancelButton = new Button { Text = "Bekor qilish", DialogResult = DialogResult.Cancel, Width = 90, FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary };
@@ -93,7 +98,7 @@ public sealed class PresentationEditForm : Form
         saveButton.Click += OnSaveClick;
         buttonPanel.Controls.Add(cancelButton);
         buttonPanel.Controls.Add(saveButton);
-        layout.Controls.Add(buttonPanel, 0, 6);
+        layout.Controls.Add(buttonPanel, 0, 7);
         layout.SetColumnSpan(buttonPanel, 2);
 
         Controls.Add(layout);
@@ -116,13 +121,13 @@ public sealed class PresentationEditForm : Form
         BorderStyle = BorderStyle.FixedSingle
     };
 
-    private static NumericUpDown LightNumericUpDown() => new()
+    private static NumericUpDown LightNumericUpDown(int minimum = 1) => new()
     {
         Dock = DockStyle.Left,
         Width = 80,
-        Minimum = 1,
+        Minimum = minimum,
         Maximum = 60,
-        Value = 3,
+        Value = Math.Max(minimum, 3),
         BackColor = LightColors.PanelAlt,
         ForeColor = LightColors.TextPrimary,
         BorderStyle = BorderStyle.FixedSingle
@@ -137,6 +142,7 @@ public sealed class PresentationEditForm : Form
         _titleBox.Text = presentation.Title;
         _presentationMinutes.Value = Math.Clamp(presentation.PresentationTimeSeconds / 60, 1, 60);
         _discussionMinutes.Value = Math.Clamp(presentation.DiscussionTimeSeconds / 60, 1, 60);
+        _extraDiscussionMinutes.Value = Math.Clamp(presentation.ExtraDiscussionTimeSeconds / 60, 0, 60);
         _filePathBox.Text = "(o'zgarmagan - almashtirish uchun tanlang)";
     }
 

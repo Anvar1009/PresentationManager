@@ -289,8 +289,15 @@ public sealed class PresentationForm : Form
         var settings = await _settingsRepository.GetAsync();
 
         // Presentation-timer expiry auto-starts discussion on its own (PresentationSessionController) —
-        // AutoNext here only ever needs to cover advancing past a finished discussion.
-        if (settings.AutoNext && mode == TimerMode.Discussion)
+        // AutoNext here only ever needs to cover advancing past a finished discussion. When the presentation
+        // has extra discussion time configured, discussion expiry instead auto-parks on ExtraDiscussionReady
+        // (same controller) and waits for the operator's confirmation there, regardless of AutoNext — so
+        // this must not race ahead and finish the presentation out from under that prompt. Once the extra
+        // clock itself runs out, there's no further phase to wait for, so AutoNext applies normally again.
+        var hasExtraDiscussion = (_session.CurrentPresentation?.ExtraDiscussionTimeSeconds ?? 0) > 0;
+        var shouldAutoAdvance = settings.AutoNext
+            && (mode == TimerMode.ExtraDiscussion || (mode == TimerMode.Discussion && !hasExtraDiscussion));
+        if (shouldAutoAdvance)
         {
             await _session.NextPresenterAsync();
         }
@@ -371,34 +378,49 @@ public sealed class PresentationForm : Form
         // Loading/advancing a presentation resets the timer values on the controller, but that alone
         // doesn't raise TimeTick (nothing is ticking yet) — without this the countdown stayed frozen
         // at its initial "00:00" text until the operator actually pressed Start.
-        UpdateTimerDisplay(
-            _session.ActiveTimerMode == TimerMode.Discussion ? _session.DiscussionRemainingSeconds : _session.PresentationRemainingSeconds,
-            _session.ActiveTimerMode);
+        var remaining = _session.ActiveTimerMode switch
+        {
+            TimerMode.Discussion => _session.DiscussionRemainingSeconds,
+            TimerMode.ExtraDiscussion => _session.ExtraDiscussionRemainingSeconds,
+            _ => _session.PresentationRemainingSeconds
+        };
+        UpdateTimerDisplay(remaining, _session.ActiveTimerMode);
     }
 
     private void UpdateStatusDisplay(PresentationStatus status)
     {
-        // The slide covers the screen for both the presentation itself and its discussion phase — there is
-        // no separate discussion screen to switch to anymore, so it simply stays up and the big centered
-        // timer underneath just switches to counting down the discussion time instead.
-        ContentHost.Visible = status is PresentationStatus.Running or PresentationStatus.Discussion or PresentationStatus.DiscussionReady;
+        // The slide covers the screen for both the presentation itself and its discussion phase (including
+        // the optional extra discussion phase) — there is no separate discussion screen to switch to
+        // anymore, so it simply stays up and the big centered timer underneath just switches to counting
+        // down whichever clock is active instead.
+        ContentHost.Visible = status is PresentationStatus.Running or PresentationStatus.Discussion or PresentationStatus.DiscussionReady
+            or PresentationStatus.ExtraDiscussionReady or PresentationStatus.ExtraDiscussion;
 
         // The mini timer only needs to exist while the slide is actually hiding the big centered one behind
         // it — everywhere else that centered timer is already visible on its own, so showing this too would
         // just duplicate it.
         _miniTimerLabel.Visible = ContentHost.Visible;
 
-        // Labels which clock the mini timer's digits actually belong to right now — DiscussionReady is
-        // reached before StartDiscussionAsync has run (so ActiveTimerMode is still whatever it was before),
-        // hence checking Status here rather than the timer's own mode.
-        var discussionActive = status is PresentationStatus.Discussion or PresentationStatus.DiscussionReady;
+        // Labels which clock the mini timer's digits actually belong to right now — DiscussionReady/
+        // ExtraDiscussionReady are reached before their respective Start*DiscussionAsync has run (so
+        // ActiveTimerMode is still whatever it was before), hence checking Status here rather than the
+        // timer's own mode.
+        var discussionActive = status is PresentationStatus.Discussion or PresentationStatus.DiscussionReady
+            or PresentationStatus.ExtraDiscussionReady or PresentationStatus.ExtraDiscussion;
         _miniTimerCaptionLabel.Visible = discussionActive && ContentHost.Visible;
+        _miniTimerCaptionLabel.Text = status is PresentationStatus.ExtraDiscussionReady or PresentationStatus.ExtraDiscussion
+            ? "QO'SHIMCHA MUHOKAMA VAQTI"
+            : "MUHOKAMA VAQTI";
 
         if (status == PresentationStatus.DiscussionReady)
         {
             // Parked, not yet ticking — show the discussion duration it's about to start from instead of
             // leaving the mini timer frozen on whatever the presentation countdown last displayed.
             UpdateTimerDisplay(_session.DiscussionRemainingSeconds, TimerMode.Discussion);
+        }
+        else if (status == PresentationStatus.ExtraDiscussionReady)
+        {
+            UpdateTimerDisplay(_session.ExtraDiscussionRemainingSeconds, TimerMode.ExtraDiscussion);
         }
     }
 
@@ -414,7 +436,8 @@ public sealed class PresentationForm : Form
         {
             switch (status)
             {
-                case PresentationStatus.Running or PresentationStatus.Discussion or PresentationStatus.DiscussionReady:
+                case PresentationStatus.Running or PresentationStatus.Discussion or PresentationStatus.DiscussionReady
+                    or PresentationStatus.ExtraDiscussionReady or PresentationStatus.ExtraDiscussion:
                     if (_slideOpen && _openPresentationId == _session.CurrentPresentation?.Id)
                     {
                         await _pdfDisplayService.ShowAsync();

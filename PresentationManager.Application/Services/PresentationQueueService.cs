@@ -33,6 +33,7 @@ public sealed class PresentationQueueService
         int projectId, string fullName, string title,
         string sourceFilePath, PresentationFileType fileType,
         int presentationTimeSeconds, int discussionTimeSeconds,
+        int extraDiscussionTimeSeconds = 0,
         int? presenterId = null, CancellationToken ct = default)
     {
         var storedRelativePath = await _fileStorageService.SaveFileAsync(sourceFilePath, ct);
@@ -49,6 +50,7 @@ public sealed class PresentationQueueService
             OrderNumber = existing.Count,
             PresentationTimeSeconds = presentationTimeSeconds,
             DiscussionTimeSeconds = discussionTimeSeconds,
+            ExtraDiscussionTimeSeconds = extraDiscussionTimeSeconds,
             Status = PresentationStatus.Waiting
         };
 
@@ -59,7 +61,7 @@ public sealed class PresentationQueueService
     /// operator picked a replacement file; the old stored file is deleted once the new one is saved.</summary>
     public async Task UpdateAsync(
         int id, string fullName, string title,
-        int presentationTimeSeconds, int discussionTimeSeconds,
+        int presentationTimeSeconds, int discussionTimeSeconds, int extraDiscussionTimeSeconds,
         string? sourceFilePath, PresentationFileType? fileType, CancellationToken ct = default)
     {
         var presentation = await _presentationRepository.GetByIdAsync(id, ct)
@@ -69,6 +71,7 @@ public sealed class PresentationQueueService
         presentation.Title = title;
         presentation.PresentationTimeSeconds = presentationTimeSeconds;
         presentation.DiscussionTimeSeconds = discussionTimeSeconds;
+        presentation.ExtraDiscussionTimeSeconds = extraDiscussionTimeSeconds;
         presentation.UpdatedAt = DateTime.UtcNow;
 
         if (!string.IsNullOrEmpty(sourceFilePath) && fileType is not null)

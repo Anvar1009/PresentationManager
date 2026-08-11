@@ -26,6 +26,10 @@ public class Presentation
 
     public int DiscussionTimeSeconds { get; set; } = 120;
 
+    /// <summary>Optional extra time offered once <see cref="DiscussionTimeSeconds"/> runs out — 0 means no
+    /// extra time is configured, so the discussion phase ends exactly as it did before this field existed.</summary>
+    public int ExtraDiscussionTimeSeconds { get; set; } = 0;
+
     public PresentationStatus Status { get; set; } = PresentationStatus.Waiting;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

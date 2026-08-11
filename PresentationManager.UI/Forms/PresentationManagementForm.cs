@@ -137,7 +137,7 @@ public sealed class PresentationManagementForm : Form
         {
             await _queueService.AddAsync(
                 dialog.ProjectId!.Value, dialog.FullName, dialog.Title, dialog.SelectedFilePath!, dialog.SelectedFileType!.Value,
-                dialog.PresentationTimeSeconds, dialog.DiscussionTimeSeconds);
+                dialog.PresentationTimeSeconds, dialog.DiscussionTimeSeconds, dialog.ExtraDiscussionTimeSeconds);
             await RefreshAsync();
         }
         catch (Exception ex)
@@ -165,7 +165,7 @@ public sealed class PresentationManagementForm : Form
         {
             await _queueService.UpdateAsync(
                 selected.Id, dialog.FullName, dialog.Title, dialog.PresentationTimeSeconds, dialog.DiscussionTimeSeconds,
-                dialog.SelectedFilePath, dialog.SelectedFileType);
+                dialog.ExtraDiscussionTimeSeconds, dialog.SelectedFilePath, dialog.SelectedFileType);
             await RefreshAsync();
         }
         catch (Exception ex)

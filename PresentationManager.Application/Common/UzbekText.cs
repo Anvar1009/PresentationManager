@@ -17,6 +17,8 @@ public static class UzbekText
         PresentationStatus.Discussion => "Muhokama",
         PresentationStatus.DiscussionPaused => "Muhokama to'xtatildi",
         PresentationStatus.DiscussionReady => "Muhokama — boshlanishi kutilmoqda",
+        PresentationStatus.ExtraDiscussionReady => "Qo'shimcha muhokama — boshlanishi kutilmoqda",
+        PresentationStatus.ExtraDiscussion => "Qo'shimcha muhokama",
         PresentationStatus.Finished => "Yakunlandi",
         PresentationStatus.Skipped => "O'tkazib yuborildi",
         _ => status.ToString()

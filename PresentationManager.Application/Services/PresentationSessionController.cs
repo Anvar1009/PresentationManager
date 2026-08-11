@@ -30,6 +30,7 @@ public sealed class PresentationSessionController
         {
             if (_timer.Mode == TimerMode.Presentation) PresentationRemainingSeconds = remaining;
             else if (_timer.Mode == TimerMode.Discussion) DiscussionRemainingSeconds = remaining;
+            else if (_timer.Mode == TimerMode.ExtraDiscussion) ExtraDiscussionRemainingSeconds = remaining;
             TimeTick?.Invoke(remaining, _timer.Mode);
         };
         _timer.Expired += () => OnTimerExpired(_timer.Mode);
@@ -51,6 +52,8 @@ public sealed class PresentationSessionController
     public int PresentationRemainingSeconds { get; private set; }
 
     public int DiscussionRemainingSeconds { get; private set; }
+
+    public int ExtraDiscussionRemainingSeconds { get; private set; }
 
     public TimerMode ActiveTimerMode => _timer.Mode;
 
@@ -213,7 +216,8 @@ public sealed class PresentationSessionController
                     "Muhokamaga o'tildi (boshlanishi kutilmoqda)", ct);
                 break;
 
-            case PresentationStatus.Discussion or PresentationStatus.DiscussionPaused:
+            case PresentationStatus.Discussion or PresentationStatus.DiscussionPaused
+                or PresentationStatus.ExtraDiscussionReady or PresentationStatus.ExtraDiscussion:
                 _timer.Stop();
                 await PersistStatusAsync(PresentationStatus.Finished, ct);
                 await LogAsync(HistoryEventType.Finished, $"Taqdimot yakunlandi: {CurrentPresentation.Title}", ct);
@@ -228,7 +232,8 @@ public sealed class PresentationSessionController
     /// open a picker so the operator explicitly chooses the next presentation themselves.</summary>
     public async Task FinishCurrentPresentationAsync(CancellationToken ct = default)
     {
-        if (CurrentPresentation is null || Status is not (PresentationStatus.Discussion or PresentationStatus.DiscussionPaused))
+        if (CurrentPresentation is null || Status is not (PresentationStatus.Discussion or PresentationStatus.DiscussionPaused
+            or PresentationStatus.ExtraDiscussionReady or PresentationStatus.ExtraDiscussion))
         {
             return;
         }
@@ -258,9 +263,28 @@ public sealed class PresentationSessionController
             "Muhokama boshlandi", ct);
     }
 
+    /// <summary>Starts the extra discussion clock once the operator confirms it — the counterpart to
+    /// <see cref="StartDiscussionAsync"/> for the optional extra phase, only reachable from
+    /// <see cref="PresentationStatus.ExtraDiscussionReady"/>.</summary>
+    public async Task StartExtraDiscussionAsync(CancellationToken ct = default)
+    {
+        if (CurrentPresentation is null || Status != PresentationStatus.ExtraDiscussionReady)
+        {
+            return;
+        }
+
+        _timer.Start(ExtraDiscussionRemainingSeconds, TimerMode.ExtraDiscussion);
+        await SetStatusAsync(PresentationStatus.ExtraDiscussion, HistoryEventType.DiscussionStarted,
+            "Qo'shimcha muhokama vaqti boshlandi", ct);
+    }
+
     /// <summary>Presentation time reaching zero moves straight to the discussion phase on its own — the
     /// operator never has to click a separate "move to discussion" button — but, like the manual Next path,
-    /// the discussion clock itself still waits for an explicit <see cref="StartDiscussionAsync"/> call.</summary>
+    /// the discussion clock itself still waits for an explicit <see cref="StartDiscussionAsync"/> call. The
+    /// discussion clock running out mirrors the same pattern one phase later: it only auto-parks on
+    /// <see cref="PresentationStatus.ExtraDiscussionReady"/> when the presentation actually has extra time
+    /// configured — otherwise discussion expiry is left exactly as it behaved before extra time existed,
+    /// stopped at zero with <see cref="Status"/> still <see cref="PresentationStatus.Discussion"/>.</summary>
     private async void OnTimerExpired(TimerMode expiredMode)
     {
         try
@@ -271,6 +295,12 @@ public sealed class PresentationSessionController
             {
                 await SetStatusAsync(PresentationStatus.DiscussionReady, HistoryEventType.NextPresenter,
                     "Muhokamaga o'tildi (boshlanishi kutilmoqda)", CancellationToken.None);
+            }
+            else if (expiredMode == TimerMode.Discussion && Status == PresentationStatus.Discussion
+                && CurrentPresentation is { ExtraDiscussionTimeSeconds: > 0 })
+            {
+                await SetStatusAsync(PresentationStatus.ExtraDiscussionReady, HistoryEventType.NextPresenter,
+                    "Qo'shimcha muhokamaga o'tildi (boshlanishi kutilmoqda)", CancellationToken.None);
             }
         }
         catch
@@ -324,6 +354,7 @@ public sealed class PresentationSessionController
     {
         PresentationRemainingSeconds = CurrentPresentation?.PresentationTimeSeconds ?? 0;
         DiscussionRemainingSeconds = CurrentPresentation?.DiscussionTimeSeconds ?? 0;
+        ExtraDiscussionRemainingSeconds = CurrentPresentation?.ExtraDiscussionTimeSeconds ?? 0;
     }
 
     private async Task SetStatusAsync(PresentationStatus status, HistoryEventType logEvent, string message, CancellationToken ct)

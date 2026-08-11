@@ -497,7 +497,8 @@ public sealed class PresentationBotHostedService : BackgroundService
                 session.ProjectId, session.FullName, session.Title,
                 tempFilePath, fileType,
                 settings.DefaultPresentationTimeSeconds, settings.DefaultDiscussionTimeSeconds,
-                session.PresenterId, ct);
+                extraDiscussionTimeSeconds: 0,
+                presenterId: session.PresenterId, ct: ct);
 
             var confirmation = $"✅ Taqdimotingiz \"{session.ProjectName}\" loyihasiga qabul qilindi. Yana yuborish uchun /start bosing.";
 
