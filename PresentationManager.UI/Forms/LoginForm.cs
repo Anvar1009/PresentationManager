@@ -1,6 +1,6 @@
+using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
-using PresentationManager.TelegramBot;
 using PresentationManager.UI.Controls;
 using PresentationManager.UI.Theme;
 
@@ -12,20 +12,22 @@ namespace PresentationManager.UI.Forms;
 /// <see cref="ForgotPasswordForm"/> - a separate modal so this form's own layout stays simple.</summary>
 public sealed class LoginForm : Form
 {
+    private readonly IAuthService _authService;
     private readonly UserService _userService;
     private readonly PasswordResetService _passwordResetService;
-    private readonly TelegramNotifier _telegramNotifier;
+    private readonly ITelegramSender _telegramSender;
     private readonly TextBox _usernameBox;
     private readonly TextBox _passwordBox;
     private readonly Label _errorLabel;
 
     public User? AuthenticatedUser { get; private set; }
 
-    public LoginForm(UserService userService, PasswordResetService passwordResetService, TelegramNotifier telegramNotifier)
+    public LoginForm(IAuthService authService, UserService userService, PasswordResetService passwordResetService, ITelegramSender telegramSender)
     {
+        _authService = authService;
         _userService = userService;
         _passwordResetService = passwordResetService;
-        _telegramNotifier = telegramNotifier;
+        _telegramSender = telegramSender;
 
         Text = "Kirish";
         BackColor = AppColors.Background;
@@ -147,8 +149,8 @@ public sealed class LoginForm : Form
 
         try
         {
-            var user = await _userService.ValidateLoginAsync(username, password);
-            if (user is null)
+            var result = await _authService.LoginAsync(username, password);
+            if (result is null)
             {
                 _errorLabel.Text = "Login yoki parol noto'g'ri.";
                 _passwordBox.SelectAll();
@@ -156,7 +158,7 @@ public sealed class LoginForm : Form
                 return;
             }
 
-            AuthenticatedUser = user;
+            AuthenticatedUser = result.User;
             DialogResult = DialogResult.OK;
         }
         catch (Exception ex)
@@ -167,7 +169,7 @@ public sealed class LoginForm : Form
 
     private void OnForgotPasswordClick()
     {
-        using var dialog = new ForgotPasswordForm(_userService, _passwordResetService, _telegramNotifier);
+        using var dialog = new ForgotPasswordForm(_userService, _passwordResetService, _telegramSender);
         dialog.ShowDialog(this);
     }
 }

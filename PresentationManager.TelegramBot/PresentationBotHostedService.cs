@@ -49,9 +49,11 @@ public sealed class PresentationBotHostedService : BackgroundService
     /// <see cref="ContactRequestKeyboard"/>, so it stays docked at the bottom of the chat across every
     /// message) — tapping "📋 Loyihalar" jumps straight back to the project/presentation menu without
     /// needing /start.</summary>
-    /// <summary>Internal (not private) so <see cref="JudgeAssignmentNotifier"/> can reuse the exact same
-    /// keyboard when pushing a judge-assignment notification, instead of duplicating this definition.</summary>
-    internal static readonly ReplyKeyboardMarkup JudgeMainKeyboard = new(
+    /// <summary>Public (not just internal) so both <see cref="JudgeAssignmentNotifier"/> (BotService's own
+    /// linked-Admin-mirror assignment flow) and PresentationManager.API.Controllers.JudgesController
+    /// (PresentationManager.UI's desktop assignment flow) can reuse the exact same keyboard when pushing a
+    /// judge-assignment notification, instead of duplicating this definition in a second assembly.</summary>
+    public static readonly ReplyKeyboardMarkup JudgeMainKeyboard = new(
         new[] { new KeyboardButton("📋 Loyihalar") })
     {
         ResizeKeyboard = true

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- net8.0-windows to match every other project in the solution - see PresentationManager.API.csproj's
+       comment for why (only PresentationManager.UI, which references this, actually needs the Windows bits;
+       nothing in here does). -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PresentationManager.Application\PresentationManager.Application.csproj" />
+  </ItemGroup>
+
+</Project>

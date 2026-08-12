@@ -1,0 +1,16 @@
+[Unit]
+Description=Presentation Manager API (serves PresentationManager.UI desktop clients)
+After=network.target postgresql.service
+
+[Service]
+Type=notify
+WorkingDirectory=/opt/presentationmanager-api
+ExecStart=/opt/presentationmanager-api/PresentationManager.API
+Restart=on-failure
+RestartSec=5
+User=presentationmanager
+SyslogIdentifier=presentationmanager-api
+Environment=ASPNETCORE_URLS=http://0.0.0.0:5000
+
+[Install]
+WantedBy=multi-user.target

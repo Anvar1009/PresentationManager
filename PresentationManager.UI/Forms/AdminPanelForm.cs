@@ -283,7 +283,7 @@ public sealed class AdminPanelForm : Form
     /// <summary>Opens the selected presentation's uploaded file with the OS's default viewer - the same file
     /// the presenter submitted via the Telegram bot, resolved from managed storage exactly as the operator's
     /// live preview does (see <c>AdminForm.UpdatePreviewAsync</c>).</summary>
-    private void OnOpenPresentationFileClick(object? sender, EventArgs e)
+    private async void OnOpenPresentationFileClick(object? sender, EventArgs e)
     {
         var rowIndex = _presentationsGrid.CurrentCell?.RowIndex ?? -1;
         if (rowIndex < 0 || rowIndex >= _currentPresentations.Count)
@@ -293,7 +293,7 @@ public sealed class AdminPanelForm : Form
         }
 
         var presentation = _currentPresentations[rowIndex];
-        var absolutePath = _fileStorageService.GetAbsolutePath(presentation.FilePath);
+        var absolutePath = await _fileStorageService.GetAbsolutePathAsync(presentation.FilePath);
         if (!File.Exists(absolutePath))
         {
             MessageBox.Show(this, "Fayl topilmadi.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);

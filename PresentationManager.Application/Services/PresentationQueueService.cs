@@ -79,7 +79,7 @@ public sealed class PresentationQueueService
             var oldPath = presentation.FilePath;
             presentation.FilePath = await _fileStorageService.SaveFileAsync(sourceFilePath, ct);
             presentation.FileType = fileType.Value;
-            _fileStorageService.DeleteFile(oldPath);
+            await _fileStorageService.DeleteFileAsync(oldPath, ct);
         }
 
         await _presentationRepository.UpdateAsync(presentation, ct);
@@ -94,7 +94,7 @@ public sealed class PresentationQueueService
         }
 
         await _presentationRepository.DeleteAsync(id, ct);
-        _fileStorageService.DeleteFile(presentation.FilePath);
+        await _fileStorageService.DeleteFileAsync(presentation.FilePath, ct);
     }
 
     /// <summary>Applies a new drag-and-drop order. <paramref name="orderedIds"/> must contain every

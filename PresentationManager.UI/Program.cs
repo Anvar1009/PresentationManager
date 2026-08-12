@@ -1,16 +1,15 @@
-using Microsoft.EntityFrameworkCore;
+using System.Net.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using PresentationManager.ApiClient;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
 using PresentationManager.Domain.Enums;
-using PresentationManager.Infrastructure.Persistence;
-using PresentationManager.Infrastructure.Repositories;
-using PresentationManager.Infrastructure.Services;
 using PresentationManager.TelegramBot;
 using PresentationManager.UI.Forms;
+using PresentationManager.UI.Services;
 
 namespace PresentationManager.UI;
 
@@ -30,18 +29,19 @@ static class Program
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
 
         // Per-user AppData, not AppContext.BaseDirectory — so the published app is a single standalone
-        // .exe with nothing else to hand over: uploaded files are created here on first run instead of
-        // needing to sit alongside the executable (which would otherwise require copying a whole folder
-        // rather than one file, and would break entirely if the exe lives somewhere read-only like Program
-        // Files). The database itself now lives in PostgreSQL, not a file here - see appsettings.json.
+        // .exe with nothing else to hand over: the settings file and the file-download cache are created
+        // here on first run instead of needing to sit alongside the executable (which would otherwise
+        // require copying a whole folder rather than one file, and would break entirely if the exe lives
+        // somewhere read-only like Program Files). Everything this app used to keep locally (the database,
+        // uploaded files) now lives behind PresentationManager.API instead - see appsettings.json.
         var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PresentationManager");
         Directory.CreateDirectory(appDataDir);
 
         // Lets the published .exe be a single standalone file with truly nothing else to hand over (e.g.
-        // dropped straight on a Desktop) - its actual settings (DB connection string, Telegram bot token)
-        // live here instead of next to the exe, seeded from the placeholder template embedded in the exe
-        // itself the first time it runs on a given machine. Whoever deploys it then edits this one file
-        // (not the exe, not anything that has to travel with it) to point at the real database/bot.
+        // dropped straight on a Desktop) - its actual settings (API base URL) live here instead of next to
+        // the exe, seeded from the placeholder template embedded in the exe itself the first time it runs
+        // on a given machine. Whoever deploys it then edits this one file (not the exe, not anything that
+        // has to travel with it) to point at the real server.
         var appDataConfigPath = Path.Combine(appDataDir, "appsettings.json");
         EnsureAppDataConfigSeeded(appDataConfigPath);
 
@@ -50,35 +50,55 @@ static class Program
             {
                 config.AddJsonFile(appDataConfigPath, optional: true, reloadOnChange: false);
 
-                // Real secrets (DB password, Telegram bot token) never live in appsettings.json (checked
-                // into git) - this optional file, when present next to the exe, overrides the above and is
-                // gitignored. Kept for local dev convenience; deployed machines use appDataConfigPath instead.
+                // Real secrets (Telegram bot token, for whatever in this process still needs one) never
+                // live in appsettings.json (checked into git) - this optional file, when present next to
+                // the exe, overrides the above and is gitignored. Kept for local dev convenience; deployed
+                // machines use appDataConfigPath instead.
                 config.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
 
                 // Re-added last (Host.CreateDefaultBuilder already adds environment variables once, earlier
-                // in this same pipeline) so a ConnectionStrings__DefaultConnection env var - set directly on
-                // this machine, never written to any file - wins over both JSON sources above instead of
-                // being silently shadowed by whichever of them happens to also set the same key.
+                // in this same pipeline) so an Api__BaseUrl env var - set directly on this machine, never
+                // written to any file - wins over both JSON sources above instead of being silently
+                // shadowed by whichever of them happens to also set the same key.
                 config.AddEnvironmentVariables();
             })
             .ConfigureServices((context, services) =>
             {
-                var connectionString = context.Configuration.GetConnectionString("DefaultConnection")
-                    ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured.");
-                services.AddDbContextFactory<AppDbContext>(options => options.UseNpgsql(connectionString));
+                var apiBaseUrl = context.Configuration["Api:BaseUrl"] is { Length: > 0 } configuredBaseUrl
+                    ? configuredBaseUrl
+                    : throw new InvalidOperationException("Api:BaseUrl is not configured.");
 
                 services.Configure<PresentationBotOptions>(context.Configuration.GetSection("TelegramBot"));
 
-                services.AddSingleton<IPresentationRepository, PresentationRepository>();
-                services.AddSingleton<IProjectRepository, ProjectRepository>();
-                services.AddSingleton<IPresenterRepository, PresenterRepository>();
-                services.AddSingleton<ISettingsRepository, SettingsRepository>();
-                services.AddSingleton<IHistoryRepository, HistoryRepository>();
-                services.AddSingleton<IUserRepository, UserRepository>();
-                services.AddSingleton<ICriterionRepository, CriterionRepository>();
-                services.AddSingleton<IJudgeRepository, JudgeRepository>();
-                services.AddSingleton<IScoreRepository, ScoreRepository>();
-                services.AddSingleton<IFileStorageService>(_ => new FileStorageService(ResolveStorageRoot(context.Configuration, appDataDir)));
+                services.AddSingleton<AuthSession>();
+                services.AddTransient<JwtAuthHandler>();
+
+                // One typed HttpClient per PresentationManager.Application.Interfaces contract, each backed
+                // by PresentationManager.ApiClient's HTTP implementation instead of the EF Core/Infrastructure
+                // one this app used to talk to Postgres directly with - every Application service above them
+                // (ProjectService, UserService, PresentationQueueService, ...) keeps working completely
+                // unchanged against the same interfaces.
+                AddApiHttpClient<IPresentationRepository, HttpPresentationRepository>(services, apiBaseUrl);
+                AddApiHttpClient<IProjectRepository, HttpProjectRepository>(services, apiBaseUrl);
+                AddApiHttpClient<IPresenterRepository, HttpPresenterRepository>(services, apiBaseUrl);
+                AddApiHttpClient<ISettingsRepository, HttpSettingsRepository>(services, apiBaseUrl);
+                AddApiHttpClient<IHistoryRepository, HttpHistoryRepository>(services, apiBaseUrl);
+                AddApiHttpClient<IUserRepository, HttpUserRepository>(services, apiBaseUrl);
+                AddApiHttpClient<ICriterionRepository, HttpCriterionRepository>(services, apiBaseUrl);
+                AddApiHttpClient<IJudgeRepository, HttpJudgeRepository>(services, apiBaseUrl);
+                AddApiHttpClient<IScoreRepository, HttpScoreRepository>(services, apiBaseUrl);
+                AddApiHttpClient<IFileStorageService, HttpFileStorageService>(services, apiBaseUrl);
+                AddApiHttpClient<IAuthService, HttpAuthService>(services, apiBaseUrl);
+                // Text-only Telegram relay (password reset codes, SuperAdmin-issued credentials) - the bot
+                // token itself now lives only on the server, see PresentationManager.API.Controllers.
+                // NotificationsController. Judge-assignment pushes moved server-side entirely (into
+                // JudgesController), so there is no client-side equivalent of the old JudgeAssignmentNotifier
+                // to register anymore.
+                AddApiHttpClient<ITelegramSender, HttpTelegramSender>(services, apiBaseUrl);
+
+                // Purely local audio playback - never had anything to do with the database, so it stays a
+                // plain local implementation (see PresentationManager.UI.Services.AlarmSoundService, moved
+                // here from PresentationManager.Infrastructure).
                 services.AddSingleton<IAlarmSoundService, AlarmSoundService>();
 
                 services.AddSingleton<TimerEngine>();
@@ -92,15 +112,6 @@ static class Program
                 services.AddSingleton<AdminLinkService>();
                 services.AddSingleton<PasswordResetService>();
 
-                // The bot's long-polling receive loop (PresentationBotHostedService) no longer runs in this
-                // process at all - Telegram only allows one getUpdates consumer per bot token, so exactly one
-                // always-on copy of it runs in the separate PresentationManager.BotService worker instead,
-                // shared by every operator machine. This process only ever sends (password reset codes, judge
-                // assignment pushes, role-grant credentials) - see TelegramNotifier, which any number of
-                // processes can use independently since outbound sendMessage has no such restriction.
-                services.AddSingleton<TelegramNotifier>();
-                services.AddSingleton<JudgeAssignmentNotifier>();
-
                 services.AddSingleton<PresentationForm>();
                 services.AddSingleton<AdminForm>();
                 services.AddSingleton<AdminPanelForm>();
@@ -108,21 +119,26 @@ static class Program
             })
             .Build();
 
-        // A bad/placeholder connection string (e.g. the freshly-seeded appDataConfigPath template, still
-        // carrying "Password=CHANGE_ME", on a machine's very first launch) throws here - before any Form
-        // has ever been shown, on a WinExe subsystem with no console attached. Left uncaught, that's a
-        // silent crash: the exe flashes and disappears with zero visible explanation, on this machine's
-        // first run *and* on every future one until someone happens to check the Windows Event Log. A
-        // message box naming the actual file to go edit turns that into something self-service-fixable.
+        var apiBaseUrlForHealthCheck = host.Services.GetRequiredService<IConfiguration>()["Api:BaseUrl"]!;
+
+        // An unreachable server (bad/placeholder Api:BaseUrl, server down, no network) fails here - before
+        // any Form has ever been shown, on a WinExe subsystem with no console attached. Left uncaught,
+        // that's a silent crash: the exe flashes and disappears with zero visible explanation, on this
+        // machine's first run *and* on every future one until someone happens to notice. A message box
+        // naming the actual file to go edit turns that into something self-service-fixable - same UX this
+        // app already had for a bad database connection string, before the database moved behind the API.
         try
         {
-            using var db = host.Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext();
-            db.Database.Migrate();
+            using var healthCheckClient = new HttpClient { BaseAddress = new Uri(apiBaseUrlForHealthCheck) };
+            // Task.Run, not a direct blocking await: the WindowsFormsSynchronizationContext set above has
+            // nothing pumping it yet (Application.Run hasn't started) - awaiting directly would deadlock the
+            // moment this inner await tries to post its continuation back to a queue nothing is draining.
+            Task.Run(() => healthCheckClient.GetAsync("health")).GetAwaiter().GetResult().EnsureSuccessStatusCode();
         }
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Ma'lumotlar bazasiga ulanib bo'lmadi.\n\nSozlamalar fayli:\n{appDataConfigPath}\n\nXatolik: {ex.Message}",
+                $"Serverga ulanib bo'lmadi.\n\nSozlamalar fayli:\n{appDataConfigPath}\n\nAPI manzili:\n{apiBaseUrlForHealthCheck}\n\nXatolik: {ex.Message}",
                 "Ulanishda xatolik",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
@@ -134,22 +150,24 @@ static class Program
         // removed, so this host still behaves correctly if a future hosted service is ever added here.
         host.Start();
 
-        // Eagerly resolved (nothing else in this process constructs it by injection) so its constructor's
-        // JudgeService.JudgeAssigned subscription is live for the whole session - see JudgeAssignmentNotifier.
-        host.Services.GetRequiredService<JudgeAssignmentNotifier>();
+        // Surfaces a mid-session token expiry/revocation as one message instead of a confusing wall of 401
+        // errors the next time any Form happens to call the API - full re-login without restarting isn't
+        // wired up yet, so this is an honest "please restart" rather than a silent failure.
+        host.Services.GetRequiredService<AuthSession>().SessionExpired += () =>
+            MessageBox.Show(
+                "Sessiya muddati tugadi. Iltimos, dasturni qayta ishga tushiring va qaytadan kiring.",
+                "Sessiya tugadi",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
 
-        var userService = host.Services.GetRequiredService<UserService>();
-        // Task.Run, not a direct blocking await: the main thread's SynchronizationContext is already the
-        // WindowsFormsSynchronizationContext set above, but no message loop is pumping it yet (Application.Run
-        // hasn't started, no ShowDialog is open) - awaiting this directly would capture that context and
-        // deadlock the moment any inner await tries to post its continuation back to a queue nothing is
-        // draining. Running it on the thread pool sidesteps the captured context entirely.
-        Task.Run(() => userService.EnsureDefaultSuperAdminAsync()).GetAwaiter().GetResult();
-
+        // Bootstrapping the very first ("superadmin") account now happens server-side, in
+        // PresentationManager.API/Program.cs - a not-yet-logged-in desktop client has no token to call the
+        // (now SuperAdmin-only) create-user endpoint with, so only the server itself can still do this.
         using var loginForm = new LoginForm(
-            userService,
+            host.Services.GetRequiredService<IAuthService>(),
+            host.Services.GetRequiredService<UserService>(),
             host.Services.GetRequiredService<PasswordResetService>(),
-            host.Services.GetRequiredService<TelegramNotifier>());
+            host.Services.GetRequiredService<ITelegramSender>());
         if (loginForm.ShowDialog() == DialogResult.OK && loginForm.AuthenticatedUser is { } user)
         {
             Form mainForm = user.Role switch
@@ -188,8 +206,8 @@ static class Program
             return form;
         }
 
-        // Same Task.Run reasoning as the seed call above - the WinForms message loop has already ended by
-        // this point (Application.Run returned), so nothing pumps this thread's SynchronizationContext.
+        // Same Task.Run reasoning as the health-check call above - the WinForms message loop has already
+        // ended by this point (Application.Run returned), so nothing pumps this thread's SynchronizationContext.
         Task.Run(() => host.StopAsync()).GetAwaiter().GetResult();
     }
 
@@ -210,14 +228,17 @@ static class Program
         resourceStream.CopyTo(fileStream);
     }
 
-    /// <summary>Resolves where uploaded presentation files are stored - a "Storage:RootPath" config value
-    /// (set via appsettings/the Storage__RootPath env var, same override convention as
-    /// ConnectionStrings:DefaultConnection) pointing at a shared network location, or the pre-existing
-    /// per-machine "Files" folder under AppData when unset, so a single-machine setup with no such config
-    /// keeps behaving exactly as it always has. Every process reading uploaded files (this app and
-    /// PresentationManager.BotService) must be pointed at the same value for a shared deployment to work.</summary>
-    private static string ResolveStorageRoot(IConfiguration config, string appDataDir) =>
-        config["Storage:RootPath"] is { Length: > 0 } configured
-            ? configured
-            : Path.Combine(appDataDir, "Files");
+    /// <summary>Registers a typed HttpClient (base address = the API, JwtAuthHandler attaching the bearer
+    /// token from AuthSession on every request) for <typeparamref name="TImplementation"/> against
+    /// <typeparamref name="TService"/> - one call per PresentationManager.ApiClient class, keeping the
+    /// registration boilerplate in ConfigureServices above to a single line each.</summary>
+    private static void AddApiHttpClient<TService, TImplementation>(IServiceCollection services, string apiBaseUrl)
+        where TService : class
+        where TImplementation : class, TService
+    {
+        services.AddHttpClient<TService, TImplementation>(client =>
+        {
+            client.BaseAddress = new Uri(apiBaseUrl);
+        }).AddHttpMessageHandler<JwtAuthHandler>();
+    }
 }

@@ -98,7 +98,7 @@ public sealed class ProjectService
         var presentations = await _presentationRepository.GetByProjectIdAsync(projectId, ct);
         foreach (var presentation in presentations)
         {
-            _fileStorageService.DeleteFile(presentation.FilePath);
+            await _fileStorageService.DeleteFileAsync(presentation.FilePath, ct);
         }
 
         // The Presentations rows themselves are removed by the DB cascade configured on the ProjectId FK.

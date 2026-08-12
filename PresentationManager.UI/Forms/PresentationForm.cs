@@ -475,7 +475,7 @@ public sealed class PresentationForm : Form
             return;
         }
 
-        var absolutePath = _fileStorageService.GetAbsolutePath(current.FilePath);
+        var absolutePath = await _fileStorageService.GetAbsolutePathAsync(current.FilePath);
         if (current.FileType == PresentationFileType.Pptx)
         {
             // Converted (once, cached) to PDF and shown through the same embedded viewer as real PDFs —

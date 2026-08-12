@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Options;
+using PresentationManager.Application.Interfaces;
 using Telegram.Bot;
 using Telegram.Bot.Types.ReplyMarkups;
 
@@ -10,8 +11,12 @@ namespace PresentationManager.TelegramBot;
 /// independent <see cref="ITelegramBotClient"/> rather than sharing the hosted service's: unlike the
 /// long-polling <c>getUpdates</c> loop (which Telegram only lets one consumer hold per bot token at a time),
 /// <c>sendMessage</c> has no such restriction, so every process that knows the token - every desktop client,
-/// and the bot's own worker process - can send independently with no coordination needed.</summary>
-public sealed class TelegramNotifier
+/// and the bot's own worker process - can send independently with no coordination needed.
+/// Only ever constructed server-side now (PresentationManager.API, PresentationManager.BotService) - see
+/// <see cref="ITelegramSender"/> for the text-only contract PresentationManager.UI depends on instead,
+/// relayed over HTTP by PresentationManager.API.Controllers.NotificationsController so the bot token itself
+/// never has to live on a desktop machine.</summary>
+public sealed class TelegramNotifier : ITelegramSender
 {
     private readonly ITelegramBotClient? _botClient;
 
@@ -42,4 +47,10 @@ public sealed class TelegramNotifier
             return false;
         }
     }
+
+    /// <summary>Explicit (not a plain overload) so ITelegramSender-typed callers can't accidentally omit
+    /// the ReplyMarkup this class's own callers still rely on (JudgeAssignmentNotifier, ...) - it just
+    /// delegates to the real method above with none.</summary>
+    Task<bool> ITelegramSender.TrySendMessageAsync(long chatId, string text, CancellationToken ct) =>
+        TrySendMessageAsync(chatId, text, replyMarkup: null, ct);
 }

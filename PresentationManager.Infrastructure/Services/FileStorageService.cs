@@ -28,8 +28,12 @@ public class FileStorageService : IFileStorageService
 
         var extension = Path.GetExtension(sourceFilePath);
         var fileName = $"{Guid.NewGuid():N}_{Path.GetFileNameWithoutExtension(sourceFilePath)}{extension}";
-        var relativePath = Path.Combine(dayFolderName, fileName);
-        var destinationPath = Path.Combine(_storageRoot, relativePath);
+        // Always '/' regardless of OS (not Path.Combine, which would use '\' on Windows) - this value now
+        // also doubles as a URL path segment for PresentationManager.API's FilesController, and travels
+        // between a Windows desktop client and a Linux server, so it needs one consistent separator rather
+        // than whichever OS happened to create the file.
+        var relativePath = $"{dayFolderName}/{fileName}";
+        var destinationPath = Path.Combine(_storageRoot, dayFolderName, fileName);
 
         await using (var source = File.OpenRead(sourceFilePath))
         await using (var destination = File.Create(destinationPath))
@@ -40,14 +44,17 @@ public class FileStorageService : IFileStorageService
         return relativePath;
     }
 
-    public void DeleteFile(string relativePath)
+    public Task DeleteFileAsync(string relativePath, CancellationToken ct = default)
     {
-        var fullPath = GetAbsolutePath(relativePath);
+        var fullPath = Path.Combine(_storageRoot, relativePath);
         if (File.Exists(fullPath))
         {
             File.Delete(fullPath);
         }
+
+        return Task.CompletedTask;
     }
 
-    public string GetAbsolutePath(string relativePath) => Path.Combine(_storageRoot, relativePath);
+    public Task<string> GetAbsolutePathAsync(string relativePath, CancellationToken ct = default) =>
+        Task.FromResult(Path.Combine(_storageRoot, relativePath));
 }

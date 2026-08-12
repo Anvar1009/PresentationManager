@@ -1,0 +1,15 @@
+[Unit]
+Description=Presentation Manager Telegram bot (single long-polling consumer)
+After=network.target postgresql.service
+
+[Service]
+Type=notify
+WorkingDirectory=/opt/presentationmanager-bot
+ExecStart=/opt/presentationmanager-bot/PresentationManager.BotService
+Restart=on-failure
+RestartSec=5
+User=presentationmanager
+SyslogIdentifier=presentationmanager-bot
+
+[Install]
+WantedBy=multi-user.target

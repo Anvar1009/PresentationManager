@@ -10,7 +10,11 @@ using PresentationManager.Infrastructure.Services;
 using PresentationManager.TelegramBot;
 
 var builder = Host.CreateDefaultBuilder(args)
-    .UseWindowsService(options => options.ServiceName = "PresentationManagerBotService")
+    // No-ops when run interactively (e.g. during local testing) - only takes effect when actually launched
+    // by systemd, wiring this process's logging/lifecycle into the service manager (journald logs, proper
+    // SIGTERM-triggered shutdown on `systemctl stop`, notifying systemd once startup - including the
+    // Migrate() call below - has actually finished).
+    .UseSystemd()
     .ConfigureAppConfiguration(config =>
     {
         // Real secrets (DB password, Telegram bot token) never live in the committed appsettings.json -

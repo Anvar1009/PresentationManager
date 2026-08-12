@@ -4,7 +4,6 @@ using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
-using PresentationManager.TelegramBot;
 using PresentationManager.UI.Controls;
 using PresentationManager.UI.Theme;
 
@@ -35,7 +34,7 @@ public sealed class SuperAdminPanelForm : Form
     private readonly ScoreService _scoreService;
     private readonly IHistoryRepository _historyRepository;
     private readonly IFileStorageService _fileStorageService;
-    private readonly TelegramNotifier _telegramNotifier;
+    private readonly ITelegramSender _telegramSender;
 
     private readonly ListBox _sectionList;
     private readonly Label _sectionTitleLabel;
@@ -74,7 +73,7 @@ public sealed class SuperAdminPanelForm : Form
         ScoreService scoreService,
         IHistoryRepository historyRepository,
         IFileStorageService fileStorageService,
-        TelegramNotifier telegramNotifier)
+        ITelegramSender telegramSender)
     {
         _projectService = projectService;
         _queueService = queueService;
@@ -85,7 +84,7 @@ public sealed class SuperAdminPanelForm : Form
         _scoreService = scoreService;
         _historyRepository = historyRepository;
         _fileStorageService = fileStorageService;
-        _telegramNotifier = telegramNotifier;
+        _telegramSender = telegramSender;
 
         Text = "SuperAdmin paneli";
         BackColor = LightColors.Background;
@@ -538,7 +537,7 @@ public sealed class SuperAdminPanelForm : Form
 
     /// <summary>Opens the selected presentation's uploaded file with the OS's default viewer — same mechanism
     /// as <c>AdminPanelForm.OnOpenPresentationFileClick</c>.</summary>
-    private void OnOpenPresentationFileClick(object? sender, EventArgs e)
+    private async void OnOpenPresentationFileClick(object? sender, EventArgs e)
     {
         if (!_openFileButton.Visible)
         {
@@ -553,7 +552,7 @@ public sealed class SuperAdminPanelForm : Form
         }
 
         var presentation = _currentPresentations[rowIndex];
-        var absolutePath = _fileStorageService.GetAbsolutePath(presentation.FilePath);
+        var absolutePath = await _fileStorageService.GetAbsolutePathAsync(presentation.FilePath);
         if (!File.Exists(absolutePath))
         {
             MessageBox.Show(this, "Fayl topilmadi.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -676,7 +675,7 @@ public sealed class SuperAdminPanelForm : Form
         {
             var (user, generatedPassword) = await _userService.CreateFromPresenterAsync(dialog.SelectedPresenter, dialog.Role);
 
-            var sent = user.TelegramChatId is { } chatId && await _telegramNotifier.TrySendMessageAsync(
+            var sent = user.TelegramChatId is { } chatId && await _telegramSender.TrySendMessageAsync(
                 chatId,
                 $"✅ Sizga \"{user.Role}\" huquqi berildi!\n\nDastur uchun kirish ma'lumotlaringiz:\nLogin: {user.Username}\nParol: {generatedPassword}\n\nXavfsizlik uchun birinchi kirishdan so'ng parolni o'zgartirishingiz tavsiya etiladi.");
 

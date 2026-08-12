@@ -1,6 +1,6 @@
+using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
-using PresentationManager.TelegramBot;
 using PresentationManager.UI.Controls;
 using PresentationManager.UI.Theme;
 
@@ -15,7 +15,7 @@ public sealed class ForgotPasswordForm : Form
 {
     private readonly UserService _userService;
     private readonly PasswordResetService _passwordResetService;
-    private readonly TelegramNotifier _telegramNotifier;
+    private readonly ITelegramSender _telegramSender;
 
     private User? _targetUser;
 
@@ -29,11 +29,11 @@ public sealed class ForgotPasswordForm : Form
     private readonly TextBox _newPasswordBox;
     private readonly TextBox _confirmPasswordBox;
 
-    public ForgotPasswordForm(UserService userService, PasswordResetService passwordResetService, TelegramNotifier telegramNotifier)
+    public ForgotPasswordForm(UserService userService, PasswordResetService passwordResetService, ITelegramSender telegramSender)
     {
         _userService = userService;
         _passwordResetService = passwordResetService;
-        _telegramNotifier = telegramNotifier;
+        _telegramSender = telegramSender;
 
         Text = "Parolni tiklash";
         BackColor = AppColors.Background;
@@ -205,7 +205,7 @@ public sealed class ForgotPasswordForm : Form
         }
 
         var code = _passwordResetService.GenerateCode(user.Id);
-        var sent = await _telegramNotifier.TrySendMessageAsync(chatId, $"🔐 Parolni tiklash kodi: {code}\n\nKod 10 daqiqa amal qiladi.");
+        var sent = await _telegramSender.TrySendMessageAsync(chatId, $"🔐 Parolni tiklash kodi: {code}\n\nKod 10 daqiqa amal qiladi.");
         if (!sent)
         {
             _statusLabel.Text = "Kod yuborilmadi - bot o'chiq yoki Telegram bilan bog'lanib bo'lmadi.";

@@ -7,10 +7,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
-  <!-- Same self-contained single-file shape as PresentationManager.UI.csproj - the server this runs on
-       needs nothing pre-installed beyond the OS itself. -->
+  <!-- Self-contained single-file, same idea as PresentationManager.UI.csproj - the server needs nothing
+       pre-installed beyond the OS itself. Targets linux-x64: this worker (unlike PresentationManager.UI) has
+       no WinForms/PowerPoint/WebView2 dependency, so it runs on whatever OS actually hosts it - here, the
+       user's Linux server, managed via systemd (see UseSystemd() in Program.cs) rather than a Windows
+       Service. Change to win-x64 instead if this ever needs to run on a Windows server. -->
   <PropertyGroup>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
@@ -34,7 +37,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="8.0.1" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,10 +1,13 @@
 using System.Media;
 using PresentationManager.Application.Interfaces;
 
-namespace PresentationManager.Infrastructure.Services;
+namespace PresentationManager.UI.Services;
 
 /// <summary>Plays a custom .wav if the operator configured one in Settings, otherwise falls back to a
-/// built-in Windows system sound so the app never depends on a bundled audio asset.</summary>
+/// built-in Windows system sound so the app never depends on a bundled audio asset. Lives here (not
+/// PresentationManager.Infrastructure) since it's purely local audio playback with no database involved -
+/// unlike every other former Infrastructure implementation, there is nothing here for
+/// PresentationManager.ApiClient to provide an HTTP-backed alternative to.</summary>
 public class AlarmSoundService : IAlarmSoundService
 {
     public void Play(string? customSoundPath)

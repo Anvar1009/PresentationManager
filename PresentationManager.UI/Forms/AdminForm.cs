@@ -937,7 +937,7 @@ public sealed class AdminForm : Form
         }
         _previewPresentationId = target.Id;
 
-        var absolutePath = _fileStorageService.GetAbsolutePath(target.FilePath);
+        var absolutePath = await _fileStorageService.GetAbsolutePathAsync(target.FilePath);
         var thumbnail = await SlideThumbnailService.GetFirstPageThumbnailAsync(
             absolutePath, target.FileType, _previewBox.Width, _previewBox.Height);
 
