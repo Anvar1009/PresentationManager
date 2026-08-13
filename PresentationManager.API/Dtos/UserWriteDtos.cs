@@ -42,4 +42,6 @@ public sealed record SetPasswordRequest(string PasswordHash);
 
 public sealed record SetUsernameRequest(string Username);
 
+public sealed record SetFullNameRequest(string FullName);
+
 public sealed record SetRoleRequest(UserRole Role);

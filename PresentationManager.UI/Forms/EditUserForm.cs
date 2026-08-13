@@ -10,9 +10,12 @@ namespace PresentationManager.UI.Forms;
 /// credentials, and promoting/demoting a role — both by selecting, never retyping the account's identity.</summary>
 public sealed class EditUserForm : Form
 {
+    private readonly TextBox _fullNameBox;
     private readonly TextBox _usernameBox;
     private readonly TextBox _passwordBox;
     private readonly ComboBox _roleCombo;
+
+    public string FullName => _fullNameBox.Text.Trim();
 
     public string Username => _usernameBox.Text.Trim();
 
@@ -32,12 +35,14 @@ public sealed class EditUserForm : Form
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(380, 270);
+        ClientSize = new Size(380, 310);
 
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 5, Padding = new Padding(16) };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 6, Padding = new Padding(16) };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
+        _fullNameBox = FieldTextBox();
+        _fullNameBox.Text = user.FullName;
         _usernameBox = FieldTextBox();
         _usernameBox.Text = user.Username;
         _passwordBox = FieldTextBox();
@@ -52,9 +57,10 @@ public sealed class EditUserForm : Form
         _roleCombo.Items.AddRange([UserRole.Operator, UserRole.Admin, UserRole.SuperAdmin]);
         _roleCombo.SelectedItem = user.Role;
 
-        AddRow(layout, 0, "Login *", _usernameBox);
-        AddRow(layout, 1, "Yangi parol", _passwordBox);
-        AddRow(layout, 2, "Rol *", _roleCombo);
+        AddRow(layout, 0, "Ism-familiya *", _fullNameBox);
+        AddRow(layout, 1, "Login *", _usernameBox);
+        AddRow(layout, 2, "Yangi parol", _passwordBox);
+        AddRow(layout, 3, "Rol *", _roleCombo);
 
         var hintLabel = new Label
         {
@@ -65,7 +71,7 @@ public sealed class EditUserForm : Form
             TextAlign = ContentAlignment.MiddleLeft
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-        layout.Controls.Add(hintLabel, 1, 3);
+        layout.Controls.Add(hintLabel, 1, 4);
 
         var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         var cancelButton = new Button { Text = "Bekor qilish", DialogResult = DialogResult.Cancel, Width = 90, FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary };
@@ -74,7 +80,7 @@ public sealed class EditUserForm : Form
         buttonPanel.Controls.Add(cancelButton);
         buttonPanel.Controls.Add(saveButton);
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        layout.Controls.Add(buttonPanel, 0, 4);
+        layout.Controls.Add(buttonPanel, 0, 5);
         layout.SetColumnSpan(buttonPanel, 2);
 
         Controls.Add(layout);
@@ -99,6 +105,12 @@ public sealed class EditUserForm : Form
 
     private void OnSaveClick(object? sender, EventArgs e)
     {
+        if (string.IsNullOrWhiteSpace(FullName))
+        {
+            MessageBox.Show(this, "Ism-familiya bo'sh bo'lishi mumkin emas.", "Tekshiruv", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(Username))
         {
             MessageBox.Show(this, "Login bo'sh bo'lishi mumkin emas.", "Tekshiruv", MessageBoxButtons.OK, MessageBoxIcon.Warning);

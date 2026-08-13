@@ -1,3 +1,4 @@
+using PresentationManager.Application.Common;
 using PresentationManager.Domain.Entities;
 using PresentationManager.UI.Theme;
 
@@ -20,7 +21,7 @@ internal static class UserMenuHelper
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             ForeColor = LightColors.TextPrimary
         },
-        new ToolStripMenuItem($"{user.Username} · {user.Role}")
+        new ToolStripMenuItem($"{user.Username} · {UzbekText.RoleLabel(user.Role)}")
         {
             Enabled = false,
             ForeColor = LightColors.TextSecondary

@@ -23,4 +23,14 @@ public static class UzbekText
         PresentationStatus.Skipped => "O'tkazib yuborildi",
         _ => status.ToString()
     };
+
+    /// <summary>Friendly role label shown next to the logged-in account (desktop login menu, SuperAdmin's
+    /// Foydalanuvchilar grid) instead of the raw <see cref="UserRole"/> enum name.</summary>
+    public static string RoleLabel(UserRole role) => role switch
+    {
+        UserRole.Operator => "Operator",
+        UserRole.Admin => "Administrator",
+        UserRole.SuperAdmin => "Superadministrator",
+        _ => role.ToString()
+    };
 }

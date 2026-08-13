@@ -140,13 +140,19 @@ public sealed class UserService
 
     /// <summary>SuperAdmin panel's "Login/parolni tiklash" action on an existing account — the recovery path
     /// for a user who forgot their login/password and has no Telegram link for the bot-side "Parolni
-    /// unutdingizmi?" flow. <paramref name="newPassword"/> null/blank keeps the current password unchanged;
-    /// the login is always updated.</summary>
-    public async Task EditUserAsync(int userId, string newUsername, string? newPassword, CancellationToken ct = default)
+    /// unutdingizmi?" flow, plus correcting a wrongly-entered display name (e.g. one copied from another
+    /// account when it was created). <paramref name="newPassword"/> null/blank keeps the current password
+    /// unchanged; the login and full name are always updated.</summary>
+    public async Task EditUserAsync(int userId, string newUsername, string newFullName, string? newPassword, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(newUsername))
         {
             throw new InvalidOperationException("Login bo'sh bo'lishi mumkin emas.");
+        }
+
+        if (string.IsNullOrWhiteSpace(newFullName))
+        {
+            throw new InvalidOperationException("Ism-familiya bo'sh bo'lishi mumkin emas.");
         }
 
         var trimmedUsername = newUsername.Trim();
@@ -157,6 +163,7 @@ public sealed class UserService
         }
 
         await _userRepository.SetUsernameAsync(userId, trimmedUsername, ct);
+        await _userRepository.SetFullNameAsync(userId, newFullName.Trim(), ct);
 
         if (!string.IsNullOrWhiteSpace(newPassword))
         {

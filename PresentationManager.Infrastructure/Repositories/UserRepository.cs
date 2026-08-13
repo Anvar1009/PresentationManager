@@ -121,6 +121,19 @@ public class UserRepository : IUserRepository
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task SetFullNameAsync(int userId, string fullName, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var user = await db.Users.FindAsync([userId], ct);
+        if (user is null)
+        {
+            return;
+        }
+
+        user.FullName = fullName;
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task SetRoleAsync(int userId, UserRole role, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

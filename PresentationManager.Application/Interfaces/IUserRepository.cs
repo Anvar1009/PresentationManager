@@ -37,6 +37,10 @@ public interface IUserRepository
     /// <summary>SuperAdmin-driven login change — see <see cref="PresentationManager.Application.Services.UserService.EditUserAsync"/>.</summary>
     Task SetUsernameAsync(int userId, string username, CancellationToken ct = default);
 
+    /// <summary>SuperAdmin-driven display-name correction — see
+    /// <see cref="PresentationManager.Application.Services.UserService.EditUserAsync"/>.</summary>
+    Task SetFullNameAsync(int userId, string fullName, CancellationToken ct = default);
+
     /// <summary>SuperAdmin-driven role change — see <see cref="PresentationManager.Application.Services.UserService.ChangeRoleAsync"/>.</summary>
     Task SetRoleAsync(int userId, UserRole role, CancellationToken ct = default);
 }

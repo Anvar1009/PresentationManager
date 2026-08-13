@@ -113,7 +113,7 @@ public sealed class AdminForm : Form
     public void SetCurrentUser(User user)
     {
         _currentUserId = user.Id;
-        _userMenuButton.Text = $"👤 {user.FullName}";
+        _userMenuButton.Text = $"👤 {user.Role}";
         _userMenu.Items.Clear();
         _userMenu.Items.AddRange(UserMenuHelper.BuildItems(user, this));
     }

@@ -104,6 +104,12 @@ public sealed class HttpUserRepository : IUserRepository
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task SetFullNameAsync(int userId, string fullName, CancellationToken ct = default)
+    {
+        var response = await _http.PutAsJsonAsync($"api/users/{userId}/fullname", new { FullName = fullName }, ApiJsonOptions.Default, ct);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task SetRoleAsync(int userId, UserRole role, CancellationToken ct = default)
     {
         var response = await _http.PutAsJsonAsync($"api/users/{userId}/role", new { Role = role }, ApiJsonOptions.Default, ct);
