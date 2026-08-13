@@ -105,6 +105,14 @@ public sealed class UsersController : ControllerBase
         return NoContent();
     }
 
+    [HttpPut("{id:int}/fullname")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> SetFullName(int id, SetFullNameRequest request, CancellationToken ct)
+    {
+        await _userRepository.SetFullNameAsync(id, request.FullName, ct);
+        return NoContent();
+    }
+
     [HttpPut("{id:int}/role")]
     [Authorize(Roles = "SuperAdmin")]
     public async Task<IActionResult> SetRole(int id, SetRoleRequest request, CancellationToken ct)

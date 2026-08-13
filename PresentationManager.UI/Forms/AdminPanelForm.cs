@@ -5,6 +5,7 @@ using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
 using PresentationManager.TelegramBot;
+using PresentationManager.UI.Controls;
 using PresentationManager.UI.Theme;
 
 namespace PresentationManager.UI.Forms;
@@ -13,9 +14,17 @@ namespace PresentationManager.UI.Forms;
 /// predates the Admin/SuperAdmin roles and refers to the operator, not this role; kept as-is to avoid a
 /// large unrelated rename). An Admin creates projects, defines their judging criteria and judges, and
 /// reviews participants/presentations/final scores — everything here is scoped to whichever project is
-/// selected at the top.</summary>
+/// selected at the top. Its section nav (Qatnashchilar/Taqdimotlar/Yakuniy baholar) sits in a left-hand
+/// column, mirroring <see cref="SuperAdminPanelForm"/>'s layout, rather than tabs across the content area.</summary>
 public sealed class AdminPanelForm : Form
 {
+    private static readonly (string Icon, string Label)[] Sections =
+    [
+        ("👥", "Qatnashchilar"),
+        ("🎤", "Taqdimotlar"),
+        ("⭐", "Yakuniy baholar")
+    ];
+
     private readonly ProjectService _projectService;
     private readonly CriterionService _criterionService;
     private readonly JudgeService _judgeService;
@@ -27,6 +36,10 @@ public sealed class AdminPanelForm : Form
     private readonly PresentationBotOptions _botOptions;
 
     private readonly ComboBox _projectCombo;
+    private readonly SectionNavListBox _sectionList;
+    private readonly Panel _participantsSection;
+    private readonly Panel _presentationsSection;
+    private readonly Panel _finalScoresSection;
     private readonly DataGridView _participantsGrid;
     private readonly DataGridView _presentationsGrid;
     private readonly DataGridView _finalScoresGrid;
@@ -43,8 +56,8 @@ public sealed class AdminPanelForm : Form
     /// projects, per <see cref="Project.CreatedByUserId"/>.</summary>
     private int? _currentUserId;
 
-    /// <summary>Profile-info/Chiqish popup shown by <see cref="_userMenuButton"/>, in its own strip along the
-    /// bottom of the window - populated once the logged-in user is known, see <see cref="SetCurrentUser"/>.</summary>
+    /// <summary>Profile-info/Chiqish popup shown by <see cref="_userMenuButton"/>, at the bottom of the left
+    /// nav column - populated once the logged-in user is known, see <see cref="SetCurrentUser"/>.</summary>
     private readonly ContextMenuStrip _userMenu = new();
     private readonly Button _userMenuButton;
 
@@ -122,20 +135,17 @@ public sealed class AdminPanelForm : Form
         topLayout.Controls.Add(linkBotButton, 5, 0);
         topPanel.Controls.Add(topLayout);
 
-        // ---------- Bottom bar: account info / Chiqish ----------
-        // This form has no left nav column the way SuperAdminPanelForm does, so "bottom" here means its own
-        // full-width strip along the foot of the window instead - the button itself still only takes up the
-        // left portion of it (Dock.Left, not Fill) so it doesn't visually try to fill unrelated width.
-        var bottomPanel = new Panel { Dock = DockStyle.Bottom, Height = 52, Padding = new Padding(20, 8, 20, 8), BackColor = LightColors.Panel };
-        var bottomPanelRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
-        bottomPanel.Controls.Add(bottomPanelRule);
+        // ---------- Left nav ----------
+        _sectionList = new SectionNavListBox();
+        _sectionList.SetSections(Sections);
+        _sectionList.SelectedIndexChanged += (_, _) => UpdateSectionVisibility();
 
-        // Populated once the logged-in user is known - see SetCurrentUser.
+        // Populated once the logged-in user is known - see SetCurrentUser. Sits below the section list
+        // (Qatnashchilar/Taqdimotlar/Yakuniy baholar), same placement as SuperAdminPanelForm's nav column.
         _userMenuButton = new Button
         {
             Text = "👤",
-            Dock = DockStyle.Left,
-            Width = 220,
+            Dock = DockStyle.Fill,
             FlatStyle = FlatStyle.Flat,
             BackColor = LightColors.PanelAlt,
             ForeColor = LightColors.TextPrimary,
@@ -144,21 +154,29 @@ public sealed class AdminPanelForm : Form
             AutoEllipsis = true
         };
         _userMenuButton.FlatAppearance.BorderColor = LightColors.Border;
-        // AboveRight, not the default below-the-control placement: this bar sits flush with the bottom of a
-        // maximized window, so a downward-opening popup would routinely be clipped by (or fall behind) the
-        // taskbar.
+        // AboveRight, not the default below-the-control placement: this button sits at the bottom of a
+        // maximized window's left column, so a downward-opening popup would routinely be clipped by (or
+        // fall behind) the taskbar.
         _userMenuButton.Click += (_, _) => _userMenu.Show(_userMenuButton, new Point(0, 0), ToolStripDropDownDirection.AboveRight);
-        bottomPanel.Controls.Add(_userMenuButton);
 
-        var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10.5f) };
+        var userMenuWrap = new Panel { Dock = DockStyle.Bottom, Height = 52, Padding = new Padding(0, 12, 0, 0) };
+        userMenuWrap.Controls.Add(_userMenuButton);
+
+        var navWrap = new Panel { Dock = DockStyle.Left, Width = 232, BackColor = LightColors.Panel, Padding = new Padding(10, 16, 10, 16) };
+        navWrap.Controls.Add(_sectionList);
+        navWrap.Controls.Add(userMenuWrap);
+
+        var navDivider = new Panel { Dock = DockStyle.Left, Width = 1, BackColor = LightColors.Border };
+
+        // ---------- Content: one panel per section, toggled by _sectionList's selection ----------
+        var contentPanel = new Panel { Dock = DockStyle.Fill, BackColor = LightColors.Background };
 
         _participantsGrid = LightGrid();
-        var participantsTab = new TabPage("Qatnashchilar") { BackColor = LightColors.Background };
-        participantsTab.Controls.Add(_participantsGrid);
+        _participantsSection = new Panel { Dock = DockStyle.Fill, Visible = false };
+        _participantsSection.Controls.Add(_participantsGrid);
 
         _presentationsGrid = LightGrid();
         _presentationsGrid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) OnOpenPresentationFileClick(null, EventArgs.Empty); };
-        var presentationsTab = new TabPage("Taqdimotlar") { BackColor = LightColors.Background };
         var presentationsToolbar = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(12, 8, 12, 8) };
         var openFileButton = new Button
         {
@@ -169,11 +187,11 @@ public sealed class AdminPanelForm : Form
         openFileButton.FlatAppearance.BorderSize = 0;
         openFileButton.Click += OnOpenPresentationFileClick;
         presentationsToolbar.Controls.Add(openFileButton);
-        presentationsTab.Controls.Add(_presentationsGrid);
-        presentationsTab.Controls.Add(presentationsToolbar);
+        _presentationsSection = new Panel { Dock = DockStyle.Fill, Visible = false };
+        _presentationsSection.Controls.Add(_presentationsGrid);
+        _presentationsSection.Controls.Add(presentationsToolbar);
 
         _finalScoresGrid = LightGrid();
-        var finalScoresTab = new TabPage("Yakuniy baholar") { BackColor = LightColors.Background };
         var exportToolbar = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(12, 8, 12, 8) };
         var exportButton = new Button
         {
@@ -184,19 +202,30 @@ public sealed class AdminPanelForm : Form
         exportButton.FlatAppearance.BorderSize = 0;
         exportButton.Click += OnExportFinalScoresClick;
         exportToolbar.Controls.Add(exportButton);
-        finalScoresTab.Controls.Add(_finalScoresGrid);
-        finalScoresTab.Controls.Add(exportToolbar);
+        _finalScoresSection = new Panel { Dock = DockStyle.Fill, Visible = false };
+        _finalScoresSection.Controls.Add(_finalScoresGrid);
+        _finalScoresSection.Controls.Add(exportToolbar);
 
-        tabs.TabPages.Add(participantsTab);
-        tabs.TabPages.Add(presentationsTab);
-        tabs.TabPages.Add(finalScoresTab);
+        contentPanel.Controls.Add(_finalScoresSection);
+        contentPanel.Controls.Add(_presentationsSection);
+        contentPanel.Controls.Add(_participantsSection);
 
-        Controls.Add(tabs);
-        Controls.Add(bottomPanel);
+        Controls.Add(contentPanel);
+        Controls.Add(navDivider);
+        Controls.Add(navWrap);
         Controls.Add(topPanelRule);
         Controls.Add(topPanel);
 
         Load += async (_, _) => await LoadProjectsAsync();
+        Load += (_, _) => _sectionList.SelectedIndex = 0;
+    }
+
+    private void UpdateSectionVisibility()
+    {
+        var label = _sectionList.SelectedSection?.Label;
+        _participantsSection.Visible = label == "Qatnashchilar";
+        _presentationsSection.Visible = label == "Taqdimotlar";
+        _finalScoresSection.Visible = label == "Yakuniy baholar";
     }
 
     /// <summary>Called once, from Program.cs, right after this form is resolved from DI and before it's run -
@@ -204,7 +233,7 @@ public sealed class AdminPanelForm : Form
     public void SetCurrentUser(User user)
     {
         _currentUserId = user.Id;
-        _userMenuButton.Text = $"👤 {user.FullName}";
+        _userMenuButton.Text = $"👤 {user.Role}";
         _userMenu.Items.Clear();
         _userMenu.Items.AddRange(UserMenuHelper.BuildItems(user, this));
     }

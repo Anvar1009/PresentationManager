@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Drawing.Drawing2D;
 using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
@@ -36,7 +35,7 @@ public sealed class SuperAdminPanelForm : Form
     private readonly IFileStorageService _fileStorageService;
     private readonly ITelegramSender _telegramSender;
 
-    private readonly ListBox _sectionList;
+    private readonly SectionNavListBox _sectionList;
     private readonly Label _sectionTitleLabel;
     private readonly Label _rowCountLabel;
     private readonly DataGridView _grid;
@@ -142,23 +141,9 @@ public sealed class SuperAdminPanelForm : Form
         header.Controls.Add(headerLayout);
 
         // ---------- Left nav ----------
-        _sectionList = new ListBox
-        {
-            Dock = DockStyle.Fill,
-            BackColor = LightColors.Panel,
-            ForeColor = LightColors.TextPrimary,
-            BorderStyle = BorderStyle.None,
-            Font = new Font("Segoe UI", 10.5f),
-            IntegralHeight = false,
-            DrawMode = DrawMode.OwnerDrawFixed,
-            ItemHeight = 46,
-            Cursor = Cursors.Hand
-        };
-        _sectionList.Items.AddRange(Sections.Select(s => (object)s).ToArray());
-        _sectionList.DrawItem += OnSectionDrawItem;
+        _sectionList = new SectionNavListBox();
+        _sectionList.SetSections(Sections);
         _sectionList.SelectedIndexChanged += async (_, _) => await RefreshSelectedSectionAsync();
-        _sectionList.MouseMove += (_, e) => SetHoveredIndex(_sectionList.IndexFromPoint(e.Location));
-        _sectionList.MouseLeave += (_, _) => SetHoveredIndex(-1);
 
         // Populated once the logged-in user is known - see SetCurrentUser. Sits below the section list
         // (Loyihalar/.../Jurnal) rather than up in the header, so account info/Chiqish reads as belonging to
@@ -337,99 +322,9 @@ public sealed class SuperAdminPanelForm : Form
     /// nothing here previously needed to know who was logged in.</summary>
     public void SetCurrentUser(User user)
     {
-        _userMenuButton.Text = $"👤 {user.FullName}";
+        _userMenuButton.Text = $"👤 {user.Role}";
         _userMenu.Items.Clear();
         _userMenu.Items.AddRange(UserMenuHelper.BuildItems(user, this));
-    }
-
-    private int _hoveredSectionIndex = -1;
-
-    /// <summary>ListBox never actually reports <see cref="DrawItemState.HotLight"/> for its own items (that
-    /// flag is a menu/toolstrip thing) - hover has to be tracked by hand from MouseMove, same approach
-    /// <see cref="PresentationPickerForm"/> uses for its list.</summary>
-    private void SetHoveredIndex(int index)
-    {
-        if (index == _hoveredSectionIndex)
-        {
-            return;
-        }
-
-        var previous = _hoveredSectionIndex;
-        _hoveredSectionIndex = index;
-        if (previous >= 0 && previous < _sectionList.Items.Count)
-        {
-            _sectionList.Invalidate(_sectionList.GetItemRectangle(previous));
-        }
-
-        if (_hoveredSectionIndex >= 0 && _hoveredSectionIndex < _sectionList.Items.Count)
-        {
-            _sectionList.Invalidate(_sectionList.GetItemRectangle(_hoveredSectionIndex));
-        }
-    }
-
-    /// <summary>Owner-draws each nav row as an icon + label with a rounded accent tint and left bar when
-    /// selected, and a subtle hover tint otherwise — matching the rest of the app's dark, card-based look
-    /// instead of a plain default-styled ListBox.</summary>
-    private void OnSectionDrawItem(object? sender, DrawItemEventArgs e)
-    {
-        if (e.Index < 0 || e.Index >= Sections.Length)
-        {
-            e.DrawBackground();
-            return;
-        }
-
-        var (icon, label) = Sections[e.Index];
-        var isSelected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
-        var isHot = e.Index == _hoveredSectionIndex;
-        var bounds = e.Bounds;
-        var g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-
-        using (var bgBrush = new SolidBrush(LightColors.Panel))
-        {
-            g.FillRectangle(bgBrush, bounds);
-        }
-
-        var rowRect = Rectangle.Inflate(bounds, -2, -3);
-        if (isSelected || isHot)
-        {
-            var fillColor = isSelected ? Blend(LightColors.Panel, LightColors.Accent, 0.14f) : LightColors.PanelAlt;
-            using var path = RoundedRect(rowRect, 8f);
-            using var fillBrush = new SolidBrush(fillColor);
-            g.FillPath(fillBrush, path);
-        }
-
-        if (isSelected)
-        {
-            using var barBrush = new SolidBrush(LightColors.Accent);
-            g.FillRectangle(barBrush, bounds.X, bounds.Y + 8, 4, bounds.Height - 16);
-        }
-
-        var iconRect = new Rectangle(bounds.X + 16, bounds.Y, 28, bounds.Height);
-        TextRenderer.DrawText(g, icon, Font, iconRect, LightColors.TextPrimary,
-            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-
-        var labelRect = new Rectangle(bounds.X + 50, bounds.Y, bounds.Width - 60, bounds.Height);
-        var labelFont = isSelected ? new Font(_sectionList.Font, FontStyle.Bold) : _sectionList.Font;
-        TextRenderer.DrawText(g, label, labelFont, labelRect, isSelected ? LightColors.TextPrimary : LightColors.TextSecondary,
-            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
-    }
-
-    private static Color Blend(Color from, Color to, float amount) => Color.FromArgb(
-        (int)(from.R + (to.R - from.R) * amount),
-        (int)(from.G + (to.G - from.G) * amount),
-        (int)(from.B + (to.B - from.B) * amount));
-
-    private static GraphicsPath RoundedRect(Rectangle rect, float radius)
-    {
-        var d = radius * 2;
-        var path = new GraphicsPath();
-        path.AddArc(rect.X, rect.Y, d, d, 180, 90);
-        path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
-        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
-        path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
     }
 
     private async Task RefreshSelectedSectionAsync()
@@ -608,7 +503,7 @@ public sealed class SuperAdminPanelForm : Form
             {
                 Login = u.Username,
                 Ism = u.FullName,
-                Rol = u.Role.ToString(),
+                Rol = UzbekText.RoleLabel(u.Role),
                 Faol = u.IsActive ? "Ha" : "Yo'q",
                 YaratilganVaqt = u.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
             })
@@ -723,7 +618,7 @@ public sealed class SuperAdminPanelForm : Form
 
         try
         {
-            await _userService.EditUserAsync(user.Id, dialog.Username, string.IsNullOrEmpty(dialog.NewPassword) ? null : dialog.NewPassword);
+            await _userService.EditUserAsync(user.Id, dialog.Username, dialog.FullName, string.IsNullOrEmpty(dialog.NewPassword) ? null : dialog.NewPassword);
             if (dialog.Role != user.Role)
             {
                 await _userService.ChangeRoleAsync(user.Id, dialog.Role);
