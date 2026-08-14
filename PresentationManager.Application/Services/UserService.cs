@@ -176,6 +176,39 @@ public sealed class UserService
         }
     }
 
+    /// <summary>Self-service "change my login/password", opened from the account menu (see
+    /// UserMenuHelper/EditOwnProfileForm) by any logged-in role for its own account only - unlike
+    /// <see cref="EditUserAsync"/> (SuperAdmin-only, can target any account, also edits FullName/Role), this
+    /// never touches FullName or Role and the API only accepts it when the caller is editing themselves
+    /// (or is a SuperAdmin - see UsersController.IsSelfOrSuperAdmin). <paramref name="newPassword"/>
+    /// null/blank keeps the current password unchanged.</summary>
+    public async Task ChangeOwnCredentialsAsync(int userId, string newUsername, string? newPassword, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(newUsername))
+        {
+            throw new InvalidOperationException("Login bo'sh bo'lishi mumkin emas.");
+        }
+
+        var trimmedUsername = newUsername.Trim();
+        var existing = await _userRepository.GetByUsernameAsync(trimmedUsername, ct);
+        if (existing is not null && existing.Id != userId)
+        {
+            throw new InvalidOperationException("Bu login band.");
+        }
+
+        await _userRepository.SetUsernameAsync(userId, trimmedUsername, ct);
+
+        if (!string.IsNullOrWhiteSpace(newPassword))
+        {
+            if (newPassword.Length < 6)
+            {
+                throw new InvalidOperationException("Parol kamida 6 ta belgidan iborat bo'lishi kerak.");
+            }
+
+            await _userRepository.SetPasswordAsync(userId, PasswordHasher.Hash(newPassword), ct);
+        }
+    }
+
     /// <summary>Bootstraps the very first account so the newly-added login requirement doesn't lock everyone
     /// out on an empty database — called once at startup. Every account after this one is created from the
     /// SuperAdmin panel's Users tab.</summary>
