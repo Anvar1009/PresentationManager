@@ -95,6 +95,12 @@ static class Program
                 // JudgesController), so there is no client-side equivalent of the old JudgeAssignmentNotifier
                 // to register anymore.
                 AddApiHttpClient<ITelegramSender, HttpTelegramSender>(services, apiBaseUrl);
+                AddApiHttpClient<OrderRandomizerClient, OrderRandomizerClient>(services, apiBaseUrl);
+
+                // Built (not connected) here; AdminForm connects it once AuthSession.Token is actually set
+                // (after login) - see OrderHubClient's own remarks. Must resolve the same AuthSession
+                // singleton LoginForm populates (line ~73), not a fresh instance.
+                services.AddSingleton(sp => new OrderHubClient(apiBaseUrl, sp.GetRequiredService<AuthSession>()));
 
                 // Purely local audio playback - never had anything to do with the database, so it stays a
                 // plain local implementation (see PresentationManager.UI.Services.AlarmSoundService, moved
@@ -116,6 +122,7 @@ static class Program
                 services.AddSingleton<AdminForm>();
                 services.AddSingleton<AdminPanelForm>();
                 services.AddSingleton<SuperAdminPanelForm>();
+                services.AddSingleton<OrderOperatorForm>();
             })
             .Build();
 
@@ -180,6 +187,7 @@ static class Program
                 UserRole.Operator => WithCurrentOperatorUser(host.Services.GetRequiredService<AdminForm>(), user),
                 UserRole.Admin => WithCurrentAdminUser(host.Services.GetRequiredService<AdminPanelForm>(), user),
                 UserRole.SuperAdmin => WithCurrentSuperAdminUser(host.Services.GetRequiredService<SuperAdminPanelForm>(), user),
+                UserRole.OrderOperator => WithCurrentOrderOperatorUser(host.Services.GetRequiredService<OrderOperatorForm>(), user),
                 _ => throw new InvalidOperationException($"Unknown role: {user.Role}")
             };
 
@@ -201,6 +209,12 @@ static class Program
         }
 
         static SuperAdminPanelForm WithCurrentSuperAdminUser(SuperAdminPanelForm form, User user)
+        {
+            form.SetCurrentUser(user);
+            return form;
+        }
+
+        static OrderOperatorForm WithCurrentOrderOperatorUser(OrderOperatorForm form, User user)
         {
             form.SetCurrentUser(user);
             return form;

@@ -101,4 +101,21 @@ public sealed class PresentationQueueService
     /// presentation Id currently in the queue, in its new display order.</summary>
     public Task ReorderAsync(IReadOnlyList<int> orderedIds, CancellationToken ct = default) =>
         _presentationRepository.ReorderAsync(orderedIds, ct);
+
+    /// <summary>"Tartib operatori" role's one action — shuffles a project's presentation order at random and
+    /// persists it via <see cref="ReorderAsync"/>. Fisher-Yates, uniform over all permutations.</summary>
+    public async Task RandomizeOrderAsync(int projectId, CancellationToken ct = default)
+    {
+        var current = await _presentationRepository.GetAllOrderedAsync(projectId, ct);
+        var ids = current.Select(p => p.Id).ToList();
+
+        var rng = Random.Shared;
+        for (var i = ids.Count - 1; i > 0; i--)
+        {
+            var j = rng.Next(i + 1);
+            (ids[i], ids[j]) = (ids[j], ids[i]);
+        }
+
+        await _presentationRepository.ReorderAsync(ids, ct);
+    }
 }
