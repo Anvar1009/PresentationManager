@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using Microsoft.Extensions.Options;
+using PresentationManager.ApiClient;
 using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
@@ -32,6 +33,7 @@ public sealed class AdminForm : Form
     private readonly PresentationForm _presentationForm;
     private readonly AdminLinkService _adminLinkService;
     private readonly UserService _userService;
+    private readonly OrderHubClient _orderHubClient;
     private readonly PresentationBotOptions _botOptions;
 
     /// <summary>Set via <see cref="SetCurrentUser"/> right after this singleton form is resolved from DI in
@@ -84,6 +86,7 @@ public sealed class AdminForm : Form
         PresentationForm presentationForm,
         AdminLinkService adminLinkService,
         UserService userService,
+        OrderHubClient orderHubClient,
         IOptions<PresentationBotOptions> botOptions)
     {
         _session = session;
@@ -95,6 +98,7 @@ public sealed class AdminForm : Form
         _presentationForm = presentationForm;
         _adminLinkService = adminLinkService;
         _userService = userService;
+        _orderHubClient = orderHubClient;
         _botOptions = botOptions.Value;
 
         Text = "Taqdimotlar Boshqaruvi - Administrator";
@@ -310,6 +314,39 @@ public sealed class AdminForm : Form
         }
 
         // Namoyish Ekrani is not shown until the operator actually presses Boshlash — see OnStartClick.
+
+        _orderHubClient.OrderRandomized += projectId => RunOnUiThread(() => _ = HandleOrderRandomizedAsync(projectId));
+        try
+        {
+            await _orderHubClient.ConnectAsync();
+        }
+        catch
+        {
+            // Swallowed deliberately, same reasoning as OnBotPollTick: the 5s bot-poll timer already
+            // guarantees eventual consistency, so a hub connection failure (server not yet redeployed with
+            // the Hub, transient network issue, ...) just means order changes show up a few seconds late
+            // instead of instantly, rather than blocking the operator's dashboard from loading at all.
+        }
+    }
+
+    /// <summary>Fired by <see cref="_orderHubClient"/> the moment a "Tartib operatori" randomizes a
+    /// project's presentation order - mirrors <see cref="OnBotPollTick"/>'s own <c>ReloadQueueAsync</c> call,
+    /// just triggered instantly instead of on the next 5s tick.</summary>
+    private async Task HandleOrderRandomizedAsync(int projectId)
+    {
+        if (projectId != _session.CurrentProjectId)
+        {
+            return;
+        }
+
+        try
+        {
+            await _session.ReloadQueueAsync();
+        }
+        catch
+        {
+            // Swallowed deliberately - see OnBotPollTick.
+        }
     }
 
     private void WireSessionEvents()

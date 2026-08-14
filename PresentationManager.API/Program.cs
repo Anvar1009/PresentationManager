@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using PresentationManager.API.Hubs;
 using PresentationManager.API.Services;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
@@ -78,6 +79,7 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 
 var app = builder.Build();
 
@@ -100,6 +102,7 @@ using (var scope = app.Services.CreateScope())
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<PresentationOrderHub>("/hubs/presentation-order");
 
 // Unauthenticated on purpose - PresentationManager.UI pings this before showing LoginForm to fail fast
 // with a friendly message when the server is unreachable, the same way a bad DB connection string used to
