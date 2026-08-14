@@ -31,12 +31,18 @@ public sealed class AdminForm : Form
     private readonly ProjectService _projectService;
     private readonly PresentationForm _presentationForm;
     private readonly AdminLinkService _adminLinkService;
+    private readonly UserService _userService;
     private readonly PresentationBotOptions _botOptions;
 
     /// <summary>Set via <see cref="SetCurrentUser"/> right after this singleton form is resolved from DI in
     /// Program.cs - lets <see cref="OnSettingsClick"/> pass this operator's own id through to
     /// <c>SettingsForm</c>'s "Botga ulash" button.</summary>
     private int? _currentUserId;
+
+    /// <summary>Same instance handed to <see cref="SetCurrentUser"/> - kept around (and mutated in place by
+    /// <see cref="UserMenuHelper"/> on a successful self-service login change) so <see cref="RefreshUserMenu"/>
+    /// can rebuild the popup without re-fetching from the API.</summary>
+    private User? _currentUser;
 
     /// <summary>Profile-info/Chiqish popup shown by <see cref="_userMenuButton"/>, at the bottom of the queue
     /// panel (see <see cref="BuildLeftQueuePanel"/>) - populated once <see cref="SetCurrentUser"/> runs.</summary>
@@ -77,6 +83,7 @@ public sealed class AdminForm : Form
         ProjectService projectService,
         PresentationForm presentationForm,
         AdminLinkService adminLinkService,
+        UserService userService,
         IOptions<PresentationBotOptions> botOptions)
     {
         _session = session;
@@ -87,6 +94,7 @@ public sealed class AdminForm : Form
         _projectService = projectService;
         _presentationForm = presentationForm;
         _adminLinkService = adminLinkService;
+        _userService = userService;
         _botOptions = botOptions.Value;
 
         Text = "Taqdimotlar Boshqaruvi - Administrator";
@@ -113,9 +121,18 @@ public sealed class AdminForm : Form
     public void SetCurrentUser(User user)
     {
         _currentUserId = user.Id;
+        _currentUser = user;
         _userMenuButton.Text = $"👤 {user.Role}";
+        RefreshUserMenu();
+    }
+
+    /// <summary>Rebuilds the account popup from <see cref="_currentUser"/> - called once from
+    /// <see cref="SetCurrentUser"/> and again after a successful self-service login change (see
+    /// <see cref="UserMenuHelper"/>) so the bold "Username · Role" row reflects the new login.</summary>
+    private void RefreshUserMenu()
+    {
         _userMenu.Items.Clear();
-        _userMenu.Items.AddRange(UserMenuHelper.BuildItems(user, this));
+        _userMenu.Items.AddRange(UserMenuHelper.BuildItems(_currentUser!, _userService, this, RefreshUserMenu));
     }
 
     /// <summary>No-op while no project is active or the DB is briefly unreachable - a missed tick just means

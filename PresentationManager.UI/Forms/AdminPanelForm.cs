@@ -33,6 +33,7 @@ public sealed class AdminPanelForm : Form
     private readonly IPresenterRepository _presenterRepository;
     private readonly AdminLinkService _adminLinkService;
     private readonly IFileStorageService _fileStorageService;
+    private readonly UserService _userService;
     private readonly PresentationBotOptions _botOptions;
 
     private readonly ComboBox _projectCombo;
@@ -56,6 +57,11 @@ public sealed class AdminPanelForm : Form
     /// projects, per <see cref="Project.CreatedByUserId"/>.</summary>
     private int? _currentUserId;
 
+    /// <summary>Same instance handed to <see cref="SetCurrentUser"/> - kept around (and mutated in place by
+    /// <see cref="UserMenuHelper"/> on a successful self-service login change) so <see cref="RefreshUserMenu"/>
+    /// can rebuild the popup without re-fetching from the API.</summary>
+    private User? _currentUser;
+
     /// <summary>Profile-info/Chiqish popup shown by <see cref="_userMenuButton"/>, at the bottom of the left
     /// nav column - populated once the logged-in user is known, see <see cref="SetCurrentUser"/>.</summary>
     private readonly ContextMenuStrip _userMenu = new();
@@ -72,6 +78,7 @@ public sealed class AdminPanelForm : Form
         IPresenterRepository presenterRepository,
         AdminLinkService adminLinkService,
         IFileStorageService fileStorageService,
+        UserService userService,
         IOptions<PresentationBotOptions> botOptions)
     {
         _projectService = projectService;
@@ -82,6 +89,7 @@ public sealed class AdminPanelForm : Form
         _presenterRepository = presenterRepository;
         _adminLinkService = adminLinkService;
         _fileStorageService = fileStorageService;
+        _userService = userService;
         _botOptions = botOptions.Value;
 
         Text = "Admin paneli";
@@ -241,9 +249,18 @@ public sealed class AdminPanelForm : Form
     public void SetCurrentUser(User user)
     {
         _currentUserId = user.Id;
+        _currentUser = user;
         _userMenuButton.Text = $"👤 {user.Role}";
+        RefreshUserMenu();
+    }
+
+    /// <summary>Rebuilds the account popup from <see cref="_currentUser"/> - called once from
+    /// <see cref="SetCurrentUser"/> and again after a successful self-service login change (see
+    /// <see cref="UserMenuHelper"/>) so the bold "Username · Role" row reflects the new login.</summary>
+    private void RefreshUserMenu()
+    {
         _userMenu.Items.Clear();
-        _userMenu.Items.AddRange(UserMenuHelper.BuildItems(user, this));
+        _userMenu.Items.AddRange(UserMenuHelper.BuildItems(_currentUser!, _userService, this, RefreshUserMenu));
     }
 
     private static DataGridView LightGrid() => DataGridViewTheme.CreateReadOnlyGrid(

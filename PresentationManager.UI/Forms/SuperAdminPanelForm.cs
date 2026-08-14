@@ -51,6 +51,11 @@ public sealed class SuperAdminPanelForm : Form
     private readonly ContextMenuStrip _userMenu = new();
     private readonly Button _userMenuButton;
 
+    /// <summary>Same instance handed to <see cref="SetCurrentUser"/> - kept around (and mutated in place by
+    /// <see cref="UserMenuHelper"/> on a successful self-service login change) so <see cref="RefreshUserMenu"/>
+    /// can rebuild the popup without re-fetching from the API.</summary>
+    private User? _currentUser;
+
     /// <summary>Mirrors <see cref="_grid"/>'s bound rows, in the same order, whenever the "Taqdimotlar"
     /// section is loaded — the grid is bound to an anonymous-object projection (display-only) that loses
     /// <see cref="Presentation.FilePath"/>, so this is what a selected row is resolved back to for
@@ -322,9 +327,18 @@ public sealed class SuperAdminPanelForm : Form
     /// nothing here previously needed to know who was logged in.</summary>
     public void SetCurrentUser(User user)
     {
+        _currentUser = user;
         _userMenuButton.Text = $"👤 {user.Role}";
+        RefreshUserMenu();
+    }
+
+    /// <summary>Rebuilds the account popup from <see cref="_currentUser"/> - called once from
+    /// <see cref="SetCurrentUser"/> and again after a successful self-service login change (see
+    /// <see cref="UserMenuHelper"/>) so the bold "Username · Role" row reflects the new login.</summary>
+    private void RefreshUserMenu()
+    {
         _userMenu.Items.Clear();
-        _userMenu.Items.AddRange(UserMenuHelper.BuildItems(user, this));
+        _userMenu.Items.AddRange(UserMenuHelper.BuildItems(_currentUser!, _userService, this, RefreshUserMenu));
     }
 
     private async Task RefreshSelectedSectionAsync()

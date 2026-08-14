@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PresentationManager.API.Dtos;
@@ -6,10 +7,13 @@ using PresentationManager.Application.Interfaces;
 namespace PresentationManager.API.Controllers;
 
 /// <summary>Thin HTTP mirror of <see cref="IUserRepository"/> - every read returns the safe
-/// <see cref="UserDto"/> (never a password hash or Telegram link token). Account-management writes
-/// (create, role change, password/login reset) are SuperAdmin-only, matching who can reach these actions
-/// today (SuperAdminPanelForm) - everything else stays open to any authenticated desktop user, since
-/// Admin/Operator accounts also drive the "Botga ulash" Telegram-link flow.</summary>
+/// <see cref="UserDto"/> (never a password hash or Telegram link token). Creating accounts, changing full
+/// names, and role changes are SuperAdmin-only, matching who can reach these actions today
+/// (SuperAdminPanelForm). Login/password changes are SuperAdmin-or-self - SuperAdmin still needs to be able
+/// to recover a locked-out account, but every role also needs to be able to change its own login/password
+/// from the account menu (see UserMenuHelper's "Login/parolni o'zgartirish") without SuperAdmin involvement.
+/// Everything else stays open to any authenticated desktop user, since Admin/Operator accounts also drive
+/// the "Botga ulash" Telegram-link flow.</summary>
 [ApiController]
 [Authorize]
 [Route("api/users")]
@@ -21,6 +25,13 @@ public sealed class UsersController : ControllerBase
     {
         _userRepository = userRepository;
     }
+
+    /// <summary>Null only if the JWT is somehow missing its NameIdentifier claim - every token
+    /// <see cref="Services.JwtTokenService"/> issues always carries one, so in practice this is just for
+    /// <see cref="IsSelfOrSuperAdmin"/>'s own null-safety.</summary>
+    private int? CurrentUserId => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
+    private bool IsSelfOrSuperAdmin(int targetUserId) => User.IsInRole("SuperAdmin") || CurrentUserId == targetUserId;
 
     [HttpGet]
     public async Task<ActionResult<List<UserDto>>> GetAll(CancellationToken ct)
@@ -90,17 +101,25 @@ public sealed class UsersController : ControllerBase
     }
 
     [HttpPut("{id:int}/password")]
-    [Authorize(Roles = "SuperAdmin")]
     public async Task<IActionResult> SetPassword(int id, SetPasswordRequest request, CancellationToken ct)
     {
+        if (!IsSelfOrSuperAdmin(id))
+        {
+            return Forbid();
+        }
+
         await _userRepository.SetPasswordAsync(id, request.PasswordHash, ct);
         return NoContent();
     }
 
     [HttpPut("{id:int}/username")]
-    [Authorize(Roles = "SuperAdmin")]
     public async Task<IActionResult> SetUsername(int id, SetUsernameRequest request, CancellationToken ct)
     {
+        if (!IsSelfOrSuperAdmin(id))
+        {
+            return Forbid();
+        }
+
         await _userRepository.SetUsernameAsync(id, request.Username, ct);
         return NoContent();
     }
