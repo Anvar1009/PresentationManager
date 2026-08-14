@@ -1,9 +1,10 @@
 @model JudgeDashboardViewModel
 @{
     ViewData["Title"] = "Loyihalar";
-    ViewData["Brand"] = "🎓 Hakamlar paneli";
+    ViewData["Brand"] = "Hakamlar paneli";
 }
 
+<span class="eyebrow">Hakam · @Model.JudgeFullName</span>
 <h1 class="page-title">Loyihalar</h1>
 <p class="page-subtitle">Baholash uchun loyihani tanlang.</p>
 
@@ -17,8 +18,8 @@ else
         @foreach (var project in Model.Projects)
         {
             <a class="card card-link" asp-controller="Judge" asp-action="Project" asp-route-judgeAssignmentId="@project.JudgeAssignmentId">
-                <div class="card-title">@project.ProjectName</div>
-                <div class="card-meta">Taqdimotchilarni baholash</div>
+                <span class="card-title">@project.ProjectName</span>
+                <span class="card-meta">Taqdimotchilarni baholash</span>
             </a>
         }
     </div>

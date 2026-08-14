@@ -1,12 +1,13 @@
 @model JudgeEvaluateViewModel
 @{
     ViewData["Title"] = Model.PresenterFullName;
-    ViewData["Brand"] = "🎓 Hakamlar paneli";
+    ViewData["Brand"] = "Hakamlar paneli";
 }
 
 <p>
     <a asp-controller="Judge" asp-action="Project" asp-route-judgeAssignmentId="@Model.JudgeAssignmentId">&larr; Taqdimotchilar</a>
 </p>
+<span class="eyebrow">Baholash</span>
 <h1 class="page-title">@Model.PresenterFullName</h1>
 <p class="page-subtitle">@Model.PresentationTitle</p>
 
@@ -25,7 +26,10 @@ else
         @foreach (var criterion in Model.Criteria)
         {
             <div class="criterion-block">
-                <div class="criterion-name">@criterion.CriterionName (max @criterion.MaxScore)</div>
+                <div class="criterion-head">
+                    <span class="criterion-name">@criterion.CriterionName</span>
+                    <span class="criterion-max">max @criterion.MaxScore</span>
+                </div>
                 <div class="score-buttons">
                     @for (var score = 0; score <= criterion.MaxScore; score++)
                     {

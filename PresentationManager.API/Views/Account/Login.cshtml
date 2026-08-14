@@ -5,7 +5,11 @@
 
 <div class="login-shell">
     <div class="card login-card">
-        <h1 class="page-title">Boshqaruv paneli</h1>
+        <div class="login-mark">
+            <span class="brand-dot"></span>
+            Boshqaruv paneli
+        </div>
+        <h1 class="page-title">Kirish</h1>
         <p class="page-subtitle">Login va parolingiz bilan kiring.</p>
 
         <div asp-validation-summary="All" class="validation-summary"></div>
@@ -19,7 +23,7 @@
                 <label asp-for="Password"></label>
                 <input asp-for="Password" type="password" autocomplete="current-password" />
             </div>
-            <button type="submit" class="btn" style="width:100%">Kirish</button>
+            <button type="submit" class="btn btn-block">Kirish</button>
         </form>
     </div>
 </div>

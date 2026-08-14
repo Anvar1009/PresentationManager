@@ -1,15 +1,16 @@
 @model OrderDashboardViewModel
 @{
     ViewData["Title"] = "Tartib belgilash";
-    ViewData["Brand"] = "🔀 Tartib paneli";
+    ViewData["Brand"] = "Tartib paneli";
 }
 
+<span class="eyebrow">Tartib operatori · @Model.OrderOperatorFullName</span>
 <h1 class="page-title">Tartib belgilash</h1>
 <p class="page-subtitle">Loyihani tanlang va taqdimotchilar tartibini tasodifiy tarzda belgilang. O'zgarish operatorning navbat oynasida darhol ko'rinadi.</p>
 
 @if (TempData["Success"] is string success)
 {
-    <div class="card" style="border-color: var(--success); color: var(--success); margin-bottom: 14px;">@success</div>
+    <div class="notice-success">@success</div>
 }
 
 @if (Model.Projects.Count == 0)
@@ -21,11 +22,14 @@ else
     <div class="card-grid">
         @foreach (var project in Model.Projects)
         {
-            <div class="card">
-                <div class="card-title">@project.ProjectName</div>
-                <form asp-controller="Order" asp-action="Randomize" method="post" style="margin-top:14px;">
+            <div class="card stack">
+                <span class="card-title">@project.ProjectName</span>
+                <form asp-controller="Order" asp-action="Randomize" method="post">
                     <input type="hidden" name="projectId" value="@project.ProjectId" />
-                    <button type="submit" class="btn" style="width:100%">🔀 Tartibni aralashtirish</button>
+                    <button type="submit" class="btn btn-block">
+                        <svg class="icon" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></svg>
+                        Tartibni aralashtirish
+                    </button>
                 </form>
             </div>
         }
