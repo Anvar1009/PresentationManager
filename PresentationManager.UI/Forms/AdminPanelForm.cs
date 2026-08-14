@@ -94,9 +94,16 @@ public sealed class AdminPanelForm : Form
 
         var topPanel = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(20, 12, 20, 12), BackColor = LightColors.Panel };
         var topPanelRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
-        var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 1 };
-        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
+        var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 7, RowCount = 1 };
+        // Spacer first - absorbs the window's extra width so "Loyiha:"/combo and the action buttons end up
+        // pushed together against the right edge, contiguous, instead of the combo sitting off on the left
+        // with a gap before the buttons.
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
+        // Fixed, not Percent - a DropDownList combo stretched across most of a maximized window's width
+        // (the old Percent-100 sizing) reads as an oversized, empty-looking control. Wide enough for a long
+        // project name without needing the whole row.
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
@@ -127,12 +134,13 @@ public sealed class AdminPanelForm : Form
         linkBotButton.FlatAppearance.BorderColor = LightColors.Border;
         linkBotButton.Click += OnLinkBotClick;
 
-        topLayout.Controls.Add(projectLabel, 0, 0);
-        topLayout.Controls.Add(_projectCombo, 1, 0);
-        topLayout.Controls.Add(newProjectButton, 2, 0);
-        topLayout.Controls.Add(criteriaButton, 3, 0);
-        topLayout.Controls.Add(judgesButton, 4, 0);
-        topLayout.Controls.Add(linkBotButton, 5, 0);
+        // Column 0 (Percent 100) is deliberately left empty - see the spacer comment above.
+        topLayout.Controls.Add(projectLabel, 1, 0);
+        topLayout.Controls.Add(_projectCombo, 2, 0);
+        topLayout.Controls.Add(newProjectButton, 3, 0);
+        topLayout.Controls.Add(criteriaButton, 4, 0);
+        topLayout.Controls.Add(judgesButton, 5, 0);
+        topLayout.Controls.Add(linkBotButton, 6, 0);
         topPanel.Controls.Add(topLayout);
 
         // ---------- Left nav ----------
