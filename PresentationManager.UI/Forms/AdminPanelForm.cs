@@ -400,10 +400,16 @@ public sealed class AdminPanelForm : Form
 
         try
         {
-            await _projectService.CreateAsync(
+            var created = await _projectService.CreateAsync(
                 dialog.ProjectName, dialog.EventStartDate, dialog.EventEndDate, dialog.EventTime, dialog.Location,
                 _currentUserId);
+
+            // LoadProjectsAsync on its own restores whatever was selected *before* this call - with nothing
+            // selected yet (very first project) or a different one already active, the newly created project
+            // would land in the dropdown's list but never become the visible/selected text, reading as if it
+            // "didn't show up" even though it's right there once the dropdown is opened.
             await LoadProjectsAsync();
+            _projectCombo.SelectedItem = _projects.FirstOrDefault(p => p.Id == created.Id);
         }
         catch (Exception ex)
         {

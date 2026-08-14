@@ -2,10 +2,11 @@
 @{
     ViewData["Title"] = Model.ProjectName;
     ViewData["ProjectId"] = Model.ProjectId;
-    ViewData["Brand"] = "🎓 Hakamlar paneli";
+    ViewData["Brand"] = "Hakamlar paneli";
 }
 
 <p><a asp-controller="Judge" asp-action="Dashboard">&larr; Loyihalar</a></p>
+<span class="eyebrow">Taqdimotlar tartibi</span>
 <h1 class="page-title">@Model.ProjectName</h1>
 <p class="page-subtitle">Taqdimotchini tanlang va mezonlar bo'yicha baholang. Tartib operatori tartibni o'zgartirsa, bu sahifa avtomatik yangilanadi.</p>
 
@@ -15,22 +16,25 @@
 }
 else
 {
-    <div class="card">
+    <div class="card queue">
+        @{ var index = 0; }
         @foreach (var presentation in Model.Presentations)
         {
-            <div class="presentation-row">
-                <div>
-                    <div class="presentation-name">@presentation.PresenterFullName</div>
-                    <div class="presentation-title">@presentation.Title</div>
+            index++;
+            <div class="queue-row">
+                <span class="queue-index">@index.ToString("00")</span>
+                <div class="queue-body">
+                    <div class="queue-name">@presentation.PresenterFullName</div>
+                    <div class="queue-title">@presentation.Title</div>
                 </div>
-                <div style="display:flex; align-items:center; gap:14px;">
+                <div class="queue-actions">
                     @if (presentation.FullyScored)
                     {
-                        <span class="badge badge-success">Baholandi</span>
+                        <span class="pill pill-success">Baholandi</span>
                     }
                     else
                     {
-                        <span class="badge badge-pending">Baholanmagan</span>
+                        <span class="pill pill-pending">Kutilmoqda</span>
                     }
                     <a class="btn" asp-controller="Judge" asp-action="Evaluate"
                        asp-route-judgeAssignmentId="@Model.JudgeAssignmentId"
