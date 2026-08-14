@@ -1,4 +1,3 @@
-using PresentationManager.Application.Common;
 using PresentationManager.Domain.Entities;
 using PresentationManager.UI.Theme;
 
@@ -10,21 +9,18 @@ namespace PresentationManager.UI.Forms;
 /// form closes - so "Chiqish" restarts the whole app back to the login screen rather than swapping forms.</summary>
 internal static class UserMenuHelper
 {
-    /// <summary>Read-only name/login/role info followed by a separator and "Chiqish" - built fresh on every
-    /// call (each caller owns its own item instances) so the same content can populate either a MenuStrip
-    /// item's DropDownItems or a standalone ContextMenuStrip's Items.</summary>
+    /// <summary>Read-only login/role info followed by a separator and "Chiqish" - built fresh on every call
+    /// (each caller owns its own item instances) so the same content can populate either a MenuStrip item's
+    /// DropDownItems or a standalone ContextMenuStrip's Items. Shows the account's login and its raw
+    /// <see cref="Domain.Enums.UserRole"/> only - not <see cref="User.FullName"/>, which is free-text data
+    /// entered when the account was created and isn't guaranteed to match who's actually logged in.</summary>
     public static ToolStripItem[] BuildItems(User user, IWin32Window owner) =>
     [
-        new ToolStripMenuItem(user.FullName)
+        new ToolStripMenuItem($"{user.Username} · {user.Role}")
         {
             Enabled = false,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             ForeColor = LightColors.TextPrimary
-        },
-        new ToolStripMenuItem($"{user.Username} · {UzbekText.RoleLabel(user.Role)}")
-        {
-            Enabled = false,
-            ForeColor = LightColors.TextSecondary
         },
         new ToolStripSeparator(),
         CreateLogoutItem(owner)

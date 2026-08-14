@@ -503,7 +503,7 @@ public sealed class SuperAdminPanelForm : Form
             {
                 Login = u.Username,
                 Ism = u.FullName,
-                Rol = UzbekText.RoleLabel(u.Role),
+                Rol = u.Role.ToString(),
                 Faol = u.IsActive ? "Ha" : "Yo'q",
                 YaratilganVaqt = u.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
             })
