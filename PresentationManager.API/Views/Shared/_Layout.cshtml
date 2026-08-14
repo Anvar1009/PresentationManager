@@ -1,0 +1,37 @@
+@{
+    // Set by each area's own dashboard view (e.g. Judge/Dashboard.cshtml sets "🎓 Hakamlar paneli",
+    // Order/Dashboard.cshtml sets "🔀 Tartib paneli") - defaults to something generic for Login, which is
+    // shared by both web-only roles and doesn't know which one is signing in until after the password check.
+    var brand = ViewData["Brand"] as string ?? "Boshqaruv paneli";
+}
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@(ViewData["Title"] is string t && t.Length > 0 ? $"{t} — {brand}" : brand)</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body data-project-id="@(ViewData["ProjectId"])">
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <div class="topbar">
+            <div class="brand">@brand</div>
+            <div class="account">
+                <span>@User.Identity!.Name</span>
+                <form asp-controller="Account" asp-action="Logout" method="post">
+                    <button type="submit" class="btn btn-outline">Chiqish</button>
+                </form>
+            </div>
+        </div>
+    }
+
+    <div class="container">
+        @RenderBody()
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+    <script src="~/js/order-live.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

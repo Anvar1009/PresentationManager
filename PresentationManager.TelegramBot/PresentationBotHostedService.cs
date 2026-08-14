@@ -16,24 +16,23 @@ using Telegram.Bot.Types.ReplyMarkups;
 
 namespace PresentationManager.TelegramBot;
 
-/// <summary>Three roles live here, routed purely by who's already known to the system when a chat says
+/// <summary>Two roles live here, routed purely by who's already known to the system when a chat says
 /// /start: a <b>Presenter</b> uploads presentations into a project's queue (see
-/// <see cref="HandleDocumentAsync"/>), a <b>Judge</b> scores presentations against a project's dynamic
-/// criteria (see <see cref="ShowJudgePresentationsAsync"/> onward), and a linked <b>Admin</b> gets a
-/// read/report + basic-management mirror of the desktop Admin panel (see
-/// <see cref="ShowAdminMainMenuAsync"/> onward) — the only one of the three that isn't Telegram-native: an
-/// Admin must first link their desktop account via the "Botga ulash" one-time code
-/// (<see cref="AdminLinkService"/>), whereas Presenter/Judge identities live entirely in Telegram-side tables.
-/// Presenter and Judge both start from the same one-time registration (full name, then sharing a Telegram
-/// contact) and land as a Presenter — becoming a Judge only happens afterward, when Admin picks that
-/// already-registered person from the Admin panel's "Hakamlar" dialog (<c>JudgeService.AssignAsync</c>); this
-/// class subscribes to <c>JudgeService.JudgeAssigned</c> to push that person a notification the moment it
-/// happens (<see cref="OnJudgeAssignedAsync"/>). Identity priority on a plain /start is Admin, then Judge,
-/// then Presenter (see <see cref="BeginAsync"/>) - mirrors the existing Judge-over-Presenter precedent for
-/// the same reason: whichever role this chat has always wins over the others. Runs embedded in the same
-/// process as the WinForms admin app (started via <c>Program.cs</c>'s host), reusing its existing service
-/// singletons - a submitted file lands in the database and managed file storage exactly the same way
-/// <c>AdminForm.OnAddClick</c> does.</summary>
+/// <see cref="HandleDocumentAsync"/>), and a linked <b>Admin</b> gets a read/report + basic-management
+/// mirror of the desktop Admin panel (see <see cref="ShowAdminMainMenuAsync"/> onward) — the only one of the
+/// two that isn't Telegram-native: an Admin must first link their desktop account via the "Botga ulash"
+/// one-time code (<see cref="AdminLinkService"/>), whereas Presenter identities live entirely in
+/// Telegram-side tables. A chat already known as a <b>Judge</b> (someone Admin assigned via the Admin
+/// panel's "Hakamlar" dialog, <c>JudgeService.AssignAsync</c>) is instead redirected to the Judge web
+/// platform (see <see cref="ShowJudgeWebRedirectAsync"/>) - in-chat scoring was removed once that platform
+/// shipped (Phase 6 of the modernization concept). This class still subscribes to
+/// <c>JudgeService.JudgeAssigned</c> to notify that person the moment Admin assigns them
+/// (<see cref="OnJudgeAssignedAsync"/>). Identity priority on a plain /start is Admin, then Judge, then
+/// Presenter (see <see cref="BeginAsync"/>) - whichever role this chat has always wins over the others. Runs
+/// as PresentationManager.BotService's one hosted service (its own process/systemd unit, not embedded in the
+/// WinForms admin app), talking to the database directly through the same Infrastructure repositories/
+/// Application services AdminForm uses - a submitted file lands in the database and managed file storage
+/// exactly the same way <c>AdminForm.OnAddClick</c> does.</summary>
 public sealed class PresentationBotHostedService : BackgroundService
 {
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase) { ".ppt", ".pptx", ".pdf" };
@@ -84,10 +83,6 @@ public sealed class PresentationBotHostedService : BackgroundService
 
     /// <summary>Presenter upload flow state, per chat.</summary>
     private readonly ConcurrentDictionary<long, ChatSession> _sessions = new();
-
-    /// <summary>Judge scoring flow state, per chat — separate from <see cref="_sessions"/> since a chat is
-    /// only ever in one flow at a time but the two shapes don't overlap.</summary>
-    private readonly ConcurrentDictionary<long, JudgeSession> _judgeSessions = new();
 
     /// <summary>Linked-Admin reporting/management flow state, per chat — see <see cref="AdminSession"/>.</summary>
     private readonly ConcurrentDictionary<long, AdminSession> _adminSessions = new();
@@ -179,7 +174,6 @@ public sealed class PresentationBotHostedService : BackgroundService
         {
             var token = startText["/start ".Length..].Trim();
             _sessions.TryRemove(chatId, out _);
-            _judgeSessions.TryRemove(chatId, out _);
             _adminSessions.TryRemove(chatId, out _);
             await HandleAdminLinkTokenAsync(botClient, chatId, token, message.From?.Username, ct);
             return;
@@ -188,7 +182,6 @@ public sealed class PresentationBotHostedService : BackgroundService
         if (message.Text is "/start" or "/cancel" or JudgeProjectsButtonText or AdminMenuButtonText)
         {
             _sessions.TryRemove(chatId, out _);
-            _judgeSessions.TryRemove(chatId, out _);
             _adminSessions.TryRemove(chatId, out _);
             await BeginAsync(botClient, chatId, message.From?.Username, ct);
             return;
@@ -197,12 +190,6 @@ public sealed class PresentationBotHostedService : BackgroundService
         if (_adminSessions.ContainsKey(chatId))
         {
             await HandleAdminMessageAsync(botClient, chatId, message, ct);
-            return;
-        }
-
-        if (_judgeSessions.ContainsKey(chatId))
-        {
-            await HandleJudgeMessageAsync(botClient, chatId, ct);
             return;
         }
 
@@ -279,11 +266,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         var judgeAssignments = await _judgeService.GetLinkedAssignmentsByChatIdAsync(chatId, ct);
         if (judgeAssignments.Count > 0)
         {
-            // Sent as its own message (a reply keyboard can't ride along on the inline-keyboard menu message
-            // below) - keeps the "📋 Loyihalar" button docked at the bottom of the chat from here on, so
-            // returning to this menu later never needs /start again.
-            await botClient.SendMessage(chatId, "🧑‍⚖️ Hakam paneli", replyMarkup: JudgeMainKeyboard, cancellationToken: ct);
-            await ShowJudgeProjectMenuAsync(botClient, chatId, judgeAssignments, ct);
+            await ShowJudgeWebRedirectAsync(botClient, chatId, ct);
             return;
         }
 
@@ -488,226 +471,20 @@ public sealed class PresentationBotHostedService : BackgroundService
         return string.Join('\n', lines);
     }
 
-    // ---------- Judge scoring flow ----------
+    // ---------- Judge web platform redirect ----------
 
-    private async Task ShowJudgeProjectMenuAsync(ITelegramBotClient botClient, long chatId, List<Judge> assignments, CancellationToken ct)
+    /// <summary>Replaces the old in-chat judge scoring flow (Phase 6 of the modernization concept) - a judge
+    /// now scores from PresentationManager.API's Cookie-authenticated web pages
+    /// (Controllers\Web\JudgeController) instead of Telegram buttons, so this just points them there. Sent
+    /// both on a fresh /start and every time the persistent "📋 Loyihalar" button is tapped - there's no
+    /// in-chat state left to resume, so both cases are identical.</summary>
+    private async Task ShowJudgeWebRedirectAsync(ITelegramBotClient botClient, long chatId, CancellationToken ct)
     {
-        if (assignments.Count == 1)
-        {
-            await ShowJudgePresentationsAsync(botClient, chatId, assignments[0], ct);
-            return;
-        }
+        var message = string.IsNullOrEmpty(_options.JudgeWebBaseUrl)
+            ? "🧑‍⚖️ Endi hakamlar veb-sahifa orqali baholaydi. Kirish manzilini administratordan so'rang."
+            : $"🧑‍⚖️ Endi hakamlar veb-sahifa orqali baholaydi:\n{_options.JudgeWebBaseUrl.TrimEnd('/')}/Account/Login\n\nLogin va parolingiz o'zgarmagan.";
 
-        var projects = await _projectService.GetAllAsync(ct);
-        var buttons = assignments
-            .Select(a => new[]
-            {
-                InlineKeyboardButton.WithCallbackData(
-                    projects.FirstOrDefault(p => p.Id == a.ProjectId)?.Name ?? "?", $"jproj:{a.Id}")
-            })
-            .ToArray();
-
-        _judgeSessions[chatId] = new JudgeSession { Step = JudgeStep.SelectingProject };
-        await botClient.SendMessage(chatId, "Qaysi loyiha bo'yicha baholaysiz?", replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
-    }
-
-    private async Task ShowJudgePresentationsAsync(ITelegramBotClient botClient, long chatId, Judge judge, CancellationToken ct)
-    {
-        var presentations = await _queueService.GetAllAsync(judge.ProjectId, ct);
-        if (presentations.Count == 0)
-        {
-            await botClient.SendMessage(chatId, "Bu loyihada hali taqdimotlar yo'q.", cancellationToken: ct);
-            return;
-        }
-
-        var criteria = await _criterionService.GetByProjectIdAsync(judge.ProjectId, ct);
-        var buttons = new List<InlineKeyboardButton[]>();
-        foreach (var presentation in presentations)
-        {
-            var progress = await _scoreService.GetJudgeProgressAsync(presentation.Id, judge.Id, ct);
-            var mark = criteria.Count > 0 && criteria.All(c => progress.ContainsKey(c.Id)) ? "✅ " : string.Empty;
-            buttons.Add([InlineKeyboardButton.WithCallbackData($"{mark}{presentation.FullName} - {presentation.Title}", $"jpres:{presentation.Id}")]);
-        }
-
-        _judgeSessions[chatId] = new JudgeSession { Step = JudgeStep.SelectingPresentation, JudgeId = judge.Id, ProjectId = judge.ProjectId };
-        await botClient.SendMessage(chatId, "Baholash uchun taqdimotni tanlang:", replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
-    }
-
-    private async Task ShowCriteriaMenuAsync(ITelegramBotClient botClient, long chatId, JudgeSession session, CancellationToken ct)
-    {
-        var criteria = await _criterionService.GetByProjectIdAsync(session.ProjectId, ct);
-        var progress = await _scoreService.GetJudgeProgressAsync(session.PresentationId, session.JudgeId, ct);
-
-        // Inline buttons have no real background color in the Bot API - a leading green/white square is the
-        // closest equivalent, giving the same "scored vs. not" read at a glance the operator asked for.
-        var buttons = criteria
-            .Select(c =>
-            {
-                var isScored = progress.TryGetValue(c.Id, out var value);
-                var mark = isScored ? "🟩" : "⬜";
-                var scoreText = isScored ? $"{value}/{c.MaxScore}" : $"—/{c.MaxScore}";
-                return new[] { InlineKeyboardButton.WithCallbackData($"{mark} {c.Name} ({scoreText})", $"jcrit:{c.Id}") };
-            })
-            .ToList();
-        buttons.Add([InlineKeyboardButton.WithCallbackData("✅ Yakunlash", "jdone")]);
-
-        await botClient.SendMessage(chatId, "Mezonni tanlang va ball qo'ying:", replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
-    }
-
-    private async Task HandleJudgeProjectCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
-    {
-        var chatId = callbackQuery.Message?.Chat.Id;
-        if (chatId is null || !int.TryParse(data["jproj:".Length..], out var judgeRowId))
-        {
-            return;
-        }
-
-        var assignments = await _judgeService.GetLinkedAssignmentsByChatIdAsync(chatId.Value, ct);
-        var judge = assignments.FirstOrDefault(a => a.Id == judgeRowId);
-        if (judge is null)
-        {
-            await botClient.AnswerCallbackQuery(callbackQuery.Id, "Topilmadi, /start bosing.", cancellationToken: ct);
-            return;
-        }
-
-        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
-        await ShowJudgePresentationsAsync(botClient, chatId.Value, judge, ct);
-    }
-
-    private async Task HandleJudgePresentationCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
-    {
-        var chatId = callbackQuery.Message?.Chat.Id;
-        if (chatId is null || !_judgeSessions.TryGetValue(chatId.Value, out var session))
-        {
-            return;
-        }
-
-        if (!int.TryParse(data["jpres:".Length..], out var presentationId))
-        {
-            return;
-        }
-
-        session.PresentationId = presentationId;
-        session.Step = JudgeStep.ScoringPresentation;
-
-        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
-        await ShowCriteriaMenuAsync(botClient, chatId.Value, session, ct);
-    }
-
-    /// <summary>Shows the 0..MaxScore buttons for one criterion — the judge taps a score directly instead of
-    /// typing it, five per row so even a generous max score (e.g. 20) doesn't scroll forever.</summary>
-    private async Task ShowScoreButtonsAsync(ITelegramBotClient botClient, long chatId, JudgeSession session, int criterionId, CancellationToken ct)
-    {
-        var criteria = await _criterionService.GetByProjectIdAsync(session.ProjectId, ct);
-        var criterion = criteria.FirstOrDefault(c => c.Id == criterionId);
-        if (criterion is null)
-        {
-            await botClient.SendMessage(chatId, "Bu mezon endi mavjud emas.", cancellationToken: ct);
-            await ShowCriteriaMenuAsync(botClient, chatId, session, ct);
-            return;
-        }
-
-        const int perRow = 5;
-        var scoreButtons = Enumerable.Range(0, criterion.MaxScore + 1)
-            .Select(value => InlineKeyboardButton.WithCallbackData(value.ToString(), $"jscore:{criterionId}:{value}"))
-            .Chunk(perRow)
-            .Select(row => row.ToArray())
-            .ToList();
-        scoreButtons.Add([InlineKeyboardButton.WithCallbackData("⬅️ Orqaga", "jback")]);
-
-        await botClient.SendMessage(chatId, $"\"{criterion.Name}\" uchun ball tanlang:",
-            replyMarkup: new InlineKeyboardMarkup(scoreButtons), cancellationToken: ct);
-    }
-
-    private async Task HandleJudgeCriterionCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
-    {
-        var chatId = callbackQuery.Message?.Chat.Id;
-        if (chatId is null || !_judgeSessions.TryGetValue(chatId.Value, out var session))
-        {
-            return;
-        }
-
-        if (!int.TryParse(data["jcrit:".Length..], out var criterionId))
-        {
-            return;
-        }
-
-        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
-        await ShowScoreButtonsAsync(botClient, chatId.Value, session, criterionId, ct);
-    }
-
-    private async Task HandleJudgeScoreCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
-    {
-        var chatId = callbackQuery.Message?.Chat.Id;
-        if (chatId is null || !_judgeSessions.TryGetValue(chatId.Value, out var session))
-        {
-            return;
-        }
-
-        var parts = data["jscore:".Length..].Split(':');
-        if (parts.Length != 2 || !int.TryParse(parts[0], out var criterionId) || !int.TryParse(parts[1], out var value))
-        {
-            return;
-        }
-
-        try
-        {
-            await _scoreService.UpsertAsync(session.PresentationId, session.JudgeId, criterionId, value, ct);
-            await botClient.AnswerCallbackQuery(callbackQuery.Id, $"✅ {value} ball saqlandi", cancellationToken: ct);
-        }
-        catch (Exception ex)
-        {
-            await botClient.AnswerCallbackQuery(callbackQuery.Id, ex.Message, showAlert: true, cancellationToken: ct);
-            return;
-        }
-
-        await ShowCriteriaMenuAsync(botClient, chatId.Value, session, ct);
-    }
-
-    private async Task HandleJudgeBackCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, CancellationToken ct)
-    {
-        var chatId = callbackQuery.Message?.Chat.Id;
-        if (chatId is null || !_judgeSessions.TryGetValue(chatId.Value, out var session))
-        {
-            return;
-        }
-
-        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
-        await ShowCriteriaMenuAsync(botClient, chatId.Value, session, ct);
-    }
-
-    /// <summary>"Yakunlash" - rather than telling the judge to press /start again, jumps straight back to
-    /// their presentations list (re-fetching the Judge row for this project, since the just-cleared session
-    /// only kept its Id) so scoring the next presentation takes one tap, not a fresh /start.</summary>
-    private async Task HandleJudgeDoneCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, CancellationToken ct)
-    {
-        var chatId = callbackQuery.Message?.Chat.Id;
-        if (chatId is null || !_judgeSessions.TryGetValue(chatId.Value, out var session))
-        {
-            return;
-        }
-
-        await botClient.AnswerCallbackQuery(callbackQuery.Id, "✅ Yakunlandi", cancellationToken: ct);
-        await botClient.SendMessage(chatId.Value, "✅ Baholash yakunlandi.", replyMarkup: JudgeMainKeyboard, cancellationToken: ct);
-
-        var assignments = await _judgeService.GetLinkedAssignmentsByChatIdAsync(chatId.Value, ct);
-        var judge = assignments.FirstOrDefault(a => a.Id == session.JudgeId);
-        if (judge is null)
-        {
-            // The assignment itself was removed mid-session - nothing left to go back to.
-            _judgeSessions.TryRemove(chatId.Value, out _);
-            await botClient.SendMessage(chatId.Value, "Yana boshlash uchun /start bosing.", cancellationToken: ct);
-            return;
-        }
-
-        await ShowJudgePresentationsAsync(botClient, chatId.Value, judge, ct);
-    }
-
-    private async Task HandleJudgeMessageAsync(ITelegramBotClient botClient, long chatId, CancellationToken ct)
-    {
-        // Everything in the judge flow is button-driven now - any stray text just gets redirected back to
-        // whatever buttons are already on screen.
-        await botClient.SendMessage(chatId, "Iltimos, tugmalardan birini tanlang.", cancellationToken: ct);
+        await botClient.SendMessage(chatId, message, replyMarkup: JudgeMainKeyboard, cancellationToken: ct);
     }
 
     // ---------- Admin reporting/management flow ----------
@@ -1177,30 +954,6 @@ public sealed class PresentationBotHostedService : BackgroundService
         if (data.StartsWith("project:", StringComparison.Ordinal))
         {
             await HandleProjectSelectionCallbackAsync(botClient, callbackQuery, data, ct);
-        }
-        else if (data.StartsWith("jproj:", StringComparison.Ordinal))
-        {
-            await HandleJudgeProjectCallbackAsync(botClient, callbackQuery, data, ct);
-        }
-        else if (data.StartsWith("jpres:", StringComparison.Ordinal))
-        {
-            await HandleJudgePresentationCallbackAsync(botClient, callbackQuery, data, ct);
-        }
-        else if (data.StartsWith("jcrit:", StringComparison.Ordinal))
-        {
-            await HandleJudgeCriterionCallbackAsync(botClient, callbackQuery, data, ct);
-        }
-        else if (data.StartsWith("jscore:", StringComparison.Ordinal))
-        {
-            await HandleJudgeScoreCallbackAsync(botClient, callbackQuery, data, ct);
-        }
-        else if (data == "jback")
-        {
-            await HandleJudgeBackCallbackAsync(botClient, callbackQuery, ct);
-        }
-        else if (data == "jdone")
-        {
-            await HandleJudgeDoneCallbackAsync(botClient, callbackQuery, ct);
         }
         else if (data == "amain")
         {

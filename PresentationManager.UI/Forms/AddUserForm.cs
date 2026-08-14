@@ -50,7 +50,7 @@ public sealed class AddUserForm : Form
             BackColor = LightColors.PanelAlt,
             ForeColor = LightColors.TextPrimary
         };
-        _roleCombo.Items.AddRange([UserRole.Operator, UserRole.Admin, UserRole.SuperAdmin, UserRole.OrderOperator]);
+        _roleCombo.Items.AddRange([UserRole.Operator, UserRole.Admin, UserRole.SuperAdmin, UserRole.OrderOperator, UserRole.Judge]);
         _roleCombo.SelectedIndex = 0;
 
         AddRow(layout, 0, "Taqdimotchi *", _presenterCombo);

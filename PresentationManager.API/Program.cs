@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -76,9 +77,23 @@ builder.Services
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
         };
+    })
+    // Second, non-default scheme - only the Judge web platform's Account/Judge controllers and
+    // PresentationOrderHub opt into it explicitly (see their own [Authorize(AuthenticationSchemes = ...)]).
+    // Every existing [ApiController] endpoint is untouched: no AuthenticationSchemes means "the default
+    // scheme", which stays JwtBearer.
+    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+    {
+        options.LoginPath = "/Account/Login";
+        options.AccessDeniedPath = "/Account/Login";
+        options.ExpireTimeSpan = TimeSpan.FromHours(12);
+        options.SlidingExpiration = true;
+        options.Cookie.Name = "PresentationManager.Judge";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
     });
 builder.Services.AddAuthorization();
-builder.Services.AddControllers();
+builder.Services.AddControllersWithViews();
 builder.Services.AddSignalR();
 
 var app = builder.Build();
@@ -99,9 +114,15 @@ using (var scope = app.Services.CreateScope())
     await scope.ServiceProvider.GetRequiredService<UserService>().EnsureDefaultSuperAdminAsync();
 }
 
+app.UseStaticFiles();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Conventional routing for the Judge web platform's MVC controllers (attribute-routed [ApiController]s
+// above are unaffected - they never match this pattern since their routes start with "api/").
+app.MapControllerRoute(name: "default", pattern: "{controller=Account}/{action=Login}/{id?}");
 app.MapHub<PresentationOrderHub>("/hubs/presentation-order");
 
 // Unauthenticated on purpose - PresentationManager.UI pings this before showing LoginForm to fail fast

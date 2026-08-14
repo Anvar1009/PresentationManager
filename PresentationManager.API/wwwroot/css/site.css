@@ -1,0 +1,272 @@
+/* Same dark palette PresentationManager.UI's CLAUDE.md specifies for the desktop app, reused here so the
+   Judge web platform reads as the same product, not a bolted-on afterthought. */
+:root {
+    --bg: #14161d;
+    --card: #23252f;
+    --card-alt: #2c2f3b;
+    --border: #3a3d4b;
+    --accent: #ffc52d;
+    --text: #ffffff;
+    --text-secondary: #bdbdbd;
+    --danger: #e53935;
+    --success: #43a047;
+    --warning: #fb8c00;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 28px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+}
+
+.topbar .brand {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.topbar .account {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.topbar form {
+    margin: 0;
+}
+
+.container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 32px 24px;
+}
+
+.page-title {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0 0 6px;
+}
+
+.page-subtitle {
+    color: var(--text-secondary);
+    margin: 0 0 28px;
+    font-size: 14px;
+}
+
+.card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+}
+
+.card + .card {
+    margin-top: 14px;
+}
+
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+}
+
+.card-link {
+    display: block;
+    color: var(--text);
+}
+
+.card-link:hover {
+    border-color: var(--accent);
+    text-decoration: none;
+}
+
+.card-title {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0 0 4px;
+}
+
+.card-meta {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.badge-success {
+    background: rgba(67, 160, 71, 0.18);
+    color: var(--success);
+}
+
+.badge-pending {
+    background: rgba(189, 189, 189, 0.14);
+    color: var(--text-secondary);
+}
+
+.presentation-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.presentation-row:last-child {
+    border-bottom: none;
+}
+
+.presentation-name {
+    font-weight: 600;
+}
+
+.presentation-title {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    background: var(--accent);
+    color: #14161d;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.field {
+    margin-bottom: 16px;
+}
+
+.field label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.field input[type="text"],
+.field input[type="password"] {
+    width: 100%;
+    padding: 11px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card-alt);
+    color: var(--text);
+    font-size: 14px;
+}
+
+.field input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.validation-summary {
+    color: var(--danger);
+    font-size: 13px;
+    margin-bottom: 14px;
+}
+
+.login-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.login-card {
+    width: 100%;
+    max-width: 360px;
+}
+
+.criterion-block {
+    margin-bottom: 20px;
+}
+
+.criterion-name {
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.score-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.score-buttons form {
+    margin: 0;
+}
+
+.score-btn {
+    min-width: 40px;
+    padding: 8px 0;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--card-alt);
+    color: var(--text);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.score-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #14161d;
+}
+
+.score-btn:hover {
+    border-color: var(--accent);
+}
+
+.empty-state {
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 40px 0;
+}

@@ -13,9 +13,8 @@ public enum SessionStep
 /// conversation state, so each chat's step through (one-time) registration and, per upload, project ->
 /// title -> file is tracked here in memory for the lifetime of the app. A returning, already-registered
 /// presenter skips straight to <see cref="SessionStep.AwaitingProject"/> - see
-/// <see cref="PresentationBotHostedService"/>. Judges go through a separate <see cref="JudgeSession"/>
-/// instead, since a chat is only ever in one flow at a time but the two shapes are different enough not to
-/// share a class.</summary>
+/// <see cref="PresentationBotHostedService"/>. Judges no longer have an in-chat flow at all (they score from
+/// the Judge web platform instead - see <c>PresentationBotHostedService.ShowJudgeWebRedirectAsync</c>).</summary>
 public sealed class ChatSession
 {
     public SessionStep Step { get; set; } = SessionStep.AwaitingProject;

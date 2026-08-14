@@ -1,0 +1,25 @@
+@model JudgeDashboardViewModel
+@{
+    ViewData["Title"] = "Loyihalar";
+    ViewData["Brand"] = "🎓 Hakamlar paneli";
+}
+
+<h1 class="page-title">Loyihalar</h1>
+<p class="page-subtitle">Baholash uchun loyihani tanlang.</p>
+
+@if (Model.Projects.Count == 0)
+{
+    <div class="card empty-state">Sizga hali hech qanday loyiha bo'yicha hakamlik biriktirilmagan.</div>
+}
+else
+{
+    <div class="card-grid">
+        @foreach (var project in Model.Projects)
+        {
+            <a class="card card-link" asp-controller="Judge" asp-action="Project" asp-route-judgeAssignmentId="@project.JudgeAssignmentId">
+                <div class="card-title">@project.ProjectName</div>
+                <div class="card-meta">Taqdimotchilarni baholash</div>
+            </a>
+        }
+    </div>
+}

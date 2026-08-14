@@ -1,0 +1,33 @@
+@model OrderDashboardViewModel
+@{
+    ViewData["Title"] = "Tartib belgilash";
+    ViewData["Brand"] = "🔀 Tartib paneli";
+}
+
+<h1 class="page-title">Tartib belgilash</h1>
+<p class="page-subtitle">Loyihani tanlang va taqdimotchilar tartibini tasodifiy tarzda belgilang. O'zgarish operatorning navbat oynasida darhol ko'rinadi.</p>
+
+@if (TempData["Success"] is string success)
+{
+    <div class="card" style="border-color: var(--success); color: var(--success); margin-bottom: 14px;">@success</div>
+}
+
+@if (Model.Projects.Count == 0)
+{
+    <div class="card empty-state">Hozircha loyihalar yo'q.</div>
+}
+else
+{
+    <div class="card-grid">
+        @foreach (var project in Model.Projects)
+        {
+            <div class="card">
+                <div class="card-title">@project.ProjectName</div>
+                <form asp-controller="Order" asp-action="Randomize" method="post" style="margin-top:14px;">
+                    <input type="hidden" name="projectId" value="@project.ProjectId" />
+                    <button type="submit" class="btn" style="width:100%">🔀 Tartibni aralashtirish</button>
+                </form>
+            </div>
+        }
+    </div>
+}
