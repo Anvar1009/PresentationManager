@@ -1,0 +1,25 @@
+@model LoginViewModel
+@{
+    ViewData["Title"] = "Kirish";
+}
+
+<div class="login-shell">
+    <div class="card login-card">
+        <h1 class="page-title">Boshqaruv paneli</h1>
+        <p class="page-subtitle">Login va parolingiz bilan kiring.</p>
+
+        <div asp-validation-summary="All" class="validation-summary"></div>
+
+        <form asp-controller="Account" asp-action="Login" method="post">
+            <div class="field">
+                <label asp-for="Username"></label>
+                <input asp-for="Username" type="text" autocomplete="username" autofocus />
+            </div>
+            <div class="field">
+                <label asp-for="Password"></label>
+                <input asp-for="Password" type="password" autocomplete="current-password" />
+            </div>
+            <button type="submit" class="btn" style="width:100%">Kirish</button>
+        </form>
+    </div>
+</div>

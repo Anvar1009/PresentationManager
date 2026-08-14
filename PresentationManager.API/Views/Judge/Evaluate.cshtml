@@ -1,0 +1,44 @@
+@model JudgeEvaluateViewModel
+@{
+    ViewData["Title"] = Model.PresenterFullName;
+    ViewData["Brand"] = "🎓 Hakamlar paneli";
+}
+
+<p>
+    <a asp-controller="Judge" asp-action="Project" asp-route-judgeAssignmentId="@Model.JudgeAssignmentId">&larr; Taqdimotchilar</a>
+</p>
+<h1 class="page-title">@Model.PresenterFullName</h1>
+<p class="page-subtitle">@Model.PresentationTitle</p>
+
+@if (TempData["Error"] is string error)
+{
+    <div class="validation-summary">@error</div>
+}
+
+@if (Model.Criteria.Count == 0)
+{
+    <div class="card empty-state">Bu loyiha uchun baholash mezonlari hali belgilanmagan.</div>
+}
+else
+{
+    <div class="card">
+        @foreach (var criterion in Model.Criteria)
+        {
+            <div class="criterion-block">
+                <div class="criterion-name">@criterion.CriterionName (max @criterion.MaxScore)</div>
+                <div class="score-buttons">
+                    @for (var score = 0; score <= criterion.MaxScore; score++)
+                    {
+                        <form asp-controller="Judge" asp-action="SubmitScore" method="post">
+                            <input type="hidden" name="judgeAssignmentId" value="@Model.JudgeAssignmentId" />
+                            <input type="hidden" name="presentationId" value="@Model.PresentationId" />
+                            <input type="hidden" name="criterionId" value="@criterion.CriterionId" />
+                            <input type="hidden" name="value" value="@score" />
+                            <button type="submit" class="score-btn @(criterion.Value == score ? "active" : "")">@score</button>
+                        </form>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}

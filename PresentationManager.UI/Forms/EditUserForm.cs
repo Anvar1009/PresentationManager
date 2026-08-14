@@ -54,7 +54,7 @@ public sealed class EditUserForm : Form
             BackColor = LightColors.PanelAlt,
             ForeColor = LightColors.TextPrimary
         };
-        _roleCombo.Items.AddRange([UserRole.Operator, UserRole.Admin, UserRole.SuperAdmin, UserRole.OrderOperator]);
+        _roleCombo.Items.AddRange([UserRole.Operator, UserRole.Admin, UserRole.SuperAdmin, UserRole.OrderOperator, UserRole.Judge]);
         _roleCombo.SelectedItem = user.Role;
 
         AddRow(layout, 0, "Ism-familiya *", _fullNameBox);

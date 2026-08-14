@@ -1,0 +1,42 @@
+@model JudgeProjectViewModel
+@{
+    ViewData["Title"] = Model.ProjectName;
+    ViewData["ProjectId"] = Model.ProjectId;
+    ViewData["Brand"] = "🎓 Hakamlar paneli";
+}
+
+<p><a asp-controller="Judge" asp-action="Dashboard">&larr; Loyihalar</a></p>
+<h1 class="page-title">@Model.ProjectName</h1>
+<p class="page-subtitle">Taqdimotchini tanlang va mezonlar bo'yicha baholang. Tartib operatori tartibni o'zgartirsa, bu sahifa avtomatik yangilanadi.</p>
+
+@if (Model.Presentations.Count == 0)
+{
+    <div class="card empty-state">Bu loyihada hali taqdimotlar yo'q.</div>
+}
+else
+{
+    <div class="card">
+        @foreach (var presentation in Model.Presentations)
+        {
+            <div class="presentation-row">
+                <div>
+                    <div class="presentation-name">@presentation.PresenterFullName</div>
+                    <div class="presentation-title">@presentation.Title</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:14px;">
+                    @if (presentation.FullyScored)
+                    {
+                        <span class="badge badge-success">Baholandi</span>
+                    }
+                    else
+                    {
+                        <span class="badge badge-pending">Baholanmagan</span>
+                    }
+                    <a class="btn" asp-controller="Judge" asp-action="Evaluate"
+                       asp-route-judgeAssignmentId="@Model.JudgeAssignmentId"
+                       asp-route-presentationId="@presentation.PresentationId">Baholash</a>
+                </div>
+            </div>
+        }
+    </div>
+}

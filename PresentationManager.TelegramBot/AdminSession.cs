@@ -16,8 +16,8 @@ public enum AdminStep
 /// <summary>Per-chat progress through an Admin's read/report + basic-management flow, once their chat is
 /// linked to a desktop <see cref="PresentationManager.Domain.Entities.User"/> account (see
 /// <see cref="PresentationManager.Application.Services.AdminLinkService"/>) — kept separate from
-/// <see cref="ChatSession"/>/<see cref="JudgeSession"/> since a chat is only ever in one flow at a time but
-/// the three shapes don't overlap.</summary>
+/// <see cref="ChatSession"/> since a chat is only ever in one flow at a time but the two shapes don't
+/// overlap.</summary>
 public sealed class AdminSession
 {
     public AdminStep Step { get; set; } = AdminStep.MainMenu;

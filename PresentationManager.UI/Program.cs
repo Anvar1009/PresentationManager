@@ -95,11 +95,13 @@ static class Program
                 // JudgesController), so there is no client-side equivalent of the old JudgeAssignmentNotifier
                 // to register anymore.
                 AddApiHttpClient<ITelegramSender, HttpTelegramSender>(services, apiBaseUrl);
-                AddApiHttpClient<OrderRandomizerClient, OrderRandomizerClient>(services, apiBaseUrl);
 
                 // Built (not connected) here; AdminForm connects it once AuthSession.Token is actually set
                 // (after login) - see OrderHubClient's own remarks. Must resolve the same AuthSession
-                // singleton LoginForm populates (line ~73), not a fresh instance.
+                // singleton LoginForm populates (line ~73), not a fresh instance. Only ever a *listener*
+                // here - the "Tartib operatori" role that *triggers* a randomize moved to the web platform
+                // (PresentationManager.API's OrderController), so this desktop process has no client that
+                // calls the randomize endpoint itself anymore.
                 services.AddSingleton(sp => new OrderHubClient(apiBaseUrl, sp.GetRequiredService<AuthSession>()));
 
                 // Purely local audio playback - never had anything to do with the database, so it stays a
@@ -122,7 +124,6 @@ static class Program
                 services.AddSingleton<AdminForm>();
                 services.AddSingleton<AdminPanelForm>();
                 services.AddSingleton<SuperAdminPanelForm>();
-                services.AddSingleton<OrderOperatorForm>();
             })
             .Build();
 
@@ -177,6 +178,23 @@ static class Program
             host.Services.GetRequiredService<ITelegramSender>());
         if (loginForm.ShowDialog() == DialogResult.OK && loginForm.AuthenticatedUser is { } user)
         {
+            // Judge and OrderOperator are both web-only (see UserRole.Judge's doc comment - OrderOperator
+            // moved there too, so its "Tartib operatori" dashboard is PresentationManager.API's
+            // OrderController, not a desktop form anymore) - the desktop LoginForm has no way to know that
+            // ahead of a successful password check, so this is caught here instead of inside the switch
+            // below, with a friendly explanation rather than the "Unknown role" exception every other
+            // truly-unexpected value still falls into.
+            if (user.Role is UserRole.Judge or UserRole.OrderOperator)
+            {
+                MessageBox.Show(
+                    "Bu hisob faqat veb-sahifa orqali kiradi, desktop dasturga emas.",
+                    "Kirish rad etildi",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                Task.Run(() => host.StopAsync()).GetAwaiter().GetResult();
+                return;
+            }
+
             Form mainForm = user.Role switch
             {
                 // All three role forms are DI singletons built before login happens, so none of them has a
@@ -187,7 +205,6 @@ static class Program
                 UserRole.Operator => WithCurrentOperatorUser(host.Services.GetRequiredService<AdminForm>(), user),
                 UserRole.Admin => WithCurrentAdminUser(host.Services.GetRequiredService<AdminPanelForm>(), user),
                 UserRole.SuperAdmin => WithCurrentSuperAdminUser(host.Services.GetRequiredService<SuperAdminPanelForm>(), user),
-                UserRole.OrderOperator => WithCurrentOrderOperatorUser(host.Services.GetRequiredService<OrderOperatorForm>(), user),
                 _ => throw new InvalidOperationException($"Unknown role: {user.Role}")
             };
 
@@ -209,12 +226,6 @@ static class Program
         }
 
         static SuperAdminPanelForm WithCurrentSuperAdminUser(SuperAdminPanelForm form, User user)
-        {
-            form.SetCurrentUser(user);
-            return form;
-        }
-
-        static OrderOperatorForm WithCurrentOrderOperatorUser(OrderOperatorForm form, User user)
         {
             form.SetCurrentUser(user);
             return form;
