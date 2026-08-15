@@ -17,7 +17,15 @@ public sealed class PresenterAssignmentManagementForm : Form
     private readonly IPresenterRepository _presenterRepository;
     private readonly int _projectId;
     private readonly ListBox _listBox;
+    private readonly TextBox _searchBox;
+
+    /// <summary>Mirrors <see cref="_listBox"/>'s items in the same order - what a selected row resolves back
+    /// to. <see cref="_allAssignments"/> is the unfiltered source <see cref="ApplyFilter"/> re-applies on
+    /// every <see cref="_searchBox"/> keystroke without re-fetching; <see cref="OnAssignClick"/> also reads
+    /// from it (not <see cref="_assignments"/>) so an active search never hides an already-assigned presenter
+    /// from the "already assigned" exclusion check.</summary>
     private List<PresenterProjectAssignment> _assignments = [];
+    private List<PresenterProjectAssignment> _allAssignments = [];
     private Dictionary<int, Presenter> _presentersById = [];
 
     public PresenterAssignmentManagementForm(PresenterAssignmentService assignmentService, IPresenterRepository presenterRepository, int projectId, string projectName)
@@ -59,6 +67,18 @@ public sealed class PresenterAssignmentManagementForm : Form
         var listWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 4, 16, 4) };
         listWrap.Controls.Add(_listBox);
 
+        _searchBox = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            PlaceholderText = "Ism yoki telefon bo'yicha qidirish...",
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        _searchBox.TextChanged += (_, _) => ApplyFilter();
+        var searchWrap = new Panel { Dock = DockStyle.Top, Height = 40, Padding = new Padding(16, 4, 16, 0) };
+        searchWrap.Controls.Add(_searchBox);
+
         var toolbarWrap = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(16, 0, 16, 8) };
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
@@ -76,6 +96,7 @@ public sealed class PresenterAssignmentManagementForm : Form
         closeWrap.Controls.Add(closeButton);
 
         Controls.Add(listWrap);
+        Controls.Add(searchWrap);
         Controls.Add(toolbarWrap);
         Controls.Add(closeWrap);
         Controls.Add(header);
@@ -86,9 +107,24 @@ public sealed class PresenterAssignmentManagementForm : Form
 
     private async Task LoadAsync()
     {
-        _assignments = await _assignmentService.GetByProjectIdAsync(_projectId);
+        _allAssignments = await _assignmentService.GetByProjectIdAsync(_projectId);
         var presenters = await _presenterRepository.GetAllAsync();
         _presentersById = presenters.ToDictionary(p => p.Id);
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        var filter = _searchBox.Text.Trim();
+        _assignments = string.IsNullOrEmpty(filter)
+            ? _allAssignments
+            : _allAssignments.Where(a =>
+                {
+                    var presenter = _presentersById.GetValueOrDefault(a.PresenterId);
+                    return (presenter?.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false)
+                        || (presenter?.PhoneNumber?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false);
+                })
+                .ToList();
 
         _listBox.BeginUpdate();
         _listBox.Items.Clear();
@@ -111,7 +147,7 @@ public sealed class PresenterAssignmentManagementForm : Form
     private async void OnAssignClick(object? sender, EventArgs e)
     {
         var registered = await _presenterRepository.GetAllAsync();
-        var alreadyAssignedIds = _assignments.Select(a => a.PresenterId).ToHashSet();
+        var alreadyAssignedIds = _allAssignments.Select(a => a.PresenterId).ToHashSet();
         var candidates = registered.Where(p => !alreadyAssignedIds.Contains(p.Id)).ToList();
 
         if (candidates.Count == 0)

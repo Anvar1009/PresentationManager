@@ -45,12 +45,30 @@ public sealed class AdminPanelForm : Form
     private readonly DataGridView _participantsGrid;
     private readonly DataGridView _presentationsGrid;
     private readonly DataGridView _finalScoresGrid;
+    private readonly TextBox _participantsSearchBox;
+    private readonly TextBox _presentationsSearchBox;
+    private readonly TextBox _finalScoresSearchBox;
     private List<Project> _projects = [];
+
+    /// <summary>Unfiltered participants for the selected project - <see cref="ApplyParticipantsFilter"/>'s
+    /// source, re-applied on every <see cref="_participantsSearchBox"/> keystroke without re-fetching.</summary>
+    private List<ProjectParticipant> _allParticipants = [];
+
+    /// <summary>Unfiltered presentations for the selected project - <see cref="ApplyPresentationsFilter"/>'s
+    /// source; <see cref="_currentPresentations"/> is what's actually bound to the grid right now (possibly
+    /// filtered), not this.</summary>
+    private List<Presentation> _allPresentations = [];
 
     /// <summary>Mirrors <see cref="_presentationsGrid"/>'s bound rows in the same order, since the grid is
     /// bound to an anonymous-object projection (display-only) that loses <see cref="Presentation.FilePath"/> -
     /// this is what a selected row is resolved back to for <see cref="OnOpenPresentationFileClick"/>.</summary>
     private List<Presentation> _currentPresentations = [];
+
+    private List<EvaluationCriterion> _finalScoreCriteria = [];
+
+    /// <summary>Unfiltered final-score rows for the selected project - <see cref="ApplyFinalScoresFilter"/>'s
+    /// source.</summary>
+    private List<PresentationScoreSummary> _finalScoreSummaries = [];
 
     /// <summary>Set via <see cref="SetCurrentUser"/> right after this singleton form is resolved from DI in
     /// Program.cs (it's constructed without any user context, since login happens after the DI container is
@@ -196,8 +214,13 @@ public sealed class AdminPanelForm : Form
         var contentPanel = new Panel { Dock = DockStyle.Fill, BackColor = LightColors.Background };
 
         _participantsGrid = LightGrid();
+        _participantsSearchBox = SearchBox("Ism yoki telefon bo'yicha qidirish...");
+        _participantsSearchBox.TextChanged += (_, _) => ApplyParticipantsFilter();
+        var participantsToolbar = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(12, 8, 12, 8) };
+        participantsToolbar.Controls.Add(_participantsSearchBox);
         _participantsSection = new Panel { Dock = DockStyle.Fill, Visible = false };
         _participantsSection.Controls.Add(_participantsGrid);
+        _participantsSection.Controls.Add(participantsToolbar);
 
         _presentationsGrid = LightGrid();
         _presentationsGrid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) OnOpenPresentationFileClick(null, EventArgs.Empty); };
@@ -210,6 +233,11 @@ public sealed class AdminPanelForm : Form
         };
         openFileButton.FlatAppearance.BorderSize = 0;
         openFileButton.Click += OnOpenPresentationFileClick;
+        _presentationsSearchBox = SearchBox("Taqdimotchi yoki sarlavha bo'yicha qidirish...");
+        _presentationsSearchBox.TextChanged += (_, _) => ApplyPresentationsFilter();
+        var presentationsSearchWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 0, 0, 0) };
+        presentationsSearchWrap.Controls.Add(_presentationsSearchBox);
+        presentationsToolbar.Controls.Add(presentationsSearchWrap);
         presentationsToolbar.Controls.Add(openFileButton);
         _presentationsSection = new Panel { Dock = DockStyle.Fill, Visible = false };
         _presentationsSection.Controls.Add(_presentationsGrid);
@@ -225,6 +253,11 @@ public sealed class AdminPanelForm : Form
         };
         exportButton.FlatAppearance.BorderSize = 0;
         exportButton.Click += OnExportFinalScoresClick;
+        _finalScoresSearchBox = SearchBox("Taqdimotchi yoki sarlavha bo'yicha qidirish...");
+        _finalScoresSearchBox.TextChanged += (_, _) => ApplyFinalScoresFilter();
+        var finalScoresSearchWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 0, 0, 0) };
+        finalScoresSearchWrap.Controls.Add(_finalScoresSearchBox);
+        exportToolbar.Controls.Add(finalScoresSearchWrap);
         exportToolbar.Controls.Add(exportButton);
         _finalScoresSection = new Panel { Dock = DockStyle.Fill, Visible = false };
         _finalScoresSection.Controls.Add(_finalScoresGrid);
@@ -270,6 +303,16 @@ public sealed class AdminPanelForm : Form
         _userMenu.Items.Clear();
         _userMenu.Items.AddRange(UserMenuHelper.BuildItems(_currentUser!, _userService, this, RefreshUserMenu));
     }
+
+    private static TextBox SearchBox(string placeholder) => new()
+    {
+        Dock = DockStyle.Fill,
+        PlaceholderText = placeholder,
+        BackColor = LightColors.PanelAlt,
+        ForeColor = LightColors.TextPrimary,
+        BorderStyle = BorderStyle.FixedSingle,
+        Font = new Font("Segoe UI", 9.5f)
+    };
 
     private static DataGridView LightGrid() => DataGridViewTheme.CreateReadOnlyGrid(
         background: LightColors.Panel,
@@ -320,17 +363,42 @@ public sealed class AdminPanelForm : Form
 
     private async Task RefreshParticipantsAsync(int projectId)
     {
-        var participants = await _projectService.GetParticipantsAsync(projectId);
-        _participantsGrid.DataSource = participants
+        _allParticipants = await _projectService.GetParticipantsAsync(projectId);
+        ApplyParticipantsFilter();
+    }
+
+    private void ApplyParticipantsFilter()
+    {
+        var filter = _participantsSearchBox.Text.Trim();
+        var filtered = string.IsNullOrEmpty(filter)
+            ? _allParticipants
+            : _allParticipants.Where(p =>
+                    p.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || (p.PhoneNumber?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+
+        _participantsGrid.DataSource = filtered
             .Select(p => new { Ism = p.FullName, Telefon = p.PhoneNumber ?? "-", Taqdimotlar = p.PresentationCount })
             .ToList();
     }
 
     private async Task RefreshPresentationsAsync(int projectId)
     {
-        var presentations = await _queueService.GetAllAsync(projectId);
-        _currentPresentations = presentations;
-        _presentationsGrid.DataSource = presentations
+        _allPresentations = await _queueService.GetAllAsync(projectId);
+        ApplyPresentationsFilter();
+    }
+
+    private void ApplyPresentationsFilter()
+    {
+        var filter = _presentationsSearchBox.Text.Trim();
+        _currentPresentations = string.IsNullOrEmpty(filter)
+            ? _allPresentations
+            : _allPresentations.Where(p =>
+                    p.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || p.Title.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        _presentationsGrid.DataSource = _currentPresentations
             .Select(p => new
             {
                 Taqdimotchi = p.FullName,
@@ -374,8 +442,20 @@ public sealed class AdminPanelForm : Form
 
     private async Task RefreshFinalScoresAsync(int projectId)
     {
-        var criteria = await _criterionService.GetByProjectIdAsync(projectId);
-        var summaries = await _scoreService.GetFinalScoresAsync(projectId);
+        _finalScoreCriteria = await _criterionService.GetByProjectIdAsync(projectId);
+        _finalScoreSummaries = await _scoreService.GetFinalScoresAsync(projectId);
+        ApplyFinalScoresFilter();
+    }
+
+    private void ApplyFinalScoresFilter()
+    {
+        var filter = _finalScoresSearchBox.Text.Trim();
+        var filtered = string.IsNullOrEmpty(filter)
+            ? _finalScoreSummaries
+            : _finalScoreSummaries.Where(s =>
+                    s.PresenterFullName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || s.Title.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
         _finalScoresGrid.DataSource = null;
         _finalScoresGrid.Columns.Clear();
@@ -383,16 +463,16 @@ public sealed class AdminPanelForm : Form
 
         _finalScoresGrid.Columns.Add("Presenter", "Taqdimotchi");
         _finalScoresGrid.Columns.Add("Title", "Sarlavha");
-        foreach (var criterion in criteria)
+        foreach (var criterion in _finalScoreCriteria)
         {
             _finalScoresGrid.Columns.Add($"c{criterion.Id}", $"{criterion.Name} (max {criterion.MaxScore})");
         }
         _finalScoresGrid.Columns.Add("Total", "Jami");
 
-        foreach (var summary in summaries)
+        foreach (var summary in filtered)
         {
             var row = new List<object> { summary.PresenterFullName, summary.Title };
-            row.AddRange(criteria.Select(c => summary.AverageByCriterionId.GetValueOrDefault(c.Id, 0).ToString("0.##")));
+            row.AddRange(_finalScoreCriteria.Select(c => summary.AverageByCriterionId.GetValueOrDefault(c.Id, 0).ToString("0.##")));
             row.Add(summary.Total.ToString("0.##"));
             _finalScoresGrid.Rows.Add(row.ToArray());
         }

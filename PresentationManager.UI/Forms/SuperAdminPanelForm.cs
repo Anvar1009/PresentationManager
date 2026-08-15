@@ -38,6 +38,7 @@ public sealed class SuperAdminPanelForm : Form
     private readonly SectionNavListBox _sectionList;
     private readonly Label _sectionTitleLabel;
     private readonly Label _rowCountLabel;
+    private readonly TextBox _searchBox;
     private readonly DataGridView _grid;
     private readonly RoundedButton _addUserButton;
     private readonly RoundedButton _editUserButton;
@@ -66,6 +67,22 @@ public sealed class SuperAdminPanelForm : Form
     /// <summary>Same idea as <see cref="_currentPresentations"/>, for the "Foydalanuvchilar" section — lets a
     /// selected grid row be resolved back to its <see cref="User"/> for <see cref="OnEditUserClick"/>.</summary>
     private List<User> _currentUsers = [];
+
+    // ---------- Unfiltered per-section data, cached so _searchBox's TextChanged can re-filter and rebind
+    // the shared _grid on every keystroke without re-fetching from the API. Only ever one of these is
+    // "current" at a time (whichever section is selected) - see ApplyCurrentSectionFilter. ----------
+    private List<Project> _allProjects = [];
+    private List<Presentation> _allPresentations = [];
+    private Dictionary<int, string> _presentationProjectNames = [];
+    private List<Presenter> _allPresenters = [];
+    private List<Judge> _allJudges = [];
+    private Dictionary<int, string> _judgeProjectNames = [];
+    private List<User> _allUsers = [];
+    private List<Score> _allScores = [];
+    private Dictionary<int, Presentation> _scorePresentations = [];
+    private Dictionary<int, Judge> _scoreJudges = [];
+    private Dictionary<int, EvaluationCriterion> _scoreCriteria = [];
+    private List<HistoryEntry> _allHistory = [];
 
     public SuperAdminPanelForm(
         ProjectService projectService,
@@ -148,7 +165,13 @@ public sealed class SuperAdminPanelForm : Form
         // ---------- Left nav ----------
         _sectionList = new SectionNavListBox();
         _sectionList.SetSections(Sections);
-        _sectionList.SelectedIndexChanged += async (_, _) => await RefreshSelectedSectionAsync();
+        _sectionList.SelectedIndexChanged += async (_, _) =>
+        {
+            // A search relevant to the previous section rarely means anything for the new one - starting
+            // fresh avoids landing on an unrelated section that looks unexpectedly empty.
+            _searchBox.Text = string.Empty;
+            await RefreshSelectedSectionAsync();
+        };
 
         // Populated once the logged-in user is known - see SetCurrentUser. Sits below the section list
         // (Loyihalar/.../Jurnal) rather than up in the header, so account info/Chiqish reads as belonging to
@@ -295,6 +318,18 @@ public sealed class SuperAdminPanelForm : Form
 
         var cardHeaderRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
 
+        _searchBox = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            PlaceholderText = "Qidirish...",
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        _searchBox.TextChanged += (_, _) => ApplyCurrentSectionFilter();
+        var searchBarWrap = new Panel { Dock = DockStyle.Top, Height = 44, Padding = new Padding(20, 8, 20, 8) };
+        searchBarWrap.Controls.Add(_searchBox);
+
         _grid = DataGridViewTheme.CreateReadOnlyGrid(
             background: LightColors.Panel,
             alternatingBackground: LightColors.PanelAlt,
@@ -309,6 +344,7 @@ public sealed class SuperAdminPanelForm : Form
         gridWrap.Controls.Add(_grid);
 
         card.Controls.Add(gridWrap);
+        card.Controls.Add(searchBarWrap);
         card.Controls.Add(cardHeaderRule);
         card.Controls.Add(cardHeader);
         contentPanel.Controls.Add(card);
@@ -390,10 +426,45 @@ public sealed class SuperAdminPanelForm : Form
         }
     }
 
+    /// <summary>Re-filters and rebinds <see cref="_grid"/> from whichever section's already-loaded data is
+    /// current, without re-fetching - called on every <see cref="_searchBox"/> keystroke. Each Load*Async
+    /// below calls its own Apply*Filter counterpart once after fetching, so this only needs to route to the
+    /// right one by section label.</summary>
+    private void ApplyCurrentSectionFilter()
+    {
+        if (_sectionList.SelectedItem is not (string, string label))
+        {
+            return;
+        }
+
+        switch (label)
+        {
+            case "Loyihalar": ApplyProjectsFilter(); break;
+            case "Taqdimotlar": ApplyPresentationsFilter(); break;
+            case "Taqdimotchilar": ApplyPresentersFilter(); break;
+            case "Hakamlar": ApplyJudgesFilter(); break;
+            case "Foydalanuvchilar": ApplyUsersFilter(); break;
+            case "Baholar": ApplyScoresFilter(); break;
+            case "Jurnal": ApplyHistoryFilter(); break;
+        }
+
+        _rowCountLabel.Text = $"{_grid.RowCount} ta yozuv";
+    }
+
     private async Task LoadProjectsAsync()
     {
-        var projects = await _projectService.GetAllAsync();
-        _grid.DataSource = projects
+        _allProjects = await _projectService.GetAllAsync();
+        ApplyProjectsFilter();
+    }
+
+    private void ApplyProjectsFilter()
+    {
+        var filter = _searchBox.Text.Trim();
+        var filtered = string.IsNullOrEmpty(filter)
+            ? _allProjects
+            : _allProjects.Where(p => p.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        _grid.DataSource = filtered
             .Select(p => new
             {
                 Nomi = p.Name,
@@ -407,14 +478,26 @@ public sealed class SuperAdminPanelForm : Form
 
     private async Task LoadPresentationsAsync()
     {
-        var presentations = await _queueService.GetAllAsync();
-        var projects = (await _projectService.GetAllAsync()).ToDictionary(p => p.Id, p => p.Name);
+        _allPresentations = await _queueService.GetAllAsync();
+        _presentationProjectNames = (await _projectService.GetAllAsync()).ToDictionary(p => p.Id, p => p.Name);
+        ApplyPresentationsFilter();
+    }
 
-        _currentPresentations = presentations;
-        _grid.DataSource = presentations
+    private void ApplyPresentationsFilter()
+    {
+        var filter = _searchBox.Text.Trim();
+        _currentPresentations = string.IsNullOrEmpty(filter)
+            ? _allPresentations
+            : _allPresentations.Where(p =>
+                    p.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || p.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || _presentationProjectNames.GetValueOrDefault(p.ProjectId, "?").Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        _grid.DataSource = _currentPresentations
             .Select(p => new
             {
-                Loyiha = projects.GetValueOrDefault(p.ProjectId, "?"),
+                Loyiha = _presentationProjectNames.GetValueOrDefault(p.ProjectId, "?"),
                 Taqdimotchi = p.FullName,
                 Sarlavha = p.Title,
                 Holat = UzbekText.StatusLabel(p.Status),
@@ -480,8 +563,22 @@ public sealed class SuperAdminPanelForm : Form
 
     private async Task LoadPresentersAsync()
     {
-        var presenters = await _presenterRepository.GetAllAsync();
-        _grid.DataSource = presenters
+        _allPresenters = await _presenterRepository.GetAllAsync();
+        ApplyPresentersFilter();
+    }
+
+    private void ApplyPresentersFilter()
+    {
+        var filter = _searchBox.Text.Trim();
+        var filtered = string.IsNullOrEmpty(filter)
+            ? _allPresenters
+            : _allPresenters.Where(p =>
+                    p.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || (p.PhoneNumber?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (p.TelegramUsername?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+
+        _grid.DataSource = filtered
             .Select(p => new
             {
                 Ism = p.FullName,
@@ -494,13 +591,26 @@ public sealed class SuperAdminPanelForm : Form
 
     private async Task LoadJudgesAsync()
     {
-        var judges = await _judgeService.GetAllAsync();
-        var projects = (await _projectService.GetAllAsync()).ToDictionary(p => p.Id, p => p.Name);
+        _allJudges = await _judgeService.GetAllAsync();
+        _judgeProjectNames = (await _projectService.GetAllAsync()).ToDictionary(p => p.Id, p => p.Name);
+        ApplyJudgesFilter();
+    }
 
-        _grid.DataSource = judges
+    private void ApplyJudgesFilter()
+    {
+        var filter = _searchBox.Text.Trim();
+        var filtered = string.IsNullOrEmpty(filter)
+            ? _allJudges
+            : _allJudges.Where(j =>
+                    (j.FullName?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || j.PhoneNumber.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || _judgeProjectNames.GetValueOrDefault(j.ProjectId, "?").Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        _grid.DataSource = filtered
             .Select(j => new
             {
-                Loyiha = projects.GetValueOrDefault(j.ProjectId, "?"),
+                Loyiha = _judgeProjectNames.GetValueOrDefault(j.ProjectId, "?"),
                 Telefon = j.PhoneNumber,
                 Ism = j.FullName ?? "-",
                 Holat = j.TelegramChatId is not null ? "Bog'langan" : "Bog'lanmagan"
@@ -510,9 +620,21 @@ public sealed class SuperAdminPanelForm : Form
 
     private async Task LoadUsersAsync()
     {
-        var users = await _userService.GetAllAsync();
-        _currentUsers = users;
-        _grid.DataSource = users
+        _allUsers = await _userService.GetAllAsync();
+        ApplyUsersFilter();
+    }
+
+    private void ApplyUsersFilter()
+    {
+        var filter = _searchBox.Text.Trim();
+        _currentUsers = string.IsNullOrEmpty(filter)
+            ? _allUsers
+            : _allUsers.Where(u =>
+                    u.Username.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || u.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        _grid.DataSource = _currentUsers
             .Select(u => new
             {
                 Login = u.Username,
@@ -526,17 +648,30 @@ public sealed class SuperAdminPanelForm : Form
 
     private async Task LoadScoresAsync()
     {
-        var scores = await _scoreService.GetAllAsync();
-        var presentations = (await _queueService.GetAllAsync()).ToDictionary(p => p.Id);
-        var judges = (await _judgeService.GetAllAsync()).ToDictionary(j => j.Id);
-        var criteria = (await _criterionService.GetAllAsync()).ToDictionary(c => c.Id);
+        _allScores = await _scoreService.GetAllAsync();
+        _scorePresentations = (await _queueService.GetAllAsync()).ToDictionary(p => p.Id);
+        _scoreJudges = (await _judgeService.GetAllAsync()).ToDictionary(j => j.Id);
+        _scoreCriteria = (await _criterionService.GetAllAsync()).ToDictionary(c => c.Id);
+        ApplyScoresFilter();
+    }
 
-        _grid.DataSource = scores
+    private void ApplyScoresFilter()
+    {
+        var filter = _searchBox.Text.Trim();
+        var filtered = string.IsNullOrEmpty(filter)
+            ? _allScores
+            : _allScores.Where(s =>
+                    (_scorePresentations.TryGetValue(s.PresentationId, out var p) && p.Title.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                    || (_scoreJudges.TryGetValue(s.JudgeId, out var j) && j.PhoneNumber.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                    || (_scoreCriteria.TryGetValue(s.CriterionId, out var c) && c.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+
+        _grid.DataSource = filtered
             .Select(s => new
             {
-                Taqdimot = presentations.TryGetValue(s.PresentationId, out var p) ? p.Title : "?",
-                Hakam = judges.TryGetValue(s.JudgeId, out var j) ? j.PhoneNumber : "?",
-                Mezon = criteria.TryGetValue(s.CriterionId, out var c) ? c.Name : "?",
+                Taqdimot = _scorePresentations.TryGetValue(s.PresentationId, out var p) ? p.Title : "?",
+                Hakam = _scoreJudges.TryGetValue(s.JudgeId, out var j) ? j.PhoneNumber : "?",
+                Mezon = _scoreCriteria.TryGetValue(s.CriterionId, out var c) ? c.Name : "?",
                 Ball = s.Value,
                 YangilanganVaqt = s.UpdatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
             })
@@ -545,8 +680,18 @@ public sealed class SuperAdminPanelForm : Form
 
     private async Task LoadHistoryAsync()
     {
-        var history = await _historyRepository.GetRecentAsync(200);
-        _grid.DataSource = history
+        _allHistory = await _historyRepository.GetRecentAsync(200);
+        ApplyHistoryFilter();
+    }
+
+    private void ApplyHistoryFilter()
+    {
+        var filter = _searchBox.Text.Trim();
+        var filtered = string.IsNullOrEmpty(filter)
+            ? _allHistory
+            : _allHistory.Where(h => h.Message.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        _grid.DataSource = filtered
             .Select(h => new { Vaqt = h.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss"), Xabar = h.Message })
             .ToList();
     }

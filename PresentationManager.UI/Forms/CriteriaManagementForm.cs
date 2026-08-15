@@ -11,7 +11,13 @@ public sealed class CriteriaManagementForm : Form
     private readonly CriterionService _criterionService;
     private readonly int _projectId;
     private readonly ListBox _listBox;
+    private readonly TextBox _searchBox;
+
+    /// <summary>Mirrors <see cref="_listBox"/>'s items in the same order - what a selected row resolves back
+    /// to. <see cref="_allCriteria"/> is the unfiltered source <see cref="ApplyFilter"/> re-applies on every
+    /// <see cref="_searchBox"/> keystroke without re-fetching.</summary>
     private List<EvaluationCriterion> _criteria = [];
+    private List<EvaluationCriterion> _allCriteria = [];
 
     public CriteriaManagementForm(CriterionService criterionService, int projectId, string projectName)
     {
@@ -38,8 +44,20 @@ public sealed class CriteriaManagementForm : Form
             Font = new Font("Segoe UI", 10.5f)
         };
         ListBoxTheme.ApplyRowDividers(_listBox);
-        var listWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 16, 16, 4) };
+        var listWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 4, 16, 4) };
         listWrap.Controls.Add(_listBox);
+
+        _searchBox = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            PlaceholderText = "Nomi bo'yicha qidirish...",
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        _searchBox.TextChanged += (_, _) => ApplyFilter();
+        var searchWrap = new Panel { Dock = DockStyle.Top, Height = 40, Padding = new Padding(16, 12, 16, 0) };
+        searchWrap.Controls.Add(_searchBox);
 
         var toolbarWrap = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(16, 0, 16, 8) };
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
@@ -58,6 +76,7 @@ public sealed class CriteriaManagementForm : Form
         closeWrap.Controls.Add(closeButton);
 
         Controls.Add(listWrap);
+        Controls.Add(searchWrap);
         Controls.Add(toolbarWrap);
         Controls.Add(closeWrap);
         CancelButton = closeButton;
@@ -67,7 +86,16 @@ public sealed class CriteriaManagementForm : Form
 
     private async Task LoadAsync()
     {
-        _criteria = await _criterionService.GetByProjectIdAsync(_projectId);
+        _allCriteria = await _criterionService.GetByProjectIdAsync(_projectId);
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        var filter = _searchBox.Text.Trim();
+        _criteria = string.IsNullOrEmpty(filter)
+            ? _allCriteria
+            : _allCriteria.Where(c => c.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
 
         _listBox.BeginUpdate();
         _listBox.Items.Clear();
