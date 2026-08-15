@@ -75,6 +75,7 @@ public sealed class PresentationBotHostedService : BackgroundService
     private readonly PresentationQueueService _queueService;
     private readonly ISettingsRepository _settingsRepository;
     private readonly IPresenterRepository _presenterRepository;
+    private readonly PresenterAssignmentService _presenterAssignmentService;
     private readonly JudgeService _judgeService;
     private readonly ScoreService _scoreService;
     private readonly CriterionService _criterionService;
@@ -93,6 +94,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         PresentationQueueService queueService,
         ISettingsRepository settingsRepository,
         IPresenterRepository presenterRepository,
+        PresenterAssignmentService presenterAssignmentService,
         JudgeService judgeService,
         ScoreService scoreService,
         CriterionService criterionService,
@@ -104,6 +106,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         _queueService = queueService;
         _settingsRepository = settingsRepository;
         _presenterRepository = presenterRepository;
+        _presenterAssignmentService = presenterAssignmentService;
         _judgeService = judgeService;
         _scoreService = scoreService;
         _criterionService = criterionService;
@@ -273,7 +276,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         var presenter = await _presenterRepository.GetByTelegramChatIdAsync(chatId, ct);
         if (presenter is not null)
         {
-            await ShowProjectListAsync(botClient, chatId, presenter.Id, presenter.FullName, ct);
+            await ShowAssignedProjectsOrWaitAsync(botClient, chatId, presenter.Id, presenter.FullName, ct);
             return;
         }
 
@@ -346,23 +349,34 @@ public sealed class PresentationBotHostedService : BackgroundService
         }, ct);
 
         await botClient.SendMessage(chatId, "✅ Ro'yxatdan o'tish yakunlandi!", replyMarkup: new ReplyKeyboardRemove(), cancellationToken: ct);
-        await ShowProjectListAsync(botClient, chatId, presenter.Id, presenter.FullName, ct);
+        await ShowAssignedProjectsOrWaitAsync(botClient, chatId, presenter.Id, presenter.FullName, ct);
     }
 
     // ---------- Presenter upload flow ----------
 
-    private async Task ShowProjectListAsync(ITelegramBotClient botClient, long chatId, int presenterId, string fullName, CancellationToken ct)
+    /// <summary>Gate for the whole upload flow: a presenter can only ever see (and open a session for) a
+    /// project Admin has approved them for in the Admin panel (<see cref="PresenterAssignmentService"/>) - an
+    /// unapproved presenter gets a waiting message instead and no session is opened, so they can never reach
+    /// <see cref="SessionStep.AwaitingFile"/> at all.</summary>
+    private async Task ShowAssignedProjectsOrWaitAsync(ITelegramBotClient botClient, long chatId, int presenterId, string fullName, CancellationToken ct)
     {
-        var projects = await _projectService.GetAllAsync(ct);
-        if (projects.Count == 0)
+        var assignedProjects = await _presenterAssignmentService.GetAssignedProjectsAsync(presenterId, ct);
+        if (assignedProjects.Count == 0)
         {
-            await botClient.SendMessage(chatId, "Hozircha loyihalar mavjud emas. Keyinroq urinib ko'ring.", cancellationToken: ct);
+            await botClient.SendMessage(chatId,
+                "Hozircha sizni birorta loyihaga biriktirishmagan. Administrator sizni loyihaga biriktirgach, shu yerga xabar keladi va taqdimot yuborishingiz mumkin bo'ladi.",
+                cancellationToken: ct);
             return;
         }
 
+        await ShowProjectListAsync(botClient, chatId, presenterId, fullName, assignedProjects, ct);
+    }
+
+    private async Task ShowProjectListAsync(ITelegramBotClient botClient, long chatId, int presenterId, string fullName, List<Project> assignedProjects, CancellationToken ct)
+    {
         _sessions[chatId] = new ChatSession { Step = SessionStep.AwaitingProject, PresenterId = presenterId, FullName = fullName };
 
-        var buttons = projects
+        var buttons = assignedProjects
             .Select(p => new[] { InlineKeyboardButton.WithCallbackData(p.Name, $"project:{p.Id}") })
             .ToArray();
 
@@ -391,6 +405,14 @@ public sealed class PresentationBotHostedService : BackgroundService
         if (project is null)
         {
             await botClient.AnswerCallbackQuery(callbackQuery.Id, "Bu loyiha endi mavjud emas.", cancellationToken: ct);
+            return;
+        }
+
+        // Re-verified rather than trusting the button list this callback came from - Admin may have revoked
+        // the approval in the moment between the project picker being shown and this tap.
+        if (session.PresenterId is not { } presenterId || !await _presenterAssignmentService.IsAssignedAsync(project.Id, presenterId, ct))
+        {
+            await botClient.AnswerCallbackQuery(callbackQuery.Id, "Bu loyihaga ruxsatingiz yo'q.", cancellationToken: ct);
             return;
         }
 

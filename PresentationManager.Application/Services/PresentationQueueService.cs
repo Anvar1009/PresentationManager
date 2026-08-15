@@ -10,11 +10,16 @@ public sealed class PresentationQueueService
 {
     private readonly IPresentationRepository _presentationRepository;
     private readonly IFileStorageService _fileStorageService;
+    private readonly IPresenterProjectAssignmentRepository _assignmentRepository;
 
-    public PresentationQueueService(IPresentationRepository presentationRepository, IFileStorageService fileStorageService)
+    public PresentationQueueService(
+        IPresentationRepository presentationRepository,
+        IFileStorageService fileStorageService,
+        IPresenterProjectAssignmentRepository assignmentRepository)
     {
         _presentationRepository = presentationRepository;
         _fileStorageService = fileStorageService;
+        _assignmentRepository = assignmentRepository;
     }
 
     public Task<List<Presentation>> GetAllAsync(int projectId, CancellationToken ct = default) =>
@@ -36,6 +41,15 @@ public sealed class PresentationQueueService
         int extraDiscussionTimeSeconds = 0,
         int? presenterId = null, CancellationToken ct = default)
     {
+        // Defense-in-depth: the Telegram bot itself only ever offers projects a presenter is approved for
+        // (see PresentationBotHostedService.ShowProjectListAsync), but this re-checks server-side in case an
+        // approval was revoked mid-session or a stale/forged callback slipped through. Operator-added
+        // presentations (presenterId null - no bot registration to check against) are unaffected.
+        if (presenterId is { } id && !await _assignmentRepository.ExistsAsync(projectId, id, ct))
+        {
+            throw new InvalidOperationException("Siz bu loyihaga hali biriktirilmagansiz.");
+        }
+
         var storedRelativePath = await _fileStorageService.SaveFileAsync(sourceFilePath, ct);
         var existing = await _presentationRepository.GetAllOrderedAsync(projectId, ct);
 

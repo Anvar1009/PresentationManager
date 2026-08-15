@@ -42,6 +42,7 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddSingleton<ICriterionRepository, CriterionRepository>();
         services.AddSingleton<IJudgeRepository, JudgeRepository>();
         services.AddSingleton<IScoreRepository, ScoreRepository>();
+        services.AddSingleton<IPresenterProjectAssignmentRepository, PresenterProjectAssignmentRepository>();
         services.AddSingleton<IFileStorageService>(_ => new FileStorageService(ResolveStorageRoot(context.Configuration)));
 
         services.AddSingleton<ProjectService>();
@@ -49,6 +50,7 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddSingleton<CriterionService>();
         services.AddSingleton<JudgeService>();
         services.AddSingleton<ScoreService>();
+        services.AddSingleton<PresenterAssignmentService>();
         services.AddSingleton<AdminLinkService>();
         services.AddSingleton<PresentationQueueService>();
 

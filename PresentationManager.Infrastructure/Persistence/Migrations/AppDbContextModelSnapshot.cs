@@ -251,6 +251,33 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.ToTable("Presenters", (string)null);
                 });
 
+            modelBuilder.Entity("PresentationManager.Domain.Entities.PresenterProjectAssignment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PresenterId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PresenterId");
+
+                    b.HasIndex("ProjectId", "PresenterId")
+                        .IsUnique();
+
+                    b.ToTable("PresenterProjectAssignments", (string)null);
+                });
+
             modelBuilder.Entity("PresentationManager.Domain.Entities.Project", b =>
                 {
                     b.Property<int>("Id")
@@ -413,6 +440,21 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("PresenterId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PresentationManager.Domain.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PresentationManager.Domain.Entities.PresenterProjectAssignment", b =>
+                {
+                    b.HasOne("PresentationManager.Domain.Entities.Presenter", null)
+                        .WithMany()
+                        .HasForeignKey("PresenterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("PresentationManager.Domain.Entities.Project", null)
                         .WithMany()

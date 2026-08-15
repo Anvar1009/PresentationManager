@@ -15,7 +15,13 @@ public sealed class PresentationManagementForm : Form
     private readonly ProjectService _projectService;
 
     private readonly DataGridView _grid;
+    private readonly TextBox _searchBox;
+
+    /// <summary>Mirrors <see cref="_grid"/>'s bound rows in the same order - what a selected row resolves
+    /// back to. <see cref="_allPresentations"/> is the unfiltered source <see cref="ApplyFilter"/> re-applies
+    /// on every keystroke without re-fetching.</summary>
     private List<Presentation> _presentations = [];
+    private List<Presentation> _allPresentations = [];
     private List<Project> _projects = [];
 
     public PresentationManagementForm(PresentationQueueService queueService, ProjectService projectService)
@@ -45,6 +51,18 @@ public sealed class PresentationManagementForm : Form
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) OnEditClick(this, EventArgs.Empty); };
         var gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 16, 16, 8) };
         gridWrap.Controls.Add(_grid);
+
+        _searchBox = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            PlaceholderText = "Loyiha, taqdimotchi yoki sarlavha bo'yicha qidirish...",
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        _searchBox.TextChanged += (_, _) => ApplyFilter();
+        var searchWrap = new Panel { Dock = DockStyle.Top, Height = 40, Padding = new Padding(16, 8, 16, 0) };
+        searchWrap.Controls.Add(_searchBox);
 
         var toolbarWrap = new Panel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(16, 0, 16, 8) };
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
@@ -87,6 +105,7 @@ public sealed class PresentationManagementForm : Form
         closeWrap.Controls.Add(closeButton);
 
         Controls.Add(gridWrap);
+        Controls.Add(searchWrap);
         Controls.Add(toolbarWrap);
         Controls.Add(closeWrap);
 
@@ -98,9 +117,22 @@ public sealed class PresentationManagementForm : Form
     private async Task RefreshAsync()
     {
         _projects = await _projectService.GetAllAsync();
-        var projectNames = _projects.ToDictionary(p => p.Id, p => p.Name);
+        _allPresentations = await _queueService.GetAllAsync();
+        ApplyFilter();
+    }
 
-        _presentations = await _queueService.GetAllAsync();
+    private void ApplyFilter()
+    {
+        var projectNames = _projects.ToDictionary(p => p.Id, p => p.Name);
+        var filter = _searchBox.Text.Trim();
+        _presentations = string.IsNullOrEmpty(filter)
+            ? _allPresentations
+            : _allPresentations.Where(p =>
+                    p.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || p.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || projectNames.GetValueOrDefault(p.ProjectId, "?").Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
         _grid.DataSource = _presentations
             .Select(p => new
             {

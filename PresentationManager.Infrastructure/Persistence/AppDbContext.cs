@@ -27,6 +27,8 @@ public class AppDbContext : DbContext
 
     public DbSet<Score> Scores => Set<Score>();
 
+    public DbSet<PresenterProjectAssignment> PresenterProjectAssignments => Set<PresenterProjectAssignment>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Project>(b =>
@@ -144,6 +146,21 @@ public class AppDbContext : DbContext
             b.HasOne<EvaluationCriterion>()
                 .WithMany()
                 .HasForeignKey(s => s.CriterionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PresenterProjectAssignment>(b =>
+        {
+            b.ToTable("PresenterProjectAssignments");
+            b.HasKey(a => a.Id);
+            b.HasIndex(a => new { a.ProjectId, a.PresenterId }).IsUnique();
+            b.HasOne<Project>()
+                .WithMany()
+                .HasForeignKey(a => a.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.HasOne<Presenter>()
+                .WithMany()
+                .HasForeignKey(a => a.PresenterId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

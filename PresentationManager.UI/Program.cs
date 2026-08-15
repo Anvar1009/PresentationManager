@@ -87,6 +87,7 @@ static class Program
                 AddApiHttpClient<ICriterionRepository, HttpCriterionRepository>(services, apiBaseUrl);
                 AddApiHttpClient<IJudgeRepository, HttpJudgeRepository>(services, apiBaseUrl);
                 AddApiHttpClient<IScoreRepository, HttpScoreRepository>(services, apiBaseUrl);
+                AddApiHttpClient<IPresenterProjectAssignmentRepository, HttpPresenterProjectAssignmentRepository>(services, apiBaseUrl);
                 AddApiHttpClient<IFileStorageService, HttpFileStorageService>(services, apiBaseUrl);
                 AddApiHttpClient<IAuthService, HttpAuthService>(services, apiBaseUrl);
                 // Text-only Telegram relay (password reset codes, SuperAdmin-issued credentials) - the bot
@@ -119,6 +120,7 @@ static class Program
                 services.AddSingleton<ScoreService>();
                 services.AddSingleton<AdminLinkService>();
                 services.AddSingleton<PasswordResetService>();
+                services.AddSingleton<PresenterAssignmentService>();
 
                 services.AddSingleton<PresentationForm>();
                 services.AddSingleton<AdminForm>();
