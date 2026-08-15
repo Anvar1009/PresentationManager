@@ -28,6 +28,7 @@ public sealed class AdminPanelForm : Form
     private readonly ProjectService _projectService;
     private readonly CriterionService _criterionService;
     private readonly JudgeService _judgeService;
+    private readonly PresenterAssignmentService _presenterAssignmentService;
     private readonly ScoreService _scoreService;
     private readonly PresentationQueueService _queueService;
     private readonly IPresenterRepository _presenterRepository;
@@ -73,6 +74,7 @@ public sealed class AdminPanelForm : Form
         ProjectService projectService,
         CriterionService criterionService,
         JudgeService judgeService,
+        PresenterAssignmentService presenterAssignmentService,
         ScoreService scoreService,
         PresentationQueueService queueService,
         IPresenterRepository presenterRepository,
@@ -84,6 +86,7 @@ public sealed class AdminPanelForm : Form
         _projectService = projectService;
         _criterionService = criterionService;
         _judgeService = judgeService;
+        _presenterAssignmentService = presenterAssignmentService;
         _scoreService = scoreService;
         _queueService = queueService;
         _presenterRepository = presenterRepository;
@@ -102,7 +105,7 @@ public sealed class AdminPanelForm : Form
 
         var topPanel = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(20, 12, 20, 12), BackColor = LightColors.Panel };
         var topPanelRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
-        var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 7, RowCount = 1 };
+        var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 8, RowCount = 1 };
         // Spacer first - absorbs the window's extra width so "Loyiha:"/combo and the action buttons end up
         // pushed together against the right edge, contiguous, instead of the combo sitting off on the left
         // with a gap before the buttons.
@@ -115,6 +118,7 @@ public sealed class AdminPanelForm : Form
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
 
         var projectLabel = new Label { Text = "Loyiha:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = LightColors.TextSecondary, Font = new Font("Segoe UI", 10.5f) };
@@ -138,6 +142,9 @@ public sealed class AdminPanelForm : Form
         var judgesButton = new Button { Text = "Hakamlar", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(124, 58, 237), ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
         judgesButton.Click += OnJudgesClick;
 
+        var participantsAssignButton = new Button { Text = "Ishtirokchilar", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(20, 141, 116), ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
+        participantsAssignButton.Click += OnParticipantsAssignClick;
+
         var linkBotButton = new Button { Text = "🤖 Botga ulash", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
         linkBotButton.FlatAppearance.BorderColor = LightColors.Border;
         linkBotButton.Click += OnLinkBotClick;
@@ -148,7 +155,8 @@ public sealed class AdminPanelForm : Form
         topLayout.Controls.Add(newProjectButton, 3, 0);
         topLayout.Controls.Add(criteriaButton, 4, 0);
         topLayout.Controls.Add(judgesButton, 5, 0);
-        topLayout.Controls.Add(linkBotButton, 6, 0);
+        topLayout.Controls.Add(participantsAssignButton, 6, 0);
+        topLayout.Controls.Add(linkBotButton, 7, 0);
         topPanel.Controls.Add(topLayout);
 
         // ---------- Left nav ----------
@@ -442,6 +450,20 @@ public sealed class AdminPanelForm : Form
 
         using var dialog = new JudgeManagementForm(_judgeService, _presenterRepository, project.Id, project.Name);
         dialog.ShowDialog(this);
+    }
+
+    private async void OnParticipantsAssignClick(object? sender, EventArgs e)
+    {
+        var project = SelectedProject;
+        if (project is null)
+        {
+            MessageBox.Show(this, "Avval loyihani tanlang.", "Loyiha tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dialog = new PresenterAssignmentManagementForm(_presenterAssignmentService, _presenterRepository, project.Id, project.Name);
+        dialog.ShowDialog(this);
+        await RefreshParticipantsAsync(project.Id);
     }
 
     /// <summary>Generates a one-time, 15-minute deep-link code (<see cref="AdminLinkService"/>, via
