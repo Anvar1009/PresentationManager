@@ -215,6 +215,8 @@ public sealed class AdminPanelForm : Form
 
         _participantsGrid = LightGrid();
         _participantsSearchBox = SearchBox("Ism yoki telefon bo'yicha qidirish...");
+        _participantsSearchBox.Dock = DockStyle.Left;
+        _participantsSearchBox.Width = 320;
         _participantsSearchBox.TextChanged += (_, _) => ApplyParticipantsFilter();
         var participantsToolbar = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(12, 8, 12, 8) };
         participantsToolbar.Controls.Add(_participantsSearchBox);
@@ -235,7 +237,7 @@ public sealed class AdminPanelForm : Form
         openFileButton.Click += OnOpenPresentationFileClick;
         _presentationsSearchBox = SearchBox("Taqdimotchi yoki sarlavha bo'yicha qidirish...");
         _presentationsSearchBox.TextChanged += (_, _) => ApplyPresentationsFilter();
-        var presentationsSearchWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 0, 0, 0) };
+        var presentationsSearchWrap = new Panel { Dock = DockStyle.Left, Width = 320, Padding = new Padding(12, 0, 0, 0) };
         presentationsSearchWrap.Controls.Add(_presentationsSearchBox);
         presentationsToolbar.Controls.Add(presentationsSearchWrap);
         presentationsToolbar.Controls.Add(openFileButton);
@@ -255,7 +257,7 @@ public sealed class AdminPanelForm : Form
         exportButton.Click += OnExportFinalScoresClick;
         _finalScoresSearchBox = SearchBox("Taqdimotchi yoki sarlavha bo'yicha qidirish...");
         _finalScoresSearchBox.TextChanged += (_, _) => ApplyFinalScoresFilter();
-        var finalScoresSearchWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 0, 0, 0) };
+        var finalScoresSearchWrap = new Panel { Dock = DockStyle.Left, Width = 320, Padding = new Padding(12, 0, 0, 0) };
         finalScoresSearchWrap.Controls.Add(_finalScoresSearchBox);
         exportToolbar.Controls.Add(finalScoresSearchWrap);
         exportToolbar.Controls.Add(exportButton);

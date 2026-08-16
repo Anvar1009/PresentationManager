@@ -61,14 +61,24 @@ public sealed class PresentationManagementForm : Form
             BorderStyle = BorderStyle.FixedSingle
         };
         _searchBox.TextChanged += (_, _) => ApplyFilter();
-        var searchWrap = new Panel { Dock = DockStyle.Top, Height = 40, Padding = new Padding(16, 8, 16, 0) };
-        searchWrap.Controls.Add(_searchBox);
 
-        var toolbarWrap = new Panel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(16, 0, 16, 8) };
-        var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        // One row shared with the action buttons below, not a full-width strip of its own: the search box
+        // is fixed-width on the left, buttons split the remaining space on the right.
+        var toolbarWrap = new Panel { Dock = DockStyle.Top, Height = 44, Padding = new Padding(16, 8, 16, 0) };
+        var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1 };
+        // Pinned to Percent(100), not left as the implicit AutoSize default: an AutoSize row lets the
+        // TableLayoutPanel grow it to whatever height a Dock=Fill Button's GetPreferredSize reports once the
+        // column is too narrow for its text on one line (word-wrap consideration) - the row then balloons
+        // past toolbarWrap's fixed height and the button's vertically-centered text renders below the
+        // visible, clipped area (paints, just invisible). Percent(100) keeps the row pinned to the
+        // container's real height regardless of what children would prefer.
+        toolbar.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180f));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34f));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33f));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33f));
+        var searchWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 8, 0) };
+        searchWrap.Controls.Add(_searchBox);
         var addButton = new Button
         {
             Text = "+ Qo'shish", Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0), FlatStyle = FlatStyle.Flat,
@@ -90,9 +100,10 @@ public sealed class PresentationManagementForm : Form
         };
         deleteButton.FlatAppearance.BorderSize = 0;
         deleteButton.Click += OnDeleteClick;
-        toolbar.Controls.Add(addButton, 0, 0);
-        toolbar.Controls.Add(editButton, 1, 0);
-        toolbar.Controls.Add(deleteButton, 2, 0);
+        toolbar.Controls.Add(searchWrap, 0, 0);
+        toolbar.Controls.Add(addButton, 1, 0);
+        toolbar.Controls.Add(editButton, 2, 0);
+        toolbar.Controls.Add(deleteButton, 3, 0);
         toolbarWrap.Controls.Add(toolbar);
 
         var closeButton = new Button
@@ -105,7 +116,6 @@ public sealed class PresentationManagementForm : Form
         closeWrap.Controls.Add(closeButton);
 
         Controls.Add(gridWrap);
-        Controls.Add(searchWrap);
         Controls.Add(toolbarWrap);
         Controls.Add(closeWrap);
 
