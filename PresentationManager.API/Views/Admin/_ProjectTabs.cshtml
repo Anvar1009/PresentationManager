@@ -1,0 +1,10 @@
+@model AdminProjectTabsViewModel
+
+<nav class="tabs">
+    <a class="tab @(Model.Active == "participants" ? "active" : "")" asp-controller="Admin" asp-action="Participants" asp-route-projectId="@Model.ProjectId">Qatnashchilar</a>
+    <a class="tab @(Model.Active == "presentations" ? "active" : "")" asp-controller="Admin" asp-action="Presentations" asp-route-projectId="@Model.ProjectId">Taqdimotlar</a>
+    <a class="tab @(Model.Active == "finalscores" ? "active" : "")" asp-controller="Admin" asp-action="FinalScores" asp-route-projectId="@Model.ProjectId">Yakuniy baholar</a>
+    <a class="tab @(Model.Active == "criteria" ? "active" : "")" asp-controller="Admin" asp-action="Criteria" asp-route-projectId="@Model.ProjectId">Baholash mezonlari</a>
+    <a class="tab @(Model.Active == "judges" ? "active" : "")" asp-controller="Admin" asp-action="Judges" asp-route-projectId="@Model.ProjectId">Hakamlar</a>
+    <a class="tab @(Model.Active == "presenters" ? "active" : "")" asp-controller="Admin" asp-action="Presenters" asp-route-projectId="@Model.ProjectId">Ishtirokchilar</a>
+</nav>

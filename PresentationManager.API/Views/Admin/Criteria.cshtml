@@ -1,0 +1,69 @@
+@model AdminCriteriaViewModel
+@{
+    ViewData["Title"] = "Baholash mezonlari";
+    ViewData["Brand"] = "Admin paneli";
+    ViewData["Wide"] = "container-wide";
+}
+
+<p><a asp-controller="Admin" asp-action="Dashboard">&larr; Loyihalar</a></p>
+<span class="eyebrow">Baholash mezonlari</span>
+<h1 class="page-title">@Model.ProjectName</h1>
+<p class="page-subtitle">Hakamlar shu mezonlar bo'yicha ball qo'yishadi.</p>
+
+<partial name="_ProjectTabs" model='new AdminProjectTabsViewModel(Model.ProjectId, "criteria")' />
+
+@if (TempData["Error"] is string error)
+{
+    <div class="validation-summary">@error</div>
+}
+
+@if (Model.Criteria.Count == 0)
+{
+    <div class="card empty-state" style="margin-bottom: var(--space-5);">Hali mezon qo'shilmagan.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Nomi</th>
+                    <th>Maksimal ball</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var criterion in Model.Criteria)
+                {
+                    <tr>
+                        <td>@criterion.Name</td>
+                        <td>@criterion.MaxScore</td>
+                        <td>
+                            <form asp-controller="Admin" asp-action="DeleteCriterion" method="post" style="margin: 0;">
+                                <input type="hidden" name="id" value="@criterion.Id" />
+                                <input type="hidden" name="projectId" value="@Model.ProjectId" />
+                                <button type="submit" class="btn btn-sm btn-danger">O'chirish</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<div class="card" style="max-width: 420px;">
+    <span class="eyebrow">+ Mezon qo'shish</span>
+    <form asp-controller="Admin" asp-action="CreateCriterion" method="post">
+        <input type="hidden" name="projectId" value="@Model.ProjectId" />
+        <div class="field">
+            <label for="name">Nomi</label>
+            <input type="text" id="name" name="name" required />
+        </div>
+        <div class="field">
+            <label for="maxScore">Maksimal ball</label>
+            <input type="number" id="maxScore" name="maxScore" value="10" min="1" required />
+        </div>
+        <button type="submit" class="btn">+ Mezon qo'shish</button>
+    </form>
+</div>

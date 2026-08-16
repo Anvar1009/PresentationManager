@@ -8,14 +8,17 @@ using PresentationManager.Domain.Enums;
 
 namespace PresentationManager.API.Controllers.Web;
 
-/// <summary>Cookie-based login shared by both web-only roles (<see cref="UserRole.Judge"/> and
-/// <see cref="UserRole.OrderOperator"/>) - separate from <see cref="Controllers.AuthController"/>'s JWT login
-/// (used by the WinForms desktop app), but backed by the exact same <see cref="UserService.ValidateLoginAsync"/>
-/// and the same Users table. Every other role gets the same generic "login yoki parol noto'g'ri" as a wrong
-/// password, so this page never reveals which usernames exist or what role they hold.</summary>
+/// <summary>Cookie-based login shared by every role with a web surface (<see cref="UserRole.Judge"/>,
+/// <see cref="UserRole.OrderOperator"/>, <see cref="UserRole.Admin"/>, <see cref="UserRole.SuperAdmin"/>) -
+/// separate from <see cref="Controllers.AuthController"/>'s JWT login (used by the WinForms desktop app), but
+/// backed by the exact same <see cref="UserService.ValidateLoginAsync"/> and the same Users table.
+/// <see cref="UserRole.Operator"/> gets the same generic "login yoki parol noto'g'ri" as a wrong password
+/// (desktop-only, no web screens exist for it), so this page never reveals which usernames exist or what
+/// role they hold.</summary>
 public sealed class AccountController : Controller
 {
-    private static readonly HashSet<UserRole> WebRoles = [UserRole.Judge, UserRole.OrderOperator];
+    private static readonly HashSet<UserRole> WebRoles =
+        [UserRole.Judge, UserRole.OrderOperator, UserRole.Admin, UserRole.SuperAdmin];
 
     private readonly UserService _userService;
 
@@ -63,8 +66,11 @@ public sealed class AccountController : Controller
 
         return user.Role switch
         {
+            UserRole.Judge => RedirectToAction("Dashboard", "Judge"),
             UserRole.OrderOperator => RedirectToAction("Dashboard", "Order"),
-            _ => RedirectToAction("Dashboard", "Judge")
+            UserRole.Admin => RedirectToAction("Dashboard", "Admin"),
+            UserRole.SuperAdmin => RedirectToAction("Dashboard", "SuperAdmin"),
+            _ => throw new InvalidOperationException($"'{user.Role}' roli uchun veb sahifa mavjud emas.")
         };
     }
 

@@ -1,0 +1,59 @@
+@model SuperAdminDashboardViewModel
+@{
+    ViewData["Title"] = "Bosh sahifa";
+    ViewData["Brand"] = "SuperAdmin paneli";
+    ViewData["Wide"] = "container-wide";
+}
+
+<span class="eyebrow">SuperAdmin · @Model.SuperAdminFullName</span>
+<h1 class="page-title">Bosh sahifa</h1>
+<p class="page-subtitle">Barcha jadvallar va jarayonlar bo'yicha umumiy ko'rinish.</p>
+
+<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("dashboard")' />
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-value">@Model.ProjectCount</div>
+        <div class="stat-label">Loyihalar</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">@Model.PresentationCount</div>
+        <div class="stat-label">Taqdimotlar</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">@Model.PresenterCount</div>
+        <div class="stat-label">Taqdimotchilar</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">@Model.JudgeCount</div>
+        <div class="stat-label">Hakam tayinlovlari</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">@Model.UserCount</div>
+        <div class="stat-label">Tizim foydalanuvchilari</div>
+    </div>
+</div>
+
+<div class="card">
+    <span class="eyebrow">Taqdimotlar holati bo'yicha</span>
+    @if (Model.PresentationsByStatus.Count == 0)
+    {
+        <p class="page-subtitle" style="margin: 0;">Hozircha taqdimotlar yo'q.</p>
+    }
+    else
+    {
+        <div class="table-wrap" style="border: none;">
+            <table class="table">
+                <tbody>
+                    @foreach (var status in Model.PresentationsByStatus)
+                    {
+                        <tr>
+                            <td>@status.Label</td>
+                            <td><strong>@status.Count</strong></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

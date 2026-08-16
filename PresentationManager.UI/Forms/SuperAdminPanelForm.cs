@@ -209,7 +209,7 @@ public sealed class SuperAdminPanelForm : Form
         card.Paint += (_, e) => e.Graphics.DrawRectangle(new Pen(LightColors.Border), 0, 0, card.Width - 1, card.Height - 1);
 
         var cardHeader = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(20, 0, 16, 0) };
-        var cardHeaderLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        var cardHeaderLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1 };
         // Fixed, not AutoSize: _sectionTitleLabel below is Dock=Fill (needed to vertically center its text
         // in the row via TextAlign), and an AutoSize column paired with a Dock=Fill child is a circular
         // layout dependency WinForms doesn't resolve reliably - in practice the column could end up sized
@@ -218,6 +218,9 @@ public sealed class SuperAdminPanelForm : Form
         // "📁 Loyihalar" after switching sections). Wide enough for the longest label, "Foydalanuvchilar".
         cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280));
         cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        // Wide enough for the search box, shrunk down from a full-width row of its own so it shares this
+        // header row with the section-action buttons instead of taking a separate strip below.
+        cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
         // Wide enough to fit two of the section-action buttons side by side (Foydalanuvchilar shows both
         // _addUserButton and _editUserButton at once) - see the FlowLayoutPanel below.
         cardHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 420));
@@ -311,13 +314,8 @@ public sealed class SuperAdminPanelForm : Form
         sectionActionsPanel.Controls.Add(_openFileButton);
         sectionActionsPanel.Controls.Add(_clearHistoryButton);
 
-        cardHeaderLayout.Controls.Add(_sectionTitleLabel, 0, 0);
-        cardHeaderLayout.Controls.Add(_rowCountLabel, 1, 0);
-        cardHeaderLayout.Controls.Add(sectionActionsPanel, 2, 0);
-        cardHeader.Controls.Add(cardHeaderLayout);
-
-        var cardHeaderRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
-
+        // Shares the header row with sectionActionsPanel (column 3) rather than taking a full-width strip
+        // of its own below the header.
         _searchBox = new TextBox
         {
             Dock = DockStyle.Fill,
@@ -327,8 +325,16 @@ public sealed class SuperAdminPanelForm : Form
             BorderStyle = BorderStyle.FixedSingle
         };
         _searchBox.TextChanged += (_, _) => ApplyCurrentSectionFilter();
-        var searchBarWrap = new Panel { Dock = DockStyle.Top, Height = 44, Padding = new Padding(20, 8, 20, 8) };
-        searchBarWrap.Controls.Add(_searchBox);
+        var searchBoxWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 14, 12, 14) };
+        searchBoxWrap.Controls.Add(_searchBox);
+
+        cardHeaderLayout.Controls.Add(_sectionTitleLabel, 0, 0);
+        cardHeaderLayout.Controls.Add(_rowCountLabel, 1, 0);
+        cardHeaderLayout.Controls.Add(searchBoxWrap, 2, 0);
+        cardHeaderLayout.Controls.Add(sectionActionsPanel, 3, 0);
+        cardHeader.Controls.Add(cardHeaderLayout);
+
+        var cardHeaderRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
 
         _grid = DataGridViewTheme.CreateReadOnlyGrid(
             background: LightColors.Panel,
@@ -344,7 +350,6 @@ public sealed class SuperAdminPanelForm : Form
         gridWrap.Controls.Add(_grid);
 
         card.Controls.Add(gridWrap);
-        card.Controls.Add(searchBarWrap);
         card.Controls.Add(cardHeaderRule);
         card.Controls.Add(cardHeader);
         contentPanel.Controls.Add(card);

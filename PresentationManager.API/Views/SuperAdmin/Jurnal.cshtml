@@ -1,0 +1,58 @@
+@model SuperAdminJurnalViewModel
+@{
+    ViewData["Title"] = "Jurnal";
+    ViewData["Brand"] = "SuperAdmin paneli";
+    ViewData["Wide"] = "container-wide";
+}
+
+<span class="eyebrow">Jurnal</span>
+<h1 class="page-title">Jurnal</h1>
+<p class="page-subtitle">So'nggi 200 ta hodisa.</p>
+
+<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("jurnal")' />
+
+@if (TempData["Success"] is string success)
+{
+    <div class="notice-success">@success</div>
+}
+
+<div class="toolbar">
+    <form method="get" asp-controller="SuperAdmin" asp-action="Jurnal">
+        <input type="text" name="q" value="@Model.Query" placeholder="Xabar bo'yicha qidirish..." />
+    </form>
+    <div class="toolbar-actions">
+        <form asp-controller="SuperAdmin" asp-action="ClearHistory" method="post" onsubmit="return confirm('Butun jurnalni tozalashni tasdiqlaysizmi?');">
+            <button type="submit" class="btn btn-outline">
+                <svg class="icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                Jurnalni tozalash
+            </button>
+        </form>
+    </div>
+</div>
+
+@if (Model.Entries.Count == 0)
+{
+    <div class="card empty-state">Hech narsa topilmadi.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Vaqt</th>
+                    <th>Xabar</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in Model.Entries)
+                {
+                    <tr>
+                        <td>@entry.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</td>
+                        <td class="wrap">@entry.Message</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

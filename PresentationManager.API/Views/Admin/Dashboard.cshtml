@@ -1,0 +1,58 @@
+@model AdminDashboardViewModel
+@{
+    ViewData["Title"] = "Loyihalar";
+    ViewData["Brand"] = "Admin paneli";
+}
+
+<span class="eyebrow">Admin · @Model.AdminFullName</span>
+<h1 class="page-title">Loyihalar</h1>
+<p class="page-subtitle">O'zingiz yaratgan loyihalardan birini tanlang yoki yangisini qo'shing.</p>
+
+@if (TempData["Error"] is string error)
+{
+    <div class="validation-summary">@error</div>
+}
+
+@if (Model.Projects.Count == 0)
+{
+    <div class="card empty-state">Sizda hali loyihalar yo'q. Pastdan birinchisini yarating.</div>
+}
+else
+{
+    <div class="card-grid" style="margin-bottom: var(--space-6);">
+        @foreach (var project in Model.Projects)
+        {
+            <a class="card card-link" asp-controller="Admin" asp-action="Project" asp-route-projectId="@project.ProjectId">
+                <span class="card-title">@project.Name</span>
+                <span class="card-meta-mono">@project.DateRange</span>
+            </a>
+        }
+    </div>
+}
+
+<div class="card">
+    <span class="eyebrow">+ Yangi loyiha</span>
+    <form asp-controller="Admin" asp-action="CreateProject" method="post">
+        <div class="field">
+            <label for="name">Nomi</label>
+            <input type="text" id="name" name="name" required />
+        </div>
+        <div class="field">
+            <label for="eventStartDate">Boshlanish sanasi</label>
+            <input type="date" id="eventStartDate" name="eventStartDate" required />
+        </div>
+        <div class="field">
+            <label for="eventEndDate">Tugash sanasi</label>
+            <input type="date" id="eventEndDate" name="eventEndDate" required />
+        </div>
+        <div class="field">
+            <label for="eventTime">Vaqti (ixtiyoriy)</label>
+            <input type="time" id="eventTime" name="eventTime" />
+        </div>
+        <div class="field">
+            <label for="location">Manzil (ixtiyoriy)</label>
+            <input type="text" id="location" name="location" />
+        </div>
+        <button type="submit" class="btn">+ Yangi loyiha</button>
+    </form>
+</div>

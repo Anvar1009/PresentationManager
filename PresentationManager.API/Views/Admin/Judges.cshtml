@@ -1,0 +1,77 @@
+@model AdminJudgesViewModel
+@{
+    ViewData["Title"] = "Hakamlar";
+    ViewData["Brand"] = "Admin paneli";
+    ViewData["Wide"] = "container-wide";
+}
+
+<p><a asp-controller="Admin" asp-action="Dashboard">&larr; Loyihalar</a></p>
+<span class="eyebrow">Hakamlar</span>
+<h1 class="page-title">@Model.ProjectName</h1>
+<p class="page-subtitle">Faqat botga /start bosib kontaktini ulashgan odamlar tayinlanishi mumkin.</p>
+
+<partial name="_ProjectTabs" model='new AdminProjectTabsViewModel(Model.ProjectId, "judges")' />
+
+@if (TempData["Error"] is string error)
+{
+    <div class="validation-summary">@error</div>
+}
+
+@if (Model.Judges.Count == 0)
+{
+    <div class="card empty-state" style="margin-bottom: var(--space-5);">Hali hakam tayinlanmagan.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Ism</th>
+                    <th>Telefon</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var judge in Model.Judges)
+                {
+                    <tr>
+                        <td>@(string.IsNullOrWhiteSpace(judge.FullName) ? "(ism yo'q)" : judge.FullName)</td>
+                        <td>@judge.PhoneNumber</td>
+                        <td>
+                            <form asp-controller="Admin" asp-action="DeleteJudge" method="post" style="margin: 0;">
+                                <input type="hidden" name="id" value="@judge.Id" />
+                                <input type="hidden" name="projectId" value="@Model.ProjectId" />
+                                <button type="submit" class="btn btn-sm btn-danger">O'chirish</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<div class="card" style="max-width: 420px;">
+    <span class="eyebrow">+ Hakam tayinlash</span>
+    @if (Model.Candidates.Count == 0)
+    {
+        <p class="page-subtitle" style="margin: 0;">Hozircha botga ro'yxatdan o'tgan (va hali hakam bo'lmagan) odam yo'q.</p>
+    }
+    else
+    {
+        <form asp-controller="Admin" asp-action="AssignJudge" method="post">
+            <input type="hidden" name="projectId" value="@Model.ProjectId" />
+            <div class="field">
+                <label for="presenterId">Odam</label>
+                <select id="presenterId" name="presenterId" required>
+                    @foreach (var candidate in Model.Candidates)
+                    {
+                        <option value="@candidate.Id">@candidate.FullName - @candidate.PhoneNumber</option>
+                    }
+                </select>
+            </div>
+            <button type="submit" class="btn">+ Hakam tayinlash</button>
+        </form>
+    }
+</div>

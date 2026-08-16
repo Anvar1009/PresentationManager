@@ -1,0 +1,70 @@
+@model SuperAdminUsersViewModel
+@{
+    ViewData["Title"] = "Foydalanuvchilar";
+    ViewData["Brand"] = "SuperAdmin paneli";
+    ViewData["Wide"] = "container-wide";
+
+    static string BadgeClass(UserRole role) => role switch
+    {
+        UserRole.SuperAdmin => "badge-danger",
+        UserRole.Admin => "badge-accent",
+        UserRole.Operator => "badge-success",
+        UserRole.OrderOperator => "badge-warning",
+        _ => "badge"
+    };
+}
+
+<span class="eyebrow">Foydalanuvchilar</span>
+<h1 class="page-title">Foydalanuvchilar</h1>
+<p class="page-subtitle">Tizimga kirish huquqiga ega barcha hisoblar.</p>
+
+<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("users")' />
+
+@if (TempData["Success"] is string success)
+{
+    <div class="notice-success">@success</div>
+}
+
+<div class="toolbar">
+    <form method="get" asp-controller="SuperAdmin" asp-action="Users">
+        <input type="text" name="q" value="@Model.Query" placeholder="Login yoki ism bo'yicha qidirish..." />
+    </form>
+    <div class="toolbar-actions">
+        <a class="btn" asp-controller="SuperAdmin" asp-action="CreateUser">+ Foydalanuvchi qo'shish</a>
+    </div>
+</div>
+
+@if (Model.Users.Count == 0)
+{
+    <div class="card empty-state">Hech narsa topilmadi.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Login</th>
+                    <th>Ism</th>
+                    <th>Rol</th>
+                    <th>Faol</th>
+                    <th>Yaratilgan vaqt</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var user in Model.Users)
+                {
+                    <tr>
+                        <td>@user.Username</td>
+                        <td>@user.FullName</td>
+                        <td><span class="badge @BadgeClass(user.Role)">@user.Role</span></td>
+                        <td>@(user.IsActive ? "Ha" : "Yo'q")</td>
+                        <td>@user.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td><a asp-controller="SuperAdmin" asp-action="EditUser" asp-route-id="@user.Id">Login/parolni tiklash</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

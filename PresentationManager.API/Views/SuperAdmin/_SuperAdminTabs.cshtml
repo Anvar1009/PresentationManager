@@ -1,0 +1,12 @@
+@model SuperAdminTabsViewModel
+
+<nav class="tabs">
+    <a class="tab @(Model.Active == "dashboard" ? "active" : "")" asp-controller="SuperAdmin" asp-action="Dashboard">Bosh sahifa</a>
+    <a class="tab @(Model.Active == "projects" ? "active" : "")" asp-controller="SuperAdmin" asp-action="Projects">Loyihalar</a>
+    <a class="tab @(Model.Active == "presentations" ? "active" : "")" asp-controller="SuperAdmin" asp-action="Presentations">Taqdimotlar</a>
+    <a class="tab @(Model.Active == "presenters" ? "active" : "")" asp-controller="SuperAdmin" asp-action="Presenters">Taqdimotchilar</a>
+    <a class="tab @(Model.Active == "judges" ? "active" : "")" asp-controller="SuperAdmin" asp-action="Judges">Hakamlar</a>
+    <a class="tab @(Model.Active == "users" ? "active" : "")" asp-controller="SuperAdmin" asp-action="Users">Foydalanuvchilar</a>
+    <a class="tab @(Model.Active == "scores" ? "active" : "")" asp-controller="SuperAdmin" asp-action="Scores">Baholar</a>
+    <a class="tab @(Model.Active == "jurnal" ? "active" : "")" asp-controller="SuperAdmin" asp-action="Jurnal">Jurnal</a>
+</nav>

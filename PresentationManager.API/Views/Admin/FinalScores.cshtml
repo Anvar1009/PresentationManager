@@ -1,0 +1,63 @@
+@model AdminFinalScoresViewModel
+@{
+    ViewData["Title"] = "Yakuniy baholar";
+    ViewData["Brand"] = "Admin paneli";
+    ViewData["Wide"] = "container-wide";
+}
+
+<p><a asp-controller="Admin" asp-action="Dashboard">&larr; Loyihalar</a></p>
+<span class="eyebrow">Yakuniy baholar</span>
+<h1 class="page-title">@Model.ProjectName</h1>
+<p class="page-subtitle">Har bir mezon bo'yicha hakamlar bahosining o'rtachasi.</p>
+
+<partial name="_ProjectTabs" model='new AdminProjectTabsViewModel(Model.ProjectId, "finalscores")' />
+
+<div class="toolbar">
+    <form method="get" asp-controller="Admin" asp-action="FinalScores">
+        <input type="hidden" name="projectId" value="@Model.ProjectId" />
+        <input type="text" name="q" value="@Model.Query" placeholder="Taqdimotchi yoki sarlavha bo'yicha qidirish..." />
+    </form>
+    <div class="toolbar-actions">
+        <a class="btn btn-outline" asp-controller="Admin" asp-action="ExportFinalScores" asp-route-projectId="@Model.ProjectId">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+            Excel'ga eksport
+        </a>
+    </div>
+</div>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="card empty-state">Hech narsa topilmadi.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Taqdimotchi</th>
+                    <th>Sarlavha</th>
+                    @foreach (var criterion in Model.Criteria)
+                    {
+                        <th>@criterion.Name</th>
+                    }
+                    <th>Jami</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td>@row.PresenterFullName</td>
+                        <td class="wrap">@row.Title</td>
+                        @foreach (var criterion in Model.Criteria)
+                        {
+                            <td>@row.AverageByCriterionId.GetValueOrDefault(criterion.Id, 0).ToString("0.##")</td>
+                        }
+                        <td><strong>@row.Total.ToString("0.##")</strong></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
