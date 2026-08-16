@@ -1,0 +1,36 @@
+@model EditUserViewModel
+@{
+    ViewData["Title"] = "Login/parolni tiklash";
+    ViewData["Brand"] = "SuperAdmin paneli";
+}
+
+<p><a asp-controller="SuperAdmin" asp-action="Users">&larr; Foydalanuvchilar</a></p>
+<span class="eyebrow">Login/parolni tiklash</span>
+<h1 class="page-title">@Model.FullName</h1>
+<p class="page-subtitle">Parolni bo'sh qoldirsangiz, joriy parol o'zgarmaydi.</p>
+
+<div class="card" style="max-width: 460px;">
+    <div asp-validation-summary="All" class="validation-summary"></div>
+
+    <form asp-controller="SuperAdmin" asp-action="EditUser" method="post">
+        <input type="hidden" asp-for="Id" />
+        <div class="field">
+            <label asp-for="Username"></label>
+            <input asp-for="Username" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+            <label asp-for="FullName"></label>
+            <input asp-for="FullName" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+            <label asp-for="NewPassword"></label>
+            <input asp-for="NewPassword" type="text" autocomplete="off" />
+            <div class="field-hint">Bo'sh qoldirsangiz, joriy parol saqlanadi.</div>
+        </div>
+        <div class="field">
+            <label asp-for="Role"></label>
+            <select asp-for="Role" asp-items="Html.GetEnumSelectList<UserRole>()"></select>
+        </div>
+        <button type="submit" class="btn btn-block">Saqlash</button>
+    </form>
+</div>

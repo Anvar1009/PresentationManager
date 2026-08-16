@@ -1,0 +1,53 @@
+@model SuperAdminPresentationsViewModel
+@{
+    ViewData["Title"] = "Taqdimotlar";
+    ViewData["Brand"] = "SuperAdmin paneli";
+    ViewData["Wide"] = "container-wide";
+}
+
+<span class="eyebrow">Taqdimotlar</span>
+<h1 class="page-title">Taqdimotlar</h1>
+<p class="page-subtitle">Barcha loyihalar bo'yicha taqdimotlar (faqat ko'rish rejimi).</p>
+
+<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("presentations")' />
+
+<div class="toolbar">
+    <form method="get" asp-controller="SuperAdmin" asp-action="Presentations">
+        <input type="text" name="q" value="@Model.Query" placeholder="Loyiha, taqdimotchi yoki sarlavha bo'yicha qidirish..." />
+    </form>
+</div>
+
+@if (Model.Presentations.Count == 0)
+{
+    <div class="card empty-state">Hech narsa topilmadi.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Loyiha</th>
+                    <th>Taqdimotchi</th>
+                    <th>Sarlavha</th>
+                    <th>Holat</th>
+                    <th>Qo'shilgan vaqt</th>
+                    <th>Fayl</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var presentation in Model.Presentations)
+                {
+                    <tr>
+                        <td>@presentation.ProjectName</td>
+                        <td>@presentation.PresenterFullName</td>
+                        <td class="wrap">@presentation.Title</td>
+                        <td>@presentation.StatusLabel</td>
+                        <td>@presentation.CreatedAt</td>
+                        <td><a asp-controller="SuperAdmin" asp-action="DownloadPresentation" asp-route-presentationId="@presentation.PresentationId">Yuklab olish</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

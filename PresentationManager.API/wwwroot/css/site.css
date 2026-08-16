@@ -62,6 +62,8 @@
     --success-bg: #43a04722;
     --danger: #e5453f;
     --danger-bg: #e5453f1c;
+    --warning: #fb8c00;
+    --warning-bg: #fb8c0022;
 
     --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
     --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
@@ -177,6 +179,12 @@ a:hover {
 
 .container-narrow {
     max-width: 420px;
+}
+
+/* Opt-in wider container for the Admin/SuperAdmin panels' dense tables - set via ViewData["Wide"], see
+   _Layout.cshtml. Everything else (Judge/Order/Login) keeps the narrower default above. */
+.container-wide {
+    max-width: 1280px;
 }
 
 .eyebrow {
@@ -404,7 +412,11 @@ a:hover {
 }
 
 .field input[type="text"],
-.field input[type="password"] {
+.field input[type="password"],
+.field input[type="number"],
+.field input[type="date"],
+.field input[type="time"],
+.field select {
     width: 100%;
     padding: 11px 12px;
     border-radius: var(--radius-sm);
@@ -415,10 +427,17 @@ a:hover {
     font-family: var(--font-body);
 }
 
-.field input:focus {
+.field input:focus,
+.field select:focus {
     outline: none;
     border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.field-hint {
+    color: var(--text-faint);
+    font-size: 12px;
+    margin-top: var(--space-1);
 }
 
 .validation-summary {
@@ -536,6 +555,221 @@ a:hover {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--accent-ink);
+}
+
+/* ===== Section tabs (Admin/SuperAdmin panels - switching between a project's/panel's sections) ===== */
+
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border);
+}
+
+.tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border);
+}
+
+.tab:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+    text-decoration: none;
+}
+
+.tab.active {
+    color: var(--accent-ink);
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+/* ===== Dashboard stat cards (SuperAdmin overview) ===== */
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+.stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-4) var(--space-5);
+}
+
+.stat-value {
+    font-family: var(--font-mono);
+    font-size: 30px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+}
+
+.stat-label {
+    color: var(--text-muted);
+    font-size: 12.5px;
+    margin-top: var(--space-1);
+}
+
+/* ===== Toolbar (search box + action button, above a table) ===== */
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+    flex-wrap: wrap;
+}
+
+.toolbar form {
+    margin: 0;
+    flex: 1 1 260px;
+}
+
+.toolbar input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-raised);
+    color: var(--text);
+    font-size: 14px;
+    font-family: var(--font-body);
+}
+
+.toolbar input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.toolbar-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex: none;
+}
+
+/* ===== Data table (first dense-grid layout in this stylesheet - existing views only ever needed
+   .card/.queue-row) ===== */
+
+.table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-5);
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    font-size: 13.5px;
+}
+
+.table th,
+.table td {
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.table td.wrap {
+    white-space: normal;
+}
+
+.table th {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    background: var(--bg-raised);
+    border-bottom: 1px solid var(--border);
+}
+
+.table td {
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+}
+
+.table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.table tbody tr:hover td {
+    background: var(--surface-hover);
+}
+
+.table .row-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+/* ===== Badges (role/status pills inside table cells) ===== */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.badge-accent {
+    background: var(--accent-dim);
+    color: var(--accent);
+}
+
+.badge-success {
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.badge-danger {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.badge-warning {
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+/* ===== Small/danger button variants (table row actions) ===== */
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
+.btn-danger {
+    background: var(--danger);
+    color: #fff;
+}
+
+.btn-danger:hover {
+    background: #ff5a54;
 }
 
 /* ===== Icons (inline SVG, not emoji - see order/randomize/logout markup) ===== */

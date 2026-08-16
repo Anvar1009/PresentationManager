@@ -1,9 +1,12 @@
 namespace PresentationManager.Domain.Enums;
 
-/// <summary>Login roles — Operator/Admin/SuperAdmin log into the WinForms desktop app; Judge and
-/// OrderOperator log into the web platform only (see PresentationManager.API's Account/Judge/Order MVC
-/// controllers) and are deliberately rejected by the desktop LoginForm's role routing. Presenters still
-/// never log in at all - they only interact through the Telegram bot and aren't represented by this enum.</summary>
+/// <summary>Login roles. <see cref="Operator"/> is desktop-only (WinForms). <see cref="Judge"/> and
+/// <see cref="OrderOperator"/> are web-only (see PresentationManager.API's Account/Judge/Order MVC
+/// controllers) and are deliberately rejected by the desktop LoginForm's role routing. <see cref="Admin"/>
+/// and <see cref="SuperAdmin"/> are the only roles reachable from both surfaces - the same account logs into
+/// either the WinForms panel or the web Account/Admin and Account/SuperAdmin MVC controllers, whichever is
+/// convenient. Presenters still never log in at all - they only interact through the Telegram bot and aren't
+/// represented by this enum.</summary>
 public enum UserRole
 {
     Operator,

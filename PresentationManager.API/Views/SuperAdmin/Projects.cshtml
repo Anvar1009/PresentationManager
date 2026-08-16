@@ -1,0 +1,53 @@
+@model SuperAdminProjectsViewModel
+@{
+    ViewData["Title"] = "Loyihalar";
+    ViewData["Brand"] = "SuperAdmin paneli";
+    ViewData["Wide"] = "container-wide";
+}
+
+<span class="eyebrow">Loyihalar</span>
+<h1 class="page-title">Loyihalar</h1>
+<p class="page-subtitle">Barcha loyihalar (faqat ko'rish rejimi).</p>
+
+<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("projects")' />
+
+<div class="toolbar">
+    <form method="get" asp-controller="SuperAdmin" asp-action="Projects">
+        <input type="text" name="q" value="@Model.Query" placeholder="Nomi bo'yicha qidirish..." />
+    </form>
+</div>
+
+@if (Model.Projects.Count == 0)
+{
+    <div class="card empty-state">Hech narsa topilmadi.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Nomi</th>
+                    <th>Boshlanish</th>
+                    <th>Tugash</th>
+                    <th>Vaqti</th>
+                    <th>Manzil</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var project in Model.Projects)
+                {
+                    <tr>
+                        <td>@project.Name</td>
+                        <td>@project.EventStartDate.ToString("dd.MM.yyyy")</td>
+                        <td>@project.EventEndDate.ToString("dd.MM.yyyy")</td>
+                        <td>@(project.EventTime?.ToString("HH:mm") ?? "-")</td>
+                        <td class="wrap">@(project.Location ?? "-")</td>
+                        <td><a asp-controller="SuperAdmin" asp-action="ExportFinalScores" asp-route-projectId="@project.Id">Baholarni eksport</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

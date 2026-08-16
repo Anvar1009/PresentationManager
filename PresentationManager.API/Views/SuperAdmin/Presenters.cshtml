@@ -1,0 +1,49 @@
+@model SuperAdminPresentersViewModel
+@{
+    ViewData["Title"] = "Taqdimotchilar";
+    ViewData["Brand"] = "SuperAdmin paneli";
+    ViewData["Wide"] = "container-wide";
+}
+
+<span class="eyebrow">Taqdimotchilar</span>
+<h1 class="page-title">Taqdimotchilar</h1>
+<p class="page-subtitle">Botga /start bosib ro'yxatdan o'tgan har bir kishi (faqat ko'rish rejimi).</p>
+
+<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("presenters")' />
+
+<div class="toolbar">
+    <form method="get" asp-controller="SuperAdmin" asp-action="Presenters">
+        <input type="text" name="q" value="@Model.Query" placeholder="Ism yoki telefon bo'yicha qidirish..." />
+    </form>
+</div>
+
+@if (Model.Presenters.Count == 0)
+{
+    <div class="card empty-state">Hech narsa topilmadi.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Ism</th>
+                    <th>Telefon</th>
+                    <th>Telegram</th>
+                    <th>Ro'yxatdan o'tgan</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var presenter in Model.Presenters)
+                {
+                    <tr>
+                        <td>@presenter.FullName</td>
+                        <td>@(presenter.PhoneNumber ?? "-")</td>
+                        <td>@(presenter.TelegramUsername is { Length: > 0 } username ? $"@{username}" : "-")</td>
+                        <td>@presenter.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
