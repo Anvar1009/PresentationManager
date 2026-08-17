@@ -325,15 +325,20 @@ public sealed class AdminController : Controller
             var assignment = await _assignmentService.AssignAsync(projectId, presenterId, ct);
 
             // Same server-side push as PresenterAssignmentsController.Add - see AssignJudge's own remark
-            // above for why this in-process call needs to send the notification itself.
+            // above for why this in-process call needs to send the notification itself. Includes the event
+            // reminder and docks PresenterMainKeyboard - see that controller's matching block for why.
             var presenter = await _presenterRepository.GetByIdAsync(assignment.PresenterId, ct);
             if (presenter?.TelegramChatId is { } chatId)
             {
                 var project = await _projectRepository.GetByIdAsync(assignment.ProjectId, ct);
                 var projectName = project?.Name ?? "loyiha";
-                await _telegramNotifier.TrySendMessageAsync(chatId,
-                    $"🎉 Tabriklaymiz! Siz \"{projectName}\" loyihasida ishtirok etish uchun tasdiqlandingiz.\nEndi taqdimotingizni yuborishingiz mumkin - buning uchun /start bosing.",
-                    ct: ct);
+                var message = $"🎉 Tabriklaymiz! Siz \"{projectName}\" loyihasida ishtirok etish uchun tasdiqlandingiz.\nEndi taqdimotingizni yuborishingiz mumkin - buning uchun pastdagi \"📤 Taqdimot jo'natish\" tugmasini bosing.";
+                if (project is not null)
+                {
+                    message += $"\n\n{EventReminderFormatter.Format(project)}";
+                }
+
+                await _telegramNotifier.TrySendMessageAsync(chatId, message, PresentationBotHostedService.PresenterMainKeyboard, ct);
             }
         }
         catch (InvalidOperationException ex)

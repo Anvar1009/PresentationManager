@@ -22,6 +22,14 @@ namespace PresentationManager.UI.SlideDisplay;
 /// </remarks>
 public sealed class PdfSlideDisplayService : ISlideDisplayService
 {
+    /// <summary>Bounds <see cref="EnsureCoreWebView2Async"/>/navigation below, mirroring
+    /// <c>PptxToPdfConverter.ConversionTimeout</c>'s guard against the same class of "whole panel stops
+    /// responding" trap: a WebView2 environment/navigation that never completes (corrupted user-data
+    /// folder, a stuck/crashed msedgewebview2.exe render process, a WebView2 Runtime that needs updating,
+    /// ...) used to leave <c>ContentHost</c> permanently black with the operator unable to tell why and no
+    /// way to recover short of restarting the app — this turns that into one clear, catchable error instead.</summary>
+    private static readonly TimeSpan OpenTimeout = TimeSpan.FromSeconds(30);
+
     private readonly Panel _hostPanel;
     private WebView2? _webView;
     private bool _open;
@@ -53,7 +61,9 @@ public sealed class PdfSlideDisplayService : ISlideDisplayService
             _hostPanel.Controls.Add(_webView);
         }
 
-        await _webView.EnsureCoreWebView2Async();
+        await WithTimeoutAsync(
+            _webView.EnsureCoreWebView2Async(),
+            "WebView2 tayyorlanishi vaqti tugadi. Kompyuterda \"Microsoft Edge WebView2 Runtime\" o'rnatilganligini/yangilanganligini tekshiring va dasturni qayta ishga tushiring.");
 
         if (isFirstCreate)
         {
@@ -77,8 +87,9 @@ public sealed class PdfSlideDisplayService : ISlideDisplayService
         // Navigate() itself is fire-and-forget — awaiting NavigationCompleted here (rather than the old
         // "call it and hope" approach) is what actually catches a failed load instead of silently leaving
         // the operator on a black panel with no error anywhere.
-        var completed = await NavigateAndWaitAsync(
-            new Uri(absoluteFilePath).AbsoluteUri + "#toolbar=0&navpanes=0&view=FitH");
+        var completed = await WithTimeoutAsync(
+            NavigateAndWaitAsync(new Uri(absoluteFilePath).AbsoluteUri + "#toolbar=0&navpanes=0&view=FitH"),
+            "Slaydni ochish vaqti tugadi. Qaytadan urinib ko'ring.");
         if (!completed.IsSuccess)
         {
             throw new InvalidOperationException($"Faylni ochib bo'lmadi ({completed.WebErrorStatus}).");
@@ -87,6 +98,32 @@ public sealed class PdfSlideDisplayService : ISlideDisplayService
         _webView.Visible = true;
         _webView.Focus();
         _open = true;
+    }
+
+    /// <summary>Races <paramref name="task"/> against <see cref="OpenTimeout"/> — the underlying WebView2
+    /// call itself can't be cancelled once started (there's no CancellationToken overload for either
+    /// <c>EnsureCoreWebView2Async</c> or navigation), so a timeout here just stops waiting on it rather than
+    /// actually aborting it, same trade-off as <c>PptxToPdfConverter</c>'s STA-thread timeout.</summary>
+    private static async Task<T> WithTimeoutAsync<T>(Task<T> task, string timeoutMessage)
+    {
+        var completed = await Task.WhenAny(task, Task.Delay(OpenTimeout));
+        if (completed != task)
+        {
+            throw new TimeoutException(timeoutMessage);
+        }
+
+        return await task;
+    }
+
+    private static async Task WithTimeoutAsync(Task task, string timeoutMessage)
+    {
+        var completed = await Task.WhenAny(task, Task.Delay(OpenTimeout));
+        if (completed != task)
+        {
+            throw new TimeoutException(timeoutMessage);
+        }
+
+        await task;
     }
 
     private Task<CoreWebView2NavigationCompletedEventArgs> NavigateAndWaitAsync(string url)

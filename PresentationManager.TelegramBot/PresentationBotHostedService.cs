@@ -70,6 +70,21 @@ public sealed class PresentationBotHostedService : BackgroundService
 
     private const string AdminMenuButtonText = "🗂 Admin panel";
 
+    /// <summary>Persistent bottom panel shown to a registered presenter — mirrors <see cref="JudgeMainKeyboard"/>/
+    /// <see cref="AdminMainKeyboard"/>. Tapping "📤 Taqdimot jo'natish" re-enters the project-selection flow
+    /// (<see cref="ShowAssignedProjectsOrWaitAsync"/>) without needing to retype /start, including to submit a
+    /// second presentation after the first one already succeeded. Public (not just internal) for the same
+    /// reason as <see cref="JudgeMainKeyboard"/> - PresentationManager.API's PresenterAssignmentsController.Add
+    /// and Controllers.Web.AdminController.AssignPresenter both attach it to the assignment notification so the
+    /// button is already docked the moment a presenter is approved, even before their next /start.</summary>
+    public static readonly ReplyKeyboardMarkup PresenterMainKeyboard = new(
+        new[] { new KeyboardButton("📤 Taqdimot jo'natish") })
+    {
+        ResizeKeyboard = true
+    };
+
+    private const string PresenterSubmitButtonText = "📤 Taqdimot jo'natish";
+
     private readonly PresentationBotOptions _options;
     private readonly ProjectService _projectService;
     private readonly PresentationQueueService _queueService;
@@ -182,7 +197,7 @@ public sealed class PresentationBotHostedService : BackgroundService
             return;
         }
 
-        if (message.Text is "/start" or "/cancel" or JudgeProjectsButtonText or AdminMenuButtonText)
+        if (message.Text is "/start" or "/cancel" or JudgeProjectsButtonText or AdminMenuButtonText or PresenterSubmitButtonText)
         {
             _sessions.TryRemove(chatId, out _);
             _adminSessions.TryRemove(chatId, out _);
@@ -348,7 +363,7 @@ public sealed class PresentationBotHostedService : BackgroundService
             TelegramUsername = telegramUsername
         }, ct);
 
-        await botClient.SendMessage(chatId, "✅ Ro'yxatdan o'tish yakunlandi!", replyMarkup: new ReplyKeyboardRemove(), cancellationToken: ct);
+        await botClient.SendMessage(chatId, "✅ Ro'yxatdan o'tish yakunlandi!", replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
         await ShowAssignedProjectsOrWaitAsync(botClient, chatId, presenter.Id, presenter.FullName, ct);
     }
 
@@ -365,7 +380,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         {
             await botClient.SendMessage(chatId,
                 "Hozircha sizni birorta loyihaga biriktirishmagan. Administrator sizni loyihaga biriktirgach, shu yerga xabar keladi va taqdimot yuborishingiz mumkin bo'ladi.",
-                cancellationToken: ct);
+                replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
             return;
         }
 
@@ -380,6 +395,11 @@ public sealed class PresentationBotHostedService : BackgroundService
             .Select(p => new[] { InlineKeyboardButton.WithCallbackData(p.Name, $"project:{p.Id}") })
             .ToArray();
 
+        // Sent as two messages, not one: Telegram can't attach both a persistent ReplyKeyboardMarkup (bottom
+        // panel) and an InlineKeyboardMarkup (this message's own buttons) to the same SendMessage call - the
+        // first re-docks PresenterMainKeyboard (harmless if it's already showing), the second carries the
+        // actual project picker.
+        await botClient.SendMessage(chatId, $"👋 {fullName}, xush kelibsiz!", replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
         await botClient.SendMessage(chatId, "Taqdimot yuborish uchun loyihani tanlang:",
             replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
     }
@@ -451,7 +471,16 @@ public sealed class PresentationBotHostedService : BackgroundService
                 extraDiscussionTimeSeconds: 0,
                 presenterId: session.PresenterId, ct: ct);
 
-            var confirmation = $"✅ Taqdimotingiz \"{session.ProjectName}\" loyihasiga qabul qilindi. Yana yuborish uchun /start bosing.";
+            // Explicitly restates what was actually captured (project/title/file type) rather than just a
+            // generic "qabul qilindi" - so the presenter can immediately catch a wrong title or a misread
+            // file type instead of only finding out when Admin reviews the queue.
+            var fileTypeLabel = fileType == PresentationFileType.Pdf ? "PDF" : "PowerPoint";
+            var confirmation =
+                "✅ Taqdimotingiz qabul qilindi!\n\n" +
+                $"🏛 Loyiha: {session.ProjectName}\n" +
+                $"📌 Nomi: {session.Title}\n" +
+                $"📄 Fayl turi: {fileTypeLabel}\n\n" +
+                "Yana yuborish uchun pastdagi \"📤 Taqdimot jo'natish\" tugmasini bosing.";
 
             // The reminder is best-effort - the project could in principle have been deleted in the moment
             // between picking it and finishing the upload; the upload itself already succeeded above
@@ -460,37 +489,16 @@ public sealed class PresentationBotHostedService : BackgroundService
             var project = projects.FirstOrDefault(p => p.Id == session.ProjectId);
             if (project is not null)
             {
-                confirmation += $"\n\n{FormatEventReminder(project)}";
+                confirmation += $"\n\n{EventReminderFormatter.Format(project)}";
             }
 
-            await botClient.SendMessage(chatId, confirmation, cancellationToken: ct);
+            await botClient.SendMessage(chatId, confirmation, replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
         }
         finally
         {
             File.Delete(tempFilePath);
             _sessions.TryRemove(chatId, out _);
         }
-    }
-
-    /// <summary>Tells the presenter when/where the event they just submitted a presentation for actually is
-    /// - the info the operator captured on the project itself (<see cref="ProjectEditForm"/> in AdminForm).</summary>
-    private static string FormatEventReminder(Project project)
-    {
-        var dateText = project.EventStartDate == project.EventEndDate
-            ? project.EventStartDate.ToString("dd.MM.yyyy")
-            : $"{project.EventStartDate:dd.MM.yyyy} - {project.EventEndDate:dd.MM.yyyy}";
-
-        var lines = new List<string> { $"📅 Sana: {dateText}" };
-        if (project.EventTime is { } time)
-        {
-            lines.Add($"🕒 Vaqti: {time:HH:mm}");
-        }
-        if (!string.IsNullOrWhiteSpace(project.Location))
-        {
-            lines.Add($"📍 Manzil: {project.Location}");
-        }
-
-        return string.Join('\n', lines);
     }
 
     // ---------- Judge web platform redirect ----------
