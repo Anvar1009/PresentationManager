@@ -32,7 +32,18 @@ public sealed class OrderController : Controller
     public async Task<IActionResult> Dashboard(CancellationToken ct)
     {
         var projects = await _projectService.GetAllAsync(ct);
-        var options = projects.Select(p => new OrderProjectOption(p.Id, p.Name)).ToList();
+
+        // One count query per project rather than a single bulk fetch - projects.Count stays small in
+        // practice (this is a per-event competition list, not a paginated table), and CountPresentationsAsync
+        // already exists for AdminController's delete-warning, so this reuses it instead of adding a new
+        // repository method just for this card.
+        var options = new List<OrderProjectOption>();
+        foreach (var project in projects)
+        {
+            var count = await _projectService.CountPresentationsAsync(project.Id, ct);
+            options.Add(new OrderProjectOption(project.Id, project.Name, count));
+        }
+
         return View(new OrderDashboardViewModel(User.Identity?.Name ?? string.Empty, options));
     }
 

@@ -1,4 +1,6 @@
 using System.Net.Http;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -237,6 +239,19 @@ static class Program
                 _ => throw new InvalidOperationException($"Unknown role: {user.Role}")
             };
 
+            // PresentationForm (Operator only) owns a WebView2 control once the operator has actually opened
+            // a slide - WebView2 can only tear itself down while the WinForms message loop is still pumping,
+            // but PresentationForm is a DI singleton, so without this it would only get Disposed later via
+            // `host.Dispose()` below, AFTER WinFormsApp.Run has already returned and the loop has stopped -
+            // throwing "CoreWebView2 can only be accessed from the UI thread." right as the operator closes
+            // the app. Closing it here, from mainForm's own FormClosed (which fires while the loop is still
+            // running, just before WinFormsApp.Run returns), disposes it at the one point that's still safe.
+            if (mainForm is AdminForm)
+            {
+                var presentationForm = host.Services.GetRequiredService<PresentationForm>();
+                mainForm.FormClosed += (_, _) => presentationForm.Close();
+            }
+
             WinFormsApp.Run(mainForm);
         }
 
@@ -296,19 +311,37 @@ static class Program
 
     /// <summary>Writes the placeholder config template (embedded in the exe as a resource, so the published
     /// app needs no companion file to do this) to <paramref name="appDataConfigPath"/> the first time this
-    /// app runs on a given machine - never overwrites an existing file, so whatever real values get filled
-    /// in there afterward survive every future launch/update.</summary>
+    /// app runs on a given machine - never overwrites an existing file's other values, so whatever real
+    /// values get filled in there afterward survive every future launch/update.</summary>
     private static void EnsureAppDataConfigSeeded(string appDataConfigPath)
     {
-        if (File.Exists(appDataConfigPath))
+        using var resourceStream = typeof(Program).Assembly.GetManifestResourceStream("PresentationManager.UI.appsettings.json")
+            ?? throw new InvalidOperationException("Embedded default appsettings.json resource is missing.");
+
+        if (!File.Exists(appDataConfigPath))
         {
+            using var fileStream = File.Create(appDataConfigPath);
+            resourceStream.CopyTo(fileStream);
             return;
         }
 
-        using var resourceStream = typeof(Program).Assembly.GetManifestResourceStream("PresentationManager.UI.appsettings.json")
-            ?? throw new InvalidOperationException("Embedded default appsettings.json resource is missing.");
-        using var fileStream = File.Create(appDataConfigPath);
-        resourceStream.CopyTo(fileStream);
+        // Repairs a file left behind by an older/misconfigured build (an empty "Api":{"BaseUrl":""} from
+        // before this machine's exe had a real default baked in, or even the pre-API-architecture template
+        // with no "Api" section at all) - without this, a machine that hit "Api:BaseUrl is not configured"
+        // once stays stuck on every future launch even after being handed a fixed exe, since this method
+        // used to only ever act the very first time the file didn't exist yet. Only Api:BaseUrl is patched
+        // in, and only when actually missing/empty - anything else already in the file (a real TelegramBot
+        // token, etc.) is left exactly as-is.
+        var existingJson = File.ReadAllText(appDataConfigPath);
+        var existing = string.IsNullOrWhiteSpace(existingJson) ? new JsonObject() : (JsonNode.Parse(existingJson)?.AsObject() ?? new JsonObject());
+        var existingBaseUrl = existing["Api"]?["BaseUrl"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(existingBaseUrl))
+        {
+            using var reader = new StreamReader(resourceStream);
+            var defaultConfig = JsonNode.Parse(reader.ReadToEnd())!.AsObject();
+            existing["Api"] = defaultConfig["Api"]!.DeepClone();
+            File.WriteAllText(appDataConfigPath, existing.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        }
     }
 
     /// <summary>Registers a typed HttpClient (base address = the API, JwtAuthHandler attaching the bearer
