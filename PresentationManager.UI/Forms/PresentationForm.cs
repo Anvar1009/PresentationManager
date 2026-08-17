@@ -50,6 +50,16 @@ public sealed class PresentationForm : Form
 
     private bool _slideOpen;
 
+    /// <summary>Raised when the operator presses Escape on this screen — the only way back to
+    /// <see cref="AdminForm"/> while this window is showing, since this screen has no controls of its own
+    /// (see class remarks) and, on a single-monitor machine, fills the entire display and takes the
+    /// foreground the moment it's shown (see <see cref="PositionOnTargetMonitor"/>), leaving AdminForm
+    /// completely covered with no way to click back to it. Previously the operator's only way out was the
+    /// "Ekranni yashirish" button — which lives on AdminForm itself, i.e. exactly the window this one is
+    /// hiding, an unreachable dead end whenever the slide failed to render (a black screen with nothing but
+    /// the timer, and seemingly "no button works" since every click just lands on this controls-less form).</summary>
+    public event Action? ReturnToAdminRequested;
+
     /// <summary>Which presentation's file is currently loaded in <see cref="_pdfDisplayService"/> — needed
     /// alongside <see cref="_slideOpen"/> because NextPresenterAsync can now go straight from one
     /// presentation's Discussion to the next one's Running with no Ready/closed state in between (it chains
@@ -73,6 +83,9 @@ public sealed class PresentationForm : Form
         BackColor = AppColors.Background;
         StartPosition = FormStartPosition.Manual;
         DoubleBuffered = true;
+        // Needed for ProcessCmdKey below to see Escape at all — without it, once the embedded WebView2
+        // (ContentHost) has keyboard focus, the key never reaches this Form's own message handling.
+        KeyPreview = true;
         // FormBorderStyle/TopMost/ShowInTaskbar are set dynamically in PositionOnTargetMonitor, based on
         // whether a real second monitor exists — see the comment there for why.
 
@@ -174,6 +187,23 @@ public sealed class PresentationForm : Form
     public void HideAll()
     {
         Hide();
+    }
+
+    /// <summary>Escape is handled here (Form-level command key) rather than a plain KeyDown handler because
+    /// once the embedded WebView2 control (<see cref="ContentHost"/>) has keyboard focus — which it takes
+    /// for itself on every navigation, see <see cref="PdfSlideDisplayService"/> — a regular KeyDown on the
+    /// Form never fires; the browser process consumes the key first. ProcessCmdKey (with <see cref="Form.KeyPreview"/>
+    /// enabled) intercepts at the Form before that happens, so Escape reliably gets the operator back to
+    /// AdminForm no matter what's currently showing or has focus.</summary>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == Keys.Escape)
+        {
+            ReturnToAdminRequested?.Invoke();
+            return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     /// <summary>Gates the actual timer start behind one extra manual click — <see cref="AdminForm"/>'s

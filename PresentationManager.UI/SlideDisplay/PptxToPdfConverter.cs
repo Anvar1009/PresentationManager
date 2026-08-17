@@ -21,14 +21,45 @@ public static class PptxToPdfConverter
     /// as an unexplained failure to open the slide.</summary>
     private static readonly SemaphoreSlim ConversionLock = new(1, 1);
 
+    /// <summary>Generous, but bounded: a hung PowerPoint COM automation (no PowerPoint installed/activated,
+    /// a stuck modal dialog on an invisible window, ...) used to wait on <see cref="ConversionLock"/> and
+    /// the underlying <c>new PowerPoint.Application()</c> call forever, with no way back except restarting
+    /// the whole app - every later queue-preview thumbnail and every later Boshlash press queued up behind
+    /// the same never-released lock, which is what "the whole panel stops responding" actually was. This
+    /// caps how long any single attempt can block the rest of the app, in exchange for real conversions of
+    /// unusually large decks needing to stay under it.</summary>
+    private static readonly TimeSpan ConversionTimeout = TimeSpan.FromSeconds(45);
+
     /// <summary>Runs the (COM-requires-STA) conversion on its own dedicated STA thread so it doesn't block
-    /// the UI thread, then hands the result back via the returned Task.</summary>
-    public static Task<string> EnsureConvertedToPdfAsync(string pptxPath)
+    /// the UI thread, then hands the result back via the returned Task. Bounded by
+    /// <see cref="ConversionTimeout"/> on both ends - waiting for the lock, and waiting for the conversion
+    /// itself - so a single stuck attempt degrades to one clear, catchable error instead of wedging every
+    /// later slide/thumbnail open for the rest of the session (.NET can't safely abort a thread blocked
+    /// inside a native COM call, so a timed-out attempt is abandoned running rather than killed - the next
+    /// attempt tries fresh rather than piling up behind it, since the lock itself is also acquired with a
+    /// timeout instead of an unbounded wait).</summary>
+    public static async Task<string> EnsureConvertedToPdfAsync(string pptxPath)
     {
+        if (Type.GetTypeFromProgID("PowerPoint.Application") is null)
+        {
+            // Fails immediately instead of ever attempting the COM call - this is the actual root cause on
+            // a machine where PowerPoint desktop isn't installed/registered, and without this check that
+            // machine's very first real .pptx/.ppt open (as opposed to a .pdf one, which never reaches this
+            // class at all) is exactly the hang this whole method now guards against.
+            throw new InvalidOperationException(
+                "PowerPoint dasturi topilmadi. Taqdimotni konvertatsiya qilish uchun shu kompyuterda Microsoft PowerPoint o'rnatilgan bo'lishi kerak.");
+        }
+
         var tcs = new TaskCompletionSource<string>();
         var thread = new Thread(() =>
         {
-            ConversionLock.Wait();
+            if (!ConversionLock.Wait(ConversionTimeout))
+            {
+                tcs.SetException(new TimeoutException(
+                    "Oldingi konvertatsiya hali tugamagan (PowerPoint qotib qolgan bo'lishi mumkin) - operator kompyuterida barcha POWERPNT.EXE jarayonlarini tugating va qayta urinib ko'ring."));
+                return;
+            }
+
             try
             {
                 tcs.SetResult(EnsureConvertedToPdf(pptxPath));
@@ -47,7 +78,17 @@ public static class PptxToPdfConverter
         };
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        return tcs.Task;
+
+        var completed = await Task.WhenAny(tcs.Task, Task.Delay(ConversionTimeout));
+        if (completed != tcs.Task)
+        {
+            // The background thread is abandoned running (see remarks above) - this call just stops
+            // waiting on it so the operator gets their app back instead of a permanent freeze.
+            throw new TimeoutException(
+                "Taqdimotni PDF'ga aylantirish vaqti tugadi. PowerPoint javob bermayapti - operator kompyuterida barcha POWERPNT.EXE jarayonlarini tugating (Ish jarayonlari boshqaruvchisi orqali) va qaytadan urinib ko'ring.");
+        }
+
+        return await tcs.Task;
     }
 
     private static string EnsureConvertedToPdf(string pptxPath)

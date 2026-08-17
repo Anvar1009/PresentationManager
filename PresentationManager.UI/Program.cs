@@ -21,6 +21,33 @@ static class Program
     [STAThread]
     static void Main()
     {
+        // Without this, an exception thrown before the WinForms message loop starts pumping (anything here
+        // up through host.Build()/the health check) - or on a background thread, or one WinForms' own loop
+        // catches internally - has no managed catch site anywhere in this app. .NET 8 WinForms responds to
+        // that with a fast, silent process termination: the exe flashes and disappears with zero visible
+        // explanation, which is exactly what was reported running the published exe on a second machine
+        // (works on the dev machine, silently closes elsewhere - nothing here proves what actually failed
+        // without this). CatchException + the two handlers below turn every one of those into a visible
+        // message and a log file instead of silence.
+        WinFormsApp.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => ReportFatalError(e.ExceptionObject as Exception);
+        WinFormsApp.ThreadException += (_, e) => ReportFatalError(e.Exception);
+
+        try
+        {
+            RunApplication();
+        }
+        catch (Exception ex)
+        {
+            ReportFatalError(ex);
+        }
+    }
+
+    /// <summary>Everything Main used to do directly, now wrapped by Main's own try/catch above - see its
+    /// remarks for why. Local functions defined inside (WithCurrentOperatorUser etc.) are unchanged from
+    /// before this was split out.</summary>
+    static void RunApplication()
+    {
         ApplicationConfiguration.Initialize();
 
         // Installed explicitly (rather than relying on it being auto-installed by the first Control) so
@@ -236,6 +263,35 @@ static class Program
         // Same Task.Run reasoning as the health-check call above - the WinForms message loop has already
         // ended by this point (Application.Run returned), so nothing pumps this thread's SynchronizationContext.
         Task.Run(() => host.StopAsync()).GetAwaiter().GetResult();
+    }
+
+    /// <summary>Last-resort handler for anything Main's own try/catch, <see cref="AppDomain.UnhandledException"/>,
+    /// or <see cref="Application.ThreadException"/> catches - logs the full exception to a file (so a user on
+    /// a machine with no console/dev tools can still send back something useful) and shows a plain-language
+    /// message box naming that file, instead of the exe silently vanishing. Never lets a failure in its own
+    /// logging step stop the message box from showing - that box is the one thing this method must not fail
+    /// to do.</summary>
+    private static void ReportFatalError(Exception? ex)
+    {
+        var logPath = "%LocalAppData%\\PresentationManager\\crash.log";
+        try
+        {
+            var logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PresentationManager");
+            Directory.CreateDirectory(logDir);
+            logPath = Path.Combine(logDir, "crash.log");
+            File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}]{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Logging itself must never throw past this point - the message box below matters more than the
+            // log file existing.
+        }
+
+        MessageBox.Show(
+            $"Dasturda kutilmagan xatolik yuz berdi va u yopilishi kerak.\n\nXatolik: {ex?.Message ?? "noma'lum"}\n\nTo'liq tafsilotlar shu faylga yozildi (buni yuboring):\n{logPath}",
+            "Kutilmagan xatolik",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Error);
     }
 
     /// <summary>Writes the placeholder config template (embedded in the exe as a resource, so the published

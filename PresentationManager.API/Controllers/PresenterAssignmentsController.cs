@@ -64,12 +64,20 @@ public sealed class PresenterAssignmentsController : ControllerBase
             if (presenter?.TelegramChatId is { } chatId)
             {
                 // Best-effort, same as JudgesController.Add - the assignment itself already succeeded
-                // regardless of whether this push reaches them (e.g. they blocked the bot).
+                // regardless of whether this push reaches them (e.g. they blocked the bot). Includes the
+                // event date/time/location (EventReminderFormatter - same text the bot itself appends after
+                // a successful upload) so the presenter knows when to actually show up, not just that
+                // they're approved; replyMarkup docks PresentationBotHostedService.PresenterMainKeyboard
+                // immediately, so "Taqdimot jo'natish" is there even before their next /start.
                 var project = await _projectRepository.GetByIdAsync(created.ProjectId, ct);
                 var projectName = project?.Name ?? "loyiha";
-                await _telegramNotifier.TrySendMessageAsync(chatId,
-                    $"🎉 Tabriklaymiz! Siz \"{projectName}\" loyihasida ishtirok etish uchun tasdiqlandingiz.\nEndi taqdimotingizni yuborishingiz mumkin - buning uchun /start bosing.",
-                    ct: ct);
+                var message = $"🎉 Tabriklaymiz! Siz \"{projectName}\" loyihasida ishtirok etish uchun tasdiqlandingiz.\nEndi taqdimotingizni yuborishingiz mumkin - buning uchun pastdagi \"📤 Taqdimot jo'natish\" tugmasini bosing.";
+                if (project is not null)
+                {
+                    message += $"\n\n{EventReminderFormatter.Format(project)}";
+                }
+
+                await _telegramNotifier.TrySendMessageAsync(chatId, message, PresentationBotHostedService.PresenterMainKeyboard, ct);
             }
 
             return Ok(PresenterProjectAssignmentDto.FromEntity(created));

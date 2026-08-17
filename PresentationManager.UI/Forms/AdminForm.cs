@@ -351,6 +351,18 @@ public sealed class AdminForm : Form
 
     private void WireSessionEvents()
     {
+        // Escape on Namoyish Ekrani — the operator's only way back here whenever that screen is covering
+        // this one (always true on a single monitor, since it fills and activates over the whole display —
+        // see PresentationForm.PositionOnTargetMonitor) and the slide itself isn't visibly doing anything,
+        // e.g. still black while a .pptx conversion is in progress or after it silently failed. Without this,
+        // AdminForm's own "Ekranni yashirish" button is unreachable, since it lives on exactly the window
+        // Namoyish Ekrani is hiding — indistinguishable from every other button in the panel "not working".
+        _presentationForm.ReturnToAdminRequested += () => RunOnUiThread(() =>
+        {
+            _presentationForm.HideAll();
+            Activate();
+        });
+
         _session.PresentationChanged += () => RunOnUiThread(() =>
         {
             RefreshQueueList();
