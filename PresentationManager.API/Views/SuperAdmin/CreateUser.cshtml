@@ -4,7 +4,10 @@
     ViewData["Brand"] = "SuperAdmin paneli";
 }
 
-<p><a asp-controller="SuperAdmin" asp-action="Users">&larr; Foydalanuvchilar</a></p>
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("users")' />
+}
+
 <span class="eyebrow">+ Foydalanuvchi qo'shish</span>
 <h1 class="page-title">Yangi foydalanuvchi</h1>
 <p class="page-subtitle">Login va parolni foydalanuvchiga alohida yetkazing.</p>

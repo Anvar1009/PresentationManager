@@ -9,7 +9,9 @@
 <h1 class="page-title">Taqdimotchilar</h1>
 <p class="page-subtitle">Botga /start bosib ro'yxatdan o'tgan har bir kishi (faqat ko'rish rejimi).</p>
 
-<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("presenters")' />
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("presenters")' />
+}
 
 <div class="toolbar">
     <form method="get" asp-controller="SuperAdmin" asp-action="Presenters">

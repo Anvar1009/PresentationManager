@@ -5,12 +5,13 @@
     ViewData["Wide"] = "container-wide";
 }
 
-<p><a asp-controller="Admin" asp-action="Dashboard">&larr; Loyihalar</a></p>
+@section Sidebar {
+    <partial name="_ProjectTabs" model='new AdminProjectTabsViewModel(Model.ProjectId, "participants")' />
+}
+
 <span class="eyebrow">Qatnashchilar</span>
 <h1 class="page-title">@Model.ProjectName</h1>
 <p class="page-subtitle">Ushbu loyihaga kamida bitta taqdimot yuborgan har bir qatnashchi.</p>
-
-<partial name="_ProjectTabs" model='new AdminProjectTabsViewModel(Model.ProjectId, "participants")' />
 
 <div class="toolbar">
     <form method="get" asp-controller="Admin" asp-action="Participants">

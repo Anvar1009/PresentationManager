@@ -65,6 +65,22 @@
     --warning: #fb8c00;
     --warning-bg: #fb8c0022;
 
+    /* Qualitative palette for dashboard data-viz (stat card icons, the status donut chart) - the first
+       three reuse the existing accent/success/danger/warning tokens above so they read as the same "system",
+       the rest (purple/blue/teal) exist only here since nothing else in the app needed them before. */
+    --chart-1: #8b7cf6;
+    --chart-1-bg: #8b7cf626;
+    --chart-2: #3b82f6;
+    --chart-2-bg: #3b82f626;
+    --chart-3: #43a047;
+    --chart-3-bg: #43a04726;
+    --chart-4: #fb8c00;
+    --chart-4-bg: #fb8c0026;
+    --chart-5: #e5453f;
+    --chart-5-bg: #e5453f26;
+    --chart-6: #06b6d4;
+    --chart-6-bg: #06b6d426;
+
     --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
     --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
 
@@ -121,26 +137,70 @@ a:hover {
     outline-offset: 2px;
 }
 
-/* ===== Instrument bar ===== */
+/* ===== App shell (persistent left sidebar + main content) =====
+   Every authenticated panel (Admin/SuperAdmin/Judge/Order) shares this shell - each panel's own section
+   navigation and the signed-in user's info both live in the sidebar now, not scattered across a top bar
+   plus inline in-page tabs. Login (unauthenticated) skips the shell entirely - see _Layout.cshtml. */
 
-.topbar {
+.app-shell {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-4);
-    padding: var(--space-3) var(--space-6);
-    background: var(--bg-raised);
-    border-bottom: 1px solid var(--border);
+    align-items: stretch;
+    min-height: 100vh;
 }
 
-.brand {
+.sidebar {
+    width: 248px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    background: var(--bg-raised);
+    border-right: 1px solid var(--border);
+    padding: var(--space-5) var(--space-4);
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.sidebar-brand {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-3);
+    padding: 0 var(--space-2);
+}
+
+.sidebar-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    background: var(--accent-dim);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+}
+
+.sidebar-mark .icon {
+    width: 18px;
+    height: 18px;
+}
+
+.sidebar-brand-title {
+    display: block;
     font-family: var(--font-mono);
     font-weight: 600;
     font-size: 14px;
     letter-spacing: 0.02em;
+}
+
+.sidebar-brand-tagline {
+    display: block;
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 1px;
 }
 
 .brand-dot {
@@ -152,21 +212,172 @@ a:hover {
     flex: none;
 }
 
-.account {
+/* A panel's own section links (Admin/SuperAdmin's per-area tabs) reuse the existing .tabs/.tab pill
+   component, just restacked vertically inside the sidebar via this descendant override instead of a
+   separate component - see .tab in the Buttons-adjacent section below for the shared base styles. */
+.sidebar .tabs {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 2px;
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.sidebar .tab {
+    width: 100%;
+    justify-content: flex-start;
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+}
+
+/* Groups a multi-section sidebar's tabs under a small caption (e.g. "BOSHQARUV") - SuperAdminTabs is the
+   only nav with enough sections to actually need grouping; a single flat <nav class="tabs"> (Admin's
+   per-project tabs, or none at all) just never emits one of these. */
+.sidebar-group-label {
+    padding: var(--space-4) var(--space-2) var(--space-1);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.sidebar-group-label:first-child {
+    padding-top: 0;
+}
+
+/* A quieter "go up one level" link (e.g. "← Loyihalar") above a panel's section tabs, or standing alone
+   on pages that don't have section tabs at all (Judge/Order's project drill-down) - deliberately not styled
+   as a .tab itself, so it reads as an escape hatch rather than one more sibling section. */
+.sidebar-back {
+    display: block;
+    padding: 6px var(--space-2);
+    font-size: 12.5px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.sidebar-back:hover {
+    color: var(--text);
+    text-decoration: none;
+}
+
+.sidebar-footer {
+    margin-top: auto;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.sidebar-footer form {
+    margin: 0;
+}
+
+.sidebar-user {
     display: flex;
     align-items: center;
-    gap: var(--space-4);
-    color: var(--text-muted);
-    font-size: 13px;
+    gap: var(--space-3);
+    padding: 0 var(--space-2);
+    min-width: 0;
 }
 
-.account-name {
+.sidebar-user-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--accent-dim);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-family: var(--font-mono);
-    color: var(--text);
+    font-weight: 700;
+    font-size: 12px;
+    flex: none;
 }
 
-.topbar form {
-    margin: 0;
+.sidebar-user-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.sidebar-user-name {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-user-role {
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 1px;
+}
+
+.main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* Narrow viewports (a Judge scoring from their own phone is the realistic case here) fold the sidebar back
+   into a horizontal bar above the content, rather than eating a fixed 248px out of a small screen's width. */
+@media (max-width: 760px) {
+    .app-shell {
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-3);
+    }
+
+    .sidebar .tabs {
+        flex-direction: row;
+        flex-wrap: wrap;
+        flex: 1 1 auto;
+    }
+
+    .sidebar .tab {
+        width: auto;
+    }
+
+    .sidebar-back {
+        padding: 6px 0;
+    }
+
+    /* Vertical group captions read fine stacked above a column of links but just add clutter inline in a
+       horizontal bar - the links themselves are still there and still just as reachable. */
+    .sidebar-group-label {
+        display: none;
+    }
+
+    .sidebar-footer {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: none;
+        flex-direction: row;
+        align-items: center;
+        flex: none;
+    }
+
+    .sidebar-user {
+        padding: 0;
+    }
 }
 
 /* ===== Layout ===== */
@@ -609,6 +820,24 @@ a:hover {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: var(--space-4) var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.stat-card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+}
+
+.stat-card-icon .icon {
+    width: 18px;
+    height: 18px;
 }
 
 .stat-value {
@@ -623,6 +852,200 @@ a:hover {
     color: var(--text-muted);
     font-size: 12.5px;
     margin-top: var(--space-1);
+}
+
+/* Shared qualitative coloring for stat card icons / the donut chart / its legend below - one rule set per
+   component instead of duplicating the --chart-N cycle three times over. */
+.chart-color-0 { --chart-c: var(--chart-1); --chart-c-bg: var(--chart-1-bg); }
+.chart-color-1 { --chart-c: var(--chart-2); --chart-c-bg: var(--chart-2-bg); }
+.chart-color-2 { --chart-c: var(--chart-3); --chart-c-bg: var(--chart-3-bg); }
+.chart-color-3 { --chart-c: var(--chart-4); --chart-c-bg: var(--chart-4-bg); }
+.chart-color-4 { --chart-c: var(--chart-5); --chart-c-bg: var(--chart-5-bg); }
+.chart-color-5 { --chart-c: var(--chart-6); --chart-c-bg: var(--chart-6-bg); }
+
+.stat-card-icon.chart-color-0, .stat-card-icon.chart-color-1, .stat-card-icon.chart-color-2,
+.stat-card-icon.chart-color-3, .stat-card-icon.chart-color-4, .stat-card-icon.chart-color-5 {
+    background: var(--chart-c-bg);
+    color: var(--chart-c);
+}
+
+/* ===== Status donut chart (SuperAdmin overview - real counts from PresentationsByStatus, no fake data) ===== */
+
+.donut-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    flex-wrap: wrap;
+}
+
+.donut-wrap {
+    position: relative;
+    width: 176px;
+    height: 176px;
+    flex: none;
+}
+
+.donut {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.donut-track {
+    fill: none;
+    stroke: var(--surface-hover);
+    stroke-width: 22;
+}
+
+.donut-segment {
+    fill: none;
+    stroke-width: 22;
+}
+
+.donut-segment.chart-color-0, .donut-segment.chart-color-1, .donut-segment.chart-color-2,
+.donut-segment.chart-color-3, .donut-segment.chart-color-4, .donut-segment.chart-color-5 {
+    stroke: var(--chart-c);
+}
+
+.donut-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.donut-total {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.donut-total-label {
+    font-size: 10.5px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: var(--space-1);
+}
+
+.donut-legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    flex: 1 1 200px;
+}
+
+.donut-legend li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 13px;
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: none;
+}
+
+.legend-dot.chart-color-0, .legend-dot.chart-color-1, .legend-dot.chart-color-2,
+.legend-dot.chart-color-3, .legend-dot.chart-color-4, .legend-dot.chart-color-5 {
+    background: var(--chart-c);
+}
+
+.legend-label {
+    flex: 1 1 auto;
+    color: var(--text);
+}
+
+.legend-count {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+.legend-pct {
+    font-family: var(--font-mono);
+    color: var(--text-faint);
+    width: 44px;
+    text-align: right;
+}
+
+/* ===== Recent activity feed (SuperAdmin overview - real Jurnal/History entries) ===== */
+
+.activity-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+}
+
+.activity-icon .icon {
+    width: 15px;
+    height: 15px;
+}
+
+.activity-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.activity-message {
+    font-size: 13.5px;
+    color: var(--text);
+}
+
+.activity-time {
+    font-size: 11.5px;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    margin-top: 2px;
+}
+
+/* ===== Dashboard two-column layout (donut+legend / activity feed) ===== */
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: var(--space-5);
+    align-items: start;
+}
+
+@media (max-width: 900px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* ===== Toolbar (search box + action button, above a table) ===== */

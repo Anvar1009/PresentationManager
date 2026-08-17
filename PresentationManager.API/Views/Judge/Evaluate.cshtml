@@ -4,9 +4,11 @@
     ViewData["Brand"] = "Hakamlar paneli";
 }
 
-<p>
-    <a asp-controller="Judge" asp-action="Project" asp-route-judgeAssignmentId="@Model.JudgeAssignmentId">&larr; Taqdimotchilar</a>
-</p>
+@section Sidebar {
+    <a class="sidebar-back" asp-controller="Judge" asp-action="Dashboard">&larr; Loyihalar</a>
+    <a class="sidebar-back" asp-controller="Judge" asp-action="Project" asp-route-judgeAssignmentId="@Model.JudgeAssignmentId">&larr; Taqdimotchilar</a>
+}
+
 <span class="eyebrow">Baholash</span>
 <h1 class="page-title">@Model.PresenterFullName</h1>
 <p class="page-subtitle">@Model.PresentationTitle</p>

@@ -8,7 +8,10 @@
     ViewData["ProjectId"] = Model.ProjectId;
 }
 
-<p><a asp-controller="Order" asp-action="Dashboard">&larr; Loyihalar</a></p>
+@section Sidebar {
+    <a class="sidebar-back" asp-controller="Order" asp-action="Dashboard">&larr; Loyihalar</a>
+}
+
 <span class="eyebrow">Taqdimotchilar</span>
 <h1 class="page-title">@Model.ProjectName</h1>
 <p class="page-subtitle">Joriy tartib quyida ko'rsatilgan. Pastdagi tugma bosilganda tartib tasodifiy shakllantiriladi va operatorning navbat oynasida darhol yangilanadi.</p>

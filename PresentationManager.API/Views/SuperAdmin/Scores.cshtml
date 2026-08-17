@@ -9,7 +9,9 @@
 <h1 class="page-title">Baholar</h1>
 <p class="page-subtitle">Barcha loyihalar bo'yicha har bir hakamning qo'ygan bahosi (faqat ko'rish rejimi).</p>
 
-<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("scores")' />
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("scores")' />
+}
 
 <div class="toolbar">
     <form method="get" asp-controller="SuperAdmin" asp-action="Scores">

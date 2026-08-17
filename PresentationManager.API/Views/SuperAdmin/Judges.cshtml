@@ -9,7 +9,9 @@
 <h1 class="page-title">Hakamlar</h1>
 <p class="page-subtitle">Barcha loyihalar bo'yicha tayinlangan hakamlar (faqat ko'rish rejimi).</p>
 
-<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("judges")' />
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("judges")' />
+}
 
 <div class="toolbar">
     <form method="get" asp-controller="SuperAdmin" asp-action="Judges">

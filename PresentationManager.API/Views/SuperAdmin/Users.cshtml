@@ -18,7 +18,9 @@
 <h1 class="page-title">Foydalanuvchilar</h1>
 <p class="page-subtitle">Tizimga kirish huquqiga ega barcha hisoblar.</p>
 
-<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("users")' />
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("users")' />
+}
 
 @if (TempData["Success"] is string success)
 {

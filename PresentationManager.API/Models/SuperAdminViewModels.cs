@@ -4,7 +4,18 @@ using PresentationManager.Domain.Enums;
 
 namespace PresentationManager.API.Models;
 
-public sealed record SuperAdminStatusCount(string Label, int Count);
+public sealed record SuperAdminStatusCount(string Label, int Count, double Percentage);
+
+/// <summary>One row of the dashboard's "Top loyihalar" table - the most active projects (by presentation
+/// count) at a glance, reusing exactly the same fields <see cref="SuperAdminProjectsViewModel"/>'s full list
+/// already carries (via <see cref="Project"/>) rather than inventing a project-level "status" the domain has
+/// no real concept of (unlike a presentation, a project itself isn't "running" or "finished").</summary>
+public sealed record SuperAdminTopProjectRow(int ProjectId, string Name, int PresenterCount, int PresentationCount, string DateRange);
+
+/// <summary>One row of the dashboard's "So'nggi faoliyatlar" feed - the same underlying data as the full
+/// "Jurnal" tab (<see cref="SuperAdminJurnalViewModel"/>), just the most recent few with a friendlier
+/// "Bugun, HH:mm" style timestamp instead of a full date.</summary>
+public sealed record SuperAdminActivityRow(string Message, HistoryEventType EventType, string TimeLabel);
 
 /// <summary>Drives the shared <c>_SuperAdminTabs</c> partial's active-tab highlight - one of "dashboard"/
 /// "projects"/"presentations"/"presenters"/"judges"/"users"/"scores"/"jurnal".</summary>
@@ -17,7 +28,9 @@ public sealed record SuperAdminDashboardViewModel(
     int UserCount,
     int JudgeCount,
     int PresentationCount,
-    IReadOnlyList<SuperAdminStatusCount> PresentationsByStatus);
+    IReadOnlyList<SuperAdminStatusCount> PresentationsByStatus,
+    IReadOnlyList<SuperAdminTopProjectRow> TopProjects,
+    IReadOnlyList<SuperAdminActivityRow> RecentActivity);
 
 /// <summary>Reuses <see cref="Project"/> as-is - the SuperAdmin panel's "Loyihalar" tab is read-only, so no
 /// reshaping is needed beyond what the entity already carries.</summary>
