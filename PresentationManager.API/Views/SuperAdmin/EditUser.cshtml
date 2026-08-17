@@ -4,7 +4,10 @@
     ViewData["Brand"] = "SuperAdmin paneli";
 }
 
-<p><a asp-controller="SuperAdmin" asp-action="Users">&larr; Foydalanuvchilar</a></p>
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("users")' />
+}
+
 <span class="eyebrow">Login/parolni tiklash</span>
 <h1 class="page-title">@Model.FullName</h1>
 <p class="page-subtitle">Parolni bo'sh qoldirsangiz, joriy parol o'zgarmaydi.</p>

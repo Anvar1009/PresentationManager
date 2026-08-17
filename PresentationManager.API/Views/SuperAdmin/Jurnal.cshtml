@@ -9,7 +9,9 @@
 <h1 class="page-title">Jurnal</h1>
 <p class="page-subtitle">So'nggi 200 ta hodisa.</p>
 
-<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("jurnal")' />
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("jurnal")' />
+}
 
 @if (TempData["Success"] is string success)
 {

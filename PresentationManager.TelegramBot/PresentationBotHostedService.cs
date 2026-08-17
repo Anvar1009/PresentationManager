@@ -90,7 +90,6 @@ public sealed class PresentationBotHostedService : BackgroundService
     private readonly PresentationQueueService _queueService;
     private readonly ISettingsRepository _settingsRepository;
     private readonly IPresenterRepository _presenterRepository;
-    private readonly PresenterAssignmentService _presenterAssignmentService;
     private readonly JudgeService _judgeService;
     private readonly ScoreService _scoreService;
     private readonly CriterionService _criterionService;
@@ -109,7 +108,6 @@ public sealed class PresentationBotHostedService : BackgroundService
         PresentationQueueService queueService,
         ISettingsRepository settingsRepository,
         IPresenterRepository presenterRepository,
-        PresenterAssignmentService presenterAssignmentService,
         JudgeService judgeService,
         ScoreService scoreService,
         CriterionService criterionService,
@@ -121,7 +119,6 @@ public sealed class PresentationBotHostedService : BackgroundService
         _queueService = queueService;
         _settingsRepository = settingsRepository;
         _presenterRepository = presenterRepository;
-        _presenterAssignmentService = presenterAssignmentService;
         _judgeService = judgeService;
         _scoreService = scoreService;
         _criterionService = criterionService;
@@ -369,29 +366,29 @@ public sealed class PresentationBotHostedService : BackgroundService
 
     // ---------- Presenter upload flow ----------
 
-    /// <summary>Gate for the whole upload flow: a presenter can only ever see (and open a session for) a
-    /// project Admin has approved them for in the Admin panel (<see cref="PresenterAssignmentService"/>) - an
-    /// unapproved presenter gets a waiting message instead and no session is opened, so they can never reach
-    /// <see cref="SessionStep.AwaitingFile"/> at all.</summary>
+    /// <summary>Every existing project is offered here - a presenter no longer needs Admin's per-project
+    /// approval (<see cref="PresenterAssignmentService"/>) before they can even see it in the picker, only a
+    /// completed bot registration. Admin's "Ishtirokchilar" assign/approve screen still exists (e.g. for
+    /// tracking who Admin has explicitly vetted), it just no longer gates what shows up here.</summary>
     private async Task ShowAssignedProjectsOrWaitAsync(ITelegramBotClient botClient, long chatId, int presenterId, string fullName, CancellationToken ct)
     {
-        var assignedProjects = await _presenterAssignmentService.GetAssignedProjectsAsync(presenterId, ct);
-        if (assignedProjects.Count == 0)
+        var projects = await _projectService.GetAllAsync(ct);
+        if (projects.Count == 0)
         {
             await botClient.SendMessage(chatId,
-                "Hozircha sizni birorta loyihaga biriktirishmagan. Administrator sizni loyihaga biriktirgach, shu yerga xabar keladi va taqdimot yuborishingiz mumkin bo'ladi.",
+                "Hozircha birorta loyiha mavjud emas. Loyiha qo'shilgach, shu yerga xabar keladi va taqdimot yuborishingiz mumkin bo'ladi.",
                 replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
             return;
         }
 
-        await ShowProjectListAsync(botClient, chatId, presenterId, fullName, assignedProjects, ct);
+        await ShowProjectListAsync(botClient, chatId, presenterId, fullName, projects, ct);
     }
 
-    private async Task ShowProjectListAsync(ITelegramBotClient botClient, long chatId, int presenterId, string fullName, List<Project> assignedProjects, CancellationToken ct)
+    private async Task ShowProjectListAsync(ITelegramBotClient botClient, long chatId, int presenterId, string fullName, List<Project> projects, CancellationToken ct)
     {
         _sessions[chatId] = new ChatSession { Step = SessionStep.AwaitingProject, PresenterId = presenterId, FullName = fullName };
 
-        var buttons = assignedProjects
+        var buttons = projects
             .Select(p => new[] { InlineKeyboardButton.WithCallbackData(p.Name, $"project:{p.Id}") })
             .ToArray();
 
@@ -425,14 +422,6 @@ public sealed class PresentationBotHostedService : BackgroundService
         if (project is null)
         {
             await botClient.AnswerCallbackQuery(callbackQuery.Id, "Bu loyiha endi mavjud emas.", cancellationToken: ct);
-            return;
-        }
-
-        // Re-verified rather than trusting the button list this callback came from - Admin may have revoked
-        // the approval in the moment between the project picker being shown and this tap.
-        if (session.PresenterId is not { } presenterId || !await _presenterAssignmentService.IsAssignedAsync(project.Id, presenterId, ct))
-        {
-            await botClient.AnswerCallbackQuery(callbackQuery.Id, "Bu loyihaga ruxsatingiz yo'q.", cancellationToken: ct);
             return;
         }
 

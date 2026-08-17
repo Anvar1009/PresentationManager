@@ -3,6 +3,30 @@
     // Order/Dashboard.cshtml sets "Tartib paneli") - defaults to something generic for Login, which is
     // shared by both web-only roles and doesn't know which one is signing in until after the password check.
     var brand = ViewData["Brand"] as string ?? "Boshqaruv paneli";
+
+    // Uzbek label for the sidebar user card's role line - the raw ClaimTypes.Role value (the enum name,
+    // e.g. "SuperAdmin") is never shown as-is anywhere else in this app's UI either, see Users.cshtml's own
+    // BadgeClass for the same "translate the enum for display" pattern.
+    static string RoleLabel(string? role) => role switch
+    {
+        "SuperAdmin" => "Super Administrator",
+        "Admin" => "Administrator",
+        "OrderOperator" => "Tartib operatori",
+        "Judge" => "Hakam",
+        "Operator" => "Operator",
+        _ => role ?? ""
+    };
+
+    static string Initials(string fullName)
+    {
+        var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            >= 2 => $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant(),
+            1 => parts[0][0].ToString().ToUpperInvariant(),
+            _ => "?"
+        };
+    }
 }
 <!DOCTYPE html>
 <html lang="uz">
@@ -15,26 +39,53 @@
 <body data-project-id="@(ViewData["ProjectId"])">
     @if (User.Identity?.IsAuthenticated == true)
     {
-        <div class="topbar">
-            <div class="brand">
-                <span class="brand-dot" title="Real-vaqt ulanish"></span>
-                @brand
-            </div>
-            <div class="account">
-                <span class="account-name">@User.Identity!.Name</span>
-                <form asp-controller="Account" asp-action="Logout" method="post">
-                    <button type="submit" class="btn btn-outline">
-                        <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
-                        Chiqish
-                    </button>
-                </form>
-            </div>
+        <div class="app-shell">
+            <aside class="sidebar">
+                <div class="sidebar-brand">
+                    <span class="sidebar-mark" title="Real-vaqt ulanish">
+                        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+                    </span>
+                    <span>
+                        <span class="sidebar-brand-title">@brand</span>
+                        <span class="sidebar-brand-tagline">Taqdimotlar tizimi</span>
+                    </span>
+                </div>
+
+                @* Each panel supplies its own section links (or a lone "← ..." back link) here - see
+                   _ProjectTabs.cshtml/_SuperAdminTabs.cshtml and the Judge/Order views' own @section Sidebar
+                   blocks. Pages with nothing to add (a panel's own root/dashboard) simply leave this empty. *@
+                @await RenderSectionAsync("Sidebar", required: false)
+
+                <div class="sidebar-footer">
+                    <div class="sidebar-user">
+                        <span class="sidebar-user-avatar">@Initials(User.Identity!.Name!)</span>
+                        <span class="sidebar-user-text">
+                            <span class="sidebar-user-name">@User.Identity!.Name</span>
+                            <span class="sidebar-user-role">@RoleLabel(User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value)</span>
+                        </span>
+                    </div>
+                    <form asp-controller="Account" asp-action="Logout" method="post">
+                        <button type="submit" class="btn btn-outline btn-block">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+                            Chiqish
+                        </button>
+                    </form>
+                </div>
+            </aside>
+
+            <main class="main">
+                <div class="container @(ViewData["Wide"] as string)">
+                    @RenderBody()
+                </div>
+            </main>
         </div>
     }
-
-    <div class="container @(ViewData["Wide"] as string)">
-        @RenderBody()
-    </div>
+    else
+    {
+        <div class="container @(ViewData["Wide"] as string)">
+            @RenderBody()
+        </div>
+    }
 
     <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
     <script src="~/js/order-live.js"></script>

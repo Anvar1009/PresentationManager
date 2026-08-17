@@ -2,9 +2,16 @@
 @{
     ViewData["Title"] = Model.ProjectName;
     ViewData["Brand"] = "Tartib paneli";
+    // Lets order-live.js auto-reload this exact page when another tab/operator (or the desktop AdminForm's
+    // own drag-and-drop reorder) changes this project's order - see _Layout.cshtml/order-live.js, and
+    // Judge/Project.cshtml for the same pattern. Without this the list could silently go stale while open.
+    ViewData["ProjectId"] = Model.ProjectId;
 }
 
-<p><a asp-controller="Order" asp-action="Dashboard">&larr; Loyihalar</a></p>
+@section Sidebar {
+    <a class="sidebar-back" asp-controller="Order" asp-action="Dashboard">&larr; Loyihalar</a>
+}
+
 <span class="eyebrow">Taqdimotchilar</span>
 <h1 class="page-title">@Model.ProjectName</h1>
 <p class="page-subtitle">Joriy tartib quyida ko'rsatilgan. Pastdagi tugma bosilganda tartib tasodifiy shakllantiriladi va operatorning navbat oynasida darhol yangilanadi.</p>
@@ -34,11 +41,31 @@ else
         }
     </div>
 
-    <form asp-controller="Order" asp-action="Randomize" method="post" style="margin-top: var(--space-5);">
-        <input type="hidden" name="projectId" value="@Model.ProjectId" />
-        <button type="submit" class="btn btn-block">
-            <svg class="icon" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></svg>
-            Ro'yxatni shakllantirish
-        </button>
-    </form>
+    @if (Model.PresenterNames.Count < 2)
+    {
+        <p class="field-hint" style="margin-top: var(--space-4);">Tasodifiy tartib shakllantirish uchun kamida 2 ta taqdimotchi kerak.</p>
+    }
+    else
+    {
+        <form asp-controller="Order" asp-action="Randomize" method="post" style="margin-top: var(--space-5);"
+              onsubmit="return confirm('Joriy tartib almashtiriladi. Tasdiqlaysizmi?') && disableOnSubmit(this);">
+            <input type="hidden" name="projectId" value="@Model.ProjectId" />
+            <button type="submit" class="btn btn-block">
+                <svg class="icon" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></svg>
+                Ro'yxatni shakllantirish
+            </button>
+        </form>
+        <p class="card-meta-mono" style="margin-top: var(--space-3);">Har bir mumkin bo'lgan tartib bir xil ehtimollik bilan tanlanadi.</p>
+    }
+}
+
+@section Scripts {
+    <script>
+        function disableOnSubmit(form) {
+            var button = form.querySelector("button[type=submit]");
+            button.disabled = true;
+            button.textContent = "Shakllantirilmoqda...";
+            return true;
+        }
+    </script>
 }

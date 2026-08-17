@@ -1,55 +1,187 @@
 @model SuperAdminDashboardViewModel
+@using System.Globalization
 @{
     ViewData["Title"] = "Bosh sahifa";
     ViewData["Brand"] = "SuperAdmin paneli";
     ViewData["Wide"] = "container-wide";
+
+    // SVG donut geometry - computed here (not in the controller, which only hands over each slice's real
+    // Percentage) since this is pure rendering math, same spirit as the "@{ var index = 0; }" running
+    // counters already used elsewhere in these views (e.g. Order/Project.cshtml's queue numbering).
+    const double radius = 80;
+    const double circumference = 2 * Math.PI * radius;
+    var cumulative = 0.0;
+
+    // One <svg> icon per History event "family" so the activity feed reads at a glance instead of every row
+    // looking identical - Started/Resumed share the same "play" glyph, etc. Purely cosmetic grouping of the
+    // real HistoryEventType enum, not a new concept of its own.
+    string ActivityIconPath(HistoryEventType type) => type switch
+    {
+        HistoryEventType.Started or HistoryEventType.Resumed
+            or HistoryEventType.DiscussionStarted or HistoryEventType.DiscussionResumed
+            => "<polygon points=\"6 3 20 12 6 21 6 3\" />",
+        HistoryEventType.Paused or HistoryEventType.DiscussionPaused
+            => "<line x1=\"9\" y1=\"4\" x2=\"9\" y2=\"20\" /><line x1=\"15\" y1=\"4\" x2=\"15\" y2=\"20\" />",
+        HistoryEventType.Finished
+            => "<circle cx=\"12\" cy=\"12\" r=\"9\" /><polyline points=\"8.5 12.5 11 15 16 9\" />",
+        HistoryEventType.Skipped
+            => "<line x1=\"5\" y1=\"4\" x2=\"5\" y2=\"20\" /><polygon points=\"9 4 19 12 9 20 9 4\" />",
+        _ => "<line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\" /><polyline points=\"12 5 19 12 12 19\" />"
+    };
 }
 
 <span class="eyebrow">SuperAdmin · @Model.SuperAdminFullName</span>
 <h1 class="page-title">Bosh sahifa</h1>
 <p class="page-subtitle">Barcha jadvallar va jarayonlar bo'yicha umumiy ko'rinish.</p>
 
-<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("dashboard")' />
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("dashboard")' />
+}
 
 <div class="stat-grid">
     <div class="stat-card">
+        <span class="stat-card-icon chart-color-0">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
+        </span>
         <div class="stat-value">@Model.ProjectCount</div>
         <div class="stat-label">Loyihalar</div>
     </div>
     <div class="stat-card">
+        <span class="stat-card-icon chart-color-1">
+            <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
+        </span>
         <div class="stat-value">@Model.PresentationCount</div>
         <div class="stat-label">Taqdimotlar</div>
     </div>
     <div class="stat-card">
+        <span class="stat-card-icon chart-color-2">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+        </span>
         <div class="stat-value">@Model.PresenterCount</div>
         <div class="stat-label">Taqdimotchilar</div>
     </div>
     <div class="stat-card">
+        <span class="stat-card-icon chart-color-3">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="6" /><path d="M15.5 13.5 17 22l-5-3-5 3 1.5-8.5" /></svg>
+        </span>
         <div class="stat-value">@Model.JudgeCount</div>
         <div class="stat-label">Hakam tayinlovlari</div>
     </div>
     <div class="stat-card">
+        <span class="stat-card-icon chart-color-4">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+        </span>
         <div class="stat-value">@Model.UserCount</div>
         <div class="stat-label">Tizim foydalanuvchilari</div>
     </div>
 </div>
 
-<div class="card">
-    <span class="eyebrow">Taqdimotlar holati bo'yicha</span>
-    @if (Model.PresentationsByStatus.Count == 0)
+<div class="dashboard-grid">
+    <div class="card">
+        <span class="eyebrow">Taqdimotlar holati bo'yicha</span>
+        @if (Model.PresentationsByStatus.Count == 0)
+        {
+            <p class="page-subtitle" style="margin: 0;">Hozircha taqdimotlar yo'q.</p>
+        }
+        else
+        {
+            <div class="donut-card" style="margin-top: var(--space-4);">
+                <div class="donut-wrap">
+                    <svg class="donut" viewBox="0 0 200 200">
+                        <circle class="donut-track" cx="100" cy="100" r="80" />
+                        @{ var colorIndex = 0; }
+                        @foreach (var status in Model.PresentationsByStatus)
+                        {
+                            var dash = status.Percentage / 100.0 * circumference;
+                            var gap = circumference - dash;
+                            <circle class="donut-segment chart-color-@(colorIndex % 6)" cx="100" cy="100" r="80"
+                                    stroke-dasharray="@dash.ToString("0.###", CultureInfo.InvariantCulture) @gap.ToString("0.###", CultureInfo.InvariantCulture)"
+                                    stroke-dashoffset="@((-cumulative).ToString("0.###", CultureInfo.InvariantCulture))" />
+                            cumulative += dash;
+                            colorIndex++;
+                        }
+                    </svg>
+                    <div class="donut-center">
+                        <span class="donut-total">@Model.PresentationCount</span>
+                        <span class="donut-total-label">Jami</span>
+                    </div>
+                </div>
+                <ul class="donut-legend">
+                    @{ colorIndex = 0; }
+                    @foreach (var status in Model.PresentationsByStatus)
+                    {
+                        <li>
+                            <span class="legend-dot chart-color-@(colorIndex % 6)"></span>
+                            <span class="legend-label">@status.Label</span>
+                            <span class="legend-count">@status.Count</span>
+                            <span class="legend-pct">@status.Percentage.ToString("0.#")%</span>
+                        </li>
+                        colorIndex++;
+                    }
+                </ul>
+            </div>
+        }
+    </div>
+
+    <div class="card">
+        <span class="eyebrow">So'nggi faoliyatlar</span>
+        @if (Model.RecentActivity.Count == 0)
+        {
+            <p class="page-subtitle" style="margin: 0;">Hozircha hech qanday faoliyat yo'q.</p>
+        }
+        else
+        {
+            <ul class="activity-list" style="margin-top: var(--space-3);">
+                @foreach (var activity in Model.RecentActivity)
+                {
+                    <li class="activity-item">
+                        <span class="activity-icon">
+                            @Html.Raw($"<svg class=\"icon\" viewBox=\"0 0 24 24\">{ActivityIconPath(activity.EventType)}</svg>")
+                        </span>
+                        <span class="activity-body">
+                            <span class="activity-message">@activity.Message</span>
+                            <span class="activity-time">@activity.TimeLabel</span>
+                        </span>
+                    </li>
+                }
+            </ul>
+        }
+        <a asp-controller="SuperAdmin" asp-action="Jurnal" class="card-meta-mono" style="display: inline-block; margin-top: var(--space-4);">Barcha jurnalni ko'rish &rarr;</a>
+    </div>
+</div>
+
+<div class="card" style="margin-top: var(--space-5);">
+    <span class="eyebrow">Top loyihalar</span>
+    @if (Model.TopProjects.Count == 0)
     {
-        <p class="page-subtitle" style="margin: 0;">Hozircha taqdimotlar yo'q.</p>
+        <p class="page-subtitle" style="margin: 0;">Hozircha loyihalar yo'q.</p>
     }
     else
     {
-        <div class="table-wrap" style="border: none;">
+        <div class="table-wrap" style="border: none; margin-top: var(--space-3);">
             <table class="table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Loyiha nomi</th>
+                        <th>Taqdimotchilar</th>
+                        <th>Taqdimotlar</th>
+                        <th>Sana oralig'i</th>
+                        <th></th>
+                    </tr>
+                </thead>
                 <tbody>
-                    @foreach (var status in Model.PresentationsByStatus)
+                    @{ var rank = 0; }
+                    @foreach (var project in Model.TopProjects)
                     {
+                        rank++;
                         <tr>
-                            <td>@status.Label</td>
-                            <td><strong>@status.Count</strong></td>
+                            <td>@rank</td>
+                            <td>@project.Name</td>
+                            <td>@project.PresenterCount</td>
+                            <td>@project.PresentationCount</td>
+                            <td>@project.DateRange</td>
+                            <td><a asp-controller="SuperAdmin" asp-action="ExportFinalScores" asp-route-projectId="@project.ProjectId">Baholarni eksport</a></td>
                         </tr>
                     }
                 </tbody>

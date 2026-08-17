@@ -59,14 +59,52 @@ public sealed class SuperAdminController : Controller
 
         var byStatus = presentations
             .GroupBy(p => p.Status)
-            .Select(g => new SuperAdminStatusCount(UzbekText.StatusLabel(g.Key), g.Count()))
+            .Select(g => new SuperAdminStatusCount(
+                UzbekText.StatusLabel(g.Key), g.Count(),
+                presentations.Count == 0 ? 0 : g.Count() * 100.0 / presentations.Count))
             .OrderByDescending(s => s.Count)
+            .ToList();
+
+        // Ranked by presentation count rather than a fabricated "project status" - a project itself has no
+        // single lifecycle state in this domain (see SuperAdminTopProjectRow's doc comment), unlike one of
+        // its individual presentations.
+        var topProjects = presentations
+            .GroupBy(p => p.ProjectId)
+            .Select(g => new
+            {
+                Project = projects.FirstOrDefault(p => p.Id == g.Key),
+                PresentationCount = g.Count(),
+                PresenterCount = g.Select(p => p.FullName).Distinct().Count()
+            })
+            .Where(x => x.Project is not null)
+            .OrderByDescending(x => x.PresentationCount)
+            .Take(5)
+            .Select(x => new SuperAdminTopProjectRow(
+                x.Project!.Id, x.Project.Name, x.PresenterCount, x.PresentationCount,
+                $"{x.Project.EventStartDate:dd.MM.yyyy} - {x.Project.EventEndDate:dd.MM.yyyy}"))
+            .ToList();
+
+        var recentActivity = (await _historyRepository.GetRecentAsync(5, ct))
+            .Select(entry => new SuperAdminActivityRow(entry.Message, entry.EventType, FormatRecentTimestamp(entry.Timestamp)))
             .ToList();
 
         return View(new SuperAdminDashboardViewModel(
             User.Identity?.Name ?? string.Empty,
             projects.Count, presenters.Count, users.Count, judges.Count, presentations.Count,
-            byStatus));
+            byStatus, topProjects, recentActivity));
+    }
+
+    /// <summary>"Bugun, HH:mm" / "Kecha, HH:mm" for anything from the last two calendar days, falling back to
+    /// a full date beyond that - matches how a Jurnal entry actually gets read at a glance on the dashboard
+    /// (which only ever shows the most recent handful), unlike the full "Jurnal" tab's plain timestamp column
+    /// where every row needs an unambiguous absolute date regardless of age.</summary>
+    private static string FormatRecentTimestamp(DateTime utcTimestamp)
+    {
+        var local = utcTimestamp.ToLocalTime();
+        var today = DateTime.Now.Date;
+        return local.Date == today ? $"Bugun, {local:HH:mm}"
+            : local.Date == today.AddDays(-1) ? $"Kecha, {local:HH:mm}"
+            : local.ToString("dd.MM.yyyy HH:mm");
     }
 
     public async Task<IActionResult> Projects(string? q, CancellationToken ct)

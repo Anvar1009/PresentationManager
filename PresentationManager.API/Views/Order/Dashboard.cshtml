@@ -19,7 +19,14 @@ else
         {
             <a class="card card-link" asp-controller="Order" asp-action="Project" asp-route-projectId="@project.ProjectId">
                 <span class="card-title">@project.ProjectName</span>
-                <span class="card-meta">Taqdimotchilar tartibini shakllantirish</span>
+                @if (project.PresentationCount == 0)
+                {
+                    <span class="card-meta">Hali taqdimotchi yo'q</span>
+                }
+                else
+                {
+                    <span class="card-meta">@project.PresentationCount ta taqdimotchi</span>
+                }
             </a>
         }
     </div>

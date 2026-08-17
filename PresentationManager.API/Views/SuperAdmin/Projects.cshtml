@@ -9,7 +9,9 @@
 <h1 class="page-title">Loyihalar</h1>
 <p class="page-subtitle">Barcha loyihalar (faqat ko'rish rejimi).</p>
 
-<partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("projects")' />
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("projects")' />
+}
 
 <div class="toolbar">
     <form method="get" asp-controller="SuperAdmin" asp-action="Projects">
