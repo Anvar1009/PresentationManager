@@ -165,6 +165,25 @@ a:hover {
     outline-offset: 2px;
 }
 
+/* Clickable UI chrome (buttons, nav pills, badges, the sidebar's own labels) isn't meant to be selected as
+   text - without this, a fast/double click on one of these often leaves a blinking text-selection caret
+   behind, which reads as "this is an editable field" even though nothing here ever is. Actual content
+   (page text, table cells, queue names) is deliberately left out of this list so it stays selectable. */
+button,
+.btn,
+.tab,
+.pill,
+.badge,
+.sidebar-back,
+.sidebar-brand,
+.sidebar-user,
+.card-link,
+.stat-card-icon,
+.queue-index {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
 /* ===== App shell (persistent left sidebar + main content) =====
    Every authenticated panel (Admin/SuperAdmin/Judge/Order) shares this shell - each panel's own section
    navigation and the signed-in user's info both live in the sidebar now, not scattered across a top bar
@@ -1361,9 +1380,23 @@ a:hover {
     overflow-y: auto;
 }
 
-.order-stage:fullscreen .page-title,
-.order-stage:-webkit-full-screen .page-title {
-    font-size: 40px;
+/* Only the presenters list and the randomize button stay on screen while fullscreen - title/subtitle, the
+   fullscreen toggle itself, and the success/hint text below the button are all just chrome a projector
+   audience doesn't need. Esc (native browser behavior) is still how the operator exits. */
+.order-stage:fullscreen .order-stage-header,
+.order-stage:-webkit-full-screen .order-stage-header,
+.order-stage:fullscreen .notice-success,
+.order-stage:-webkit-full-screen .notice-success,
+.order-stage:fullscreen .card-meta-mono,
+.order-stage:-webkit-full-screen .card-meta-mono,
+.order-stage:fullscreen .field-hint,
+.order-stage:-webkit-full-screen .field-hint {
+    display: none;
+}
+
+.order-stage:fullscreen #queueList,
+.order-stage:-webkit-full-screen #queueList {
+    margin-top: 0 !important;
 }
 
 .order-stage:fullscreen .queue-row,
@@ -1385,8 +1418,7 @@ a:hover {
 .order-stage:fullscreen .btn-block,
 .order-stage:-webkit-full-screen .btn-block {
     max-width: 420px;
-    margin-left: auto;
-    margin-right: auto;
+    margin: var(--space-5) auto 0;
 }
 
 /* Shuffle reveal - a quick client-side flourish that cycles the visible names through a few random

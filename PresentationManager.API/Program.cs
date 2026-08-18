@@ -123,8 +123,10 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Conventional routing for the Judge web platform's MVC controllers (attribute-routed [ApiController]s
-// above are unaffected - they never match this pattern since their routes start with "api/").
-app.MapControllerRoute(name: "default", pattern: "{controller=Account}/{action=Login}/{id?}");
+// above are unaffected - they never match this pattern since their routes start with "api/"). Home/Index is
+// the site's actual root - see HomeController's own doc comment for why (a stable landing page instead of
+// dropping straight onto the login form).
+app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.MapHub<PresentationOrderHub>("/hubs/presentation-order");
 
 // Unauthenticated on purpose - PresentationManager.UI pings this before showing LoginForm to fail fast
