@@ -1287,6 +1287,81 @@ button,
     }
 }
 
+/* ===== Landing page (Home/Index - the site's actual root, and where AccountController.Logout sends you -
+   see HomeController's own doc comment. Public/unauthenticated, so it renders inside _Layout.cshtml's plain
+   .container branch, no sidebar) ===== */
+
+.landing-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-7);
+}
+
+.landing-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.landing-login-btn {
+    flex: none;
+}
+
+.landing-hero {
+    text-align: center;
+    max-width: 640px;
+    margin: 0 auto var(--space-7);
+}
+
+.landing-hero .eyebrow {
+    text-align: center;
+}
+
+.landing-hero-title {
+    font-size: 32px;
+    margin-top: var(--space-2);
+}
+
+.landing-hero-subtitle {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.landing-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-4);
+}
+
+.landing-feature {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .landing-feature {
+        transition: transform 160ms ease, box-shadow 160ms ease, border-color 120ms ease;
+    }
+}
+
+.landing-feature:hover {
+    transform: translateY(-3px);
+    border-color: var(--border-strong);
+    box-shadow: 0 1px 2px #00000026, 0 18px 32px -16px #000000cc;
+}
+
+@media (max-width: 640px) {
+    .landing-nav {
+        justify-content: center;
+        text-align: center;
+    }
+}
+
 /* ===== Profile header (CreateUser/EditUser cards - a large initials avatar above the form fields, same
    visual language as .sidebar-user-avatar so a user's own account and the account being edited read as the
    same kind of "profile" object) ===== */

@@ -86,6 +86,26 @@ public sealed class OrderController : Controller
         return RedirectToAction(nameof(Project), new { projectId });
     }
 
+    /// <summary>"Jadvalni tozalash" - undoes any number of rehearsal draws by restoring presenters to the
+    /// order they were originally registered in, so the operator can reset the queue back to a clean slate
+    /// after testing before running the real draw. Same fetch-first/redirect-fallback and live-broadcast
+    /// shape as <see cref="Randomize"/> - see its own comment.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Reset(int projectId, CancellationToken ct)
+    {
+        await _queueService.ResetOrderAsync(projectId, ct);
+        await _orderHub.Clients.All.SendAsync("OrderRandomized", projectId, ct);
+
+        if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+        {
+            return await QueueJson(projectId, ct);
+        }
+
+        TempData["Success"] = "Ro'yxat asl holatiga qaytarildi.";
+        return RedirectToAction(nameof(Project), new { projectId });
+    }
+
     /// <summary>Current presenter order as JSON - used by order-shuffle.js to redraw the queue in place
     /// (both right after this operator's own <see cref="Randomize"/> call, and whenever
     /// PresentationOrderHub reports another source - a different operator's tab, or the desktop AdminForm's

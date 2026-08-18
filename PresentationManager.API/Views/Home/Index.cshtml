@@ -2,19 +2,78 @@
     ViewData["Title"] = "Bosh sahifa";
 }
 
-<div class="login-shell">
-    <div class="card login-card" style="text-align: center;">
-        <div class="login-mark" style="justify-content: center;">
-            <span class="brand-dot"></span>
-            Taqdimotlar tizimi
+<div class="landing">
+    <header class="landing-nav">
+        <div class="landing-brand">
+            <span class="sidebar-mark">
+                <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+            </span>
+            <span>
+                <span class="sidebar-brand-title">Taqdimotlar tizimi</span>
+                <span class="sidebar-brand-tagline">Boshqaruv platformasi</span>
+            </span>
         </div>
-        <h1 class="page-title">Taqdimotlar boshqaruv tizimi</h1>
-        <p class="page-subtitle" style="margin-left: auto; margin-right: auto;">
-            Loyihalar, taqdimotchilar, hakamlar va taqdimot tartibini boshqarish uchun yagona platforma.
-        </p>
-        <a class="btn btn-block" asp-controller="Account" asp-action="Login">
+        <a class="btn landing-login-btn" asp-controller="Account" asp-action="Login">
             <svg class="icon" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" /></svg>
             Kirish
         </a>
-    </div>
+    </header>
+
+    <section class="landing-hero">
+        <span class="eyebrow">Taqdimotlar boshqaruv tizimi</span>
+        <h1 class="page-title landing-hero-title">Loyihalar, taqdimotchilar va hakamlashuvni bir joydan boshqaring</h1>
+        <p class="page-subtitle landing-hero-subtitle">
+            Tanlov va taqdimot jarayonini boshidan oxirigacha - ishtirokchilarni ro'yxatga olishdan tortib,
+            taqdimot tartibini tasodifiy shakllantirish va yakuniy baholargacha - yagona platformada olib boring.
+        </p>
+        <a class="btn" asp-controller="Account" asp-action="Login">
+            Tizimga kirish
+            <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+        </a>
+    </section>
+
+    <section class="landing-features">
+        <div class="card landing-feature">
+            <span class="stat-card-icon chart-color-0">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
+            </span>
+            <span class="card-title">Loyihalarni boshqarish</span>
+            <span class="card-meta">Har bir tadbir uchun alohida loyiha, taqdimotchilar ro'yxati va jadval.</span>
+        </div>
+        <div class="card landing-feature">
+            <span class="stat-card-icon chart-color-1">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+            </span>
+            <span class="card-title">Taqdimotchilar</span>
+            <span class="card-meta">Ishtirokchilarni ro'yxatga olish, loyihalarga biriktirish va kuzatish.</span>
+        </div>
+        <div class="card landing-feature">
+            <span class="stat-card-icon chart-color-2">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="6" /><path d="M15.5 13.5 17 22l-5-3-5 3 1.5-8.5" /></svg>
+            </span>
+            <span class="card-title">Hakamlar bahosi</span>
+            <span class="card-meta">Mezonlar bo'yicha baholash va yakuniy natijalarni avtomatik hisoblash.</span>
+        </div>
+        <div class="card landing-feature">
+            <span class="stat-card-icon chart-color-3">
+                <svg class="icon" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></svg>
+            </span>
+            <span class="card-title">Tasodifiy tartib</span>
+            <span class="card-meta">Taqdimotchilar navbatini bir marta bosish bilan adolatli, tasodifiy shakllantiring.</span>
+        </div>
+        <div class="card landing-feature">
+            <span class="stat-card-icon chart-color-4">
+                <svg class="icon" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
+            </span>
+            <span class="card-title">Real vaqtda yangilanish</span>
+            <span class="card-meta">O'zgarishlar barcha ochiq oynalarda - jumladan to'liq ekranda - darhol ko'rinadi.</span>
+        </div>
+        <div class="card landing-feature">
+            <span class="stat-card-icon chart-color-5">
+                <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
+            </span>
+            <span class="card-title">Hisobot va eksport</span>
+            <span class="card-meta">Yakuniy baholarni va statistikani bir zumda Excel formatida yuklab oling.</span>
+        </div>
+    </section>
 </div>

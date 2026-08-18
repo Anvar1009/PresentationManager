@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using PresentationManager.API.Hubs;
@@ -98,6 +99,19 @@ builder.Services.AddAuthorization();
 builder.Services.AddControllersWithViews();
 builder.Services.AddSignalR();
 
+// Without this, ASP.NET Core has to guess where it's safe to persist the Data Protection key ring (what
+// protects the cookie-auth ticket AND every antiforgery token this app issues) - under a dedicated systemd
+// service user with no writable/stable home directory, that guess can silently fall back to an in-memory-only
+// key that's thrown away and regenerated on every process restart. Any page still open in a browser from
+// before that restart then carries a hidden __RequestVerificationToken the new key ring can't validate, and
+// the very next [ValidateAntiForgeryToken] action (e.g. AccountController.Logout) fails with a 400 - which is
+// exactly what made logout flaky across the redeploys/restarts done while building this feature. Pointing
+// this at an explicit, stable directory (see ResolveDataProtectionKeysPath below) makes the key ring - and
+// therefore every previously-issued token/cookie - survive both restarts and redeploys.
+builder.Services.AddDataProtection()
+    .SetApplicationName("PresentationManager")
+    .PersistKeysToFileSystem(new DirectoryInfo(ResolveDataProtectionKeysPath(builder.Configuration)));
+
 var app = builder.Build();
 
 // A bad/placeholder connection string throws here, before the app starts accepting requests - visible via
@@ -117,6 +131,25 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseStaticFiles();
+
+// The MVC web surface's only realistic source of a bare 400 is [ValidateAntiForgeryToken] rejecting a stale
+// token (a page left open across a Data Protection key rotation/app restart being the main way that happens -
+// see the AddDataProtection call above) - that result carries no body, so the browser renders its own dead-end
+// "HTTP ERROR 400" interstitial instead of anything this app owns. Bouncing back to Home/Index (always a
+// valid, unauthenticated GET - see HomeController) turns that from a dead end into "you're just signed out,
+// here's Kirish again". Scoped to non-/api paths only: the JSON [ApiController]s the WinForms desktop client
+// talks to need their real ProblemDetails/400 body untouched.
+app.Use(async (context, next) =>
+{
+    await next();
+
+    if (context.Response.StatusCode == StatusCodes.Status400BadRequest
+        && !context.Response.HasStarted
+        && !context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.Redirect("/");
+    }
+});
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -145,3 +178,15 @@ static string ResolveStorageRoot(IConfiguration config) =>
     config["Storage:RootPath"] is { Length: > 0 } configured
         ? configured
         : Path.Combine(AppContext.BaseDirectory, "Files");
+
+/// <summary>Resolves where the Data Protection key ring is persisted - a configured "DataProtection:KeysPath",
+/// or a "dp-keys" folder next to AppContext.BaseDirectory's own "Files" storage (ResolveStorageRoot above)
+/// when unset - same convention, same directory, so it's exactly as redeploy-safe as uploaded files already
+/// are in this deployment's actual copy step (a plain overwrite-in-place, not a wipe-then-recopy). Without
+/// this configured explicitly, ASP.NET Core has to guess where it's safe to persist the key ring at all, and
+/// under a dedicated systemd service user that guess can silently fall back to an in-memory-only key that's
+/// regenerated on every restart - see Program.cs's AddDataProtection call for what that breaks.</summary>
+static string ResolveDataProtectionKeysPath(IConfiguration config) =>
+    config["DataProtection:KeysPath"] is { Length: > 0 } configured
+        ? configured
+        : Path.Combine(AppContext.BaseDirectory, "dp-keys");

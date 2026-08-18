@@ -65,6 +65,17 @@
             </form>
             <p class="card-meta-mono" style="margin-top: var(--space-3);">Har bir mumkin bo'lgan tartib bir xil ehtimollik bilan tanlanadi.</p>
         }
+
+        @* Rehearsal-reset for this stage - restores the presenters' original registration order so any test
+           draws run while checking the fullscreen presentation don't carry over into the real one. Stays
+           outside .order-stage-header on purpose so it's still reachable while fullscreen. *@
+        <form asp-controller="Order" asp-action="Reset" method="post" id="resetForm" style="margin-top: var(--space-3);">
+            <input type="hidden" name="projectId" value="@Model.ProjectId" />
+            <button type="submit" class="btn btn-outline btn-block" id="resetBtn">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7" /><polyline points="3 4 3 9 8 9" /></svg>
+                Jadvalni tozalash
+            </button>
+        </form>
     }
 </div>
 
