@@ -14,14 +14,18 @@
 
         <div asp-validation-summary="All" class="validation-summary"></div>
 
-        <form asp-controller="Account" asp-action="Login" method="post">
+        @* autocomplete="off" here is a best-effort hint only - Chrome deliberately ignores it on password
+           fields and offers to save to Google Password Manager anyway. There's no page-level way to fully
+           suppress that; a user who doesn't want it dismisses the prompt with "Never for this site" once, or
+           turns it off entirely in Chrome Settings -> Autofill -> Password Manager. *@
+        <form asp-controller="Account" asp-action="Login" method="post" autocomplete="off">
             <div class="field">
                 <label asp-for="Username"></label>
-                <input asp-for="Username" type="text" autocomplete="username" autofocus />
+                <input asp-for="Username" type="text" autocomplete="off" autofocus />
             </div>
             <div class="field">
                 <label asp-for="Password"></label>
-                <input asp-for="Password" type="password" autocomplete="current-password" />
+                <input asp-for="Password" type="password" autocomplete="off" />
             </div>
             <button type="submit" class="btn btn-block">Kirish</button>
         </form>
