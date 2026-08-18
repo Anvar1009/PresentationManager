@@ -110,18 +110,25 @@ html {
    Applied to body itself (not a fixed pseudo-element) so it can't get painted over by body's own background
    layer or need a manual stacking-context fix - the radial gradients simply are the background, with the
    flat --bg token as their last layer/fallback. Reuses the same tokens the rest of the app already uses
-   (accent-dim, chart-1/2/3) so it reads as this product's palette, not a generic gradient background.
-   Motion is confined to background-position (cheap, no layout/paint of real content) and fully skipped under
-   prefers-reduced-motion. */
+   (accent-dim, chart-1..6) so it reads as this product's palette, not a generic gradient background.
+   The first layer is a spotlight that tracks the cursor (--spot-x/--spot-y, set by interactive-bg.js) - the
+   one genuinely *interactive* part of the background; the rest drift on their own via background-position.
+   Both are fully skipped under prefers-reduced-motion (interactive-bg.js checks the same media query itself,
+   so --spot-x/--spot-y just never move and that layer sits inert at its default center position). */
 body {
     margin: 0;
     min-height: 100vh;
+    /* Own stacking context, so .bg-orbs below can use z-index:-1 and be guaranteed to stay behind every
+       real (z-index:auto) piece of UI, instead of that -1 being compared against the page root itself. */
+    isolation: isolate;
     background-color: var(--bg);
     background-image:
+        radial-gradient(480px circle at var(--spot-x, 50%) var(--spot-y, 22%), #ffc52d22, transparent 62%),
         radial-gradient(900px circle at 12% 8%, var(--accent-dim), transparent 55%),
-        radial-gradient(820px circle at 88% 12%, #8b7cf629, transparent 55%),
-        radial-gradient(780px circle at 80% 92%, #3b82f620, transparent 55%),
-        radial-gradient(680px circle at 8% 92%, #43a04720, transparent 60%);
+        radial-gradient(820px circle at 88% 12%, #8b7cf62e, transparent 55%),
+        radial-gradient(780px circle at 80% 92%, #3b82f626, transparent 55%),
+        radial-gradient(680px circle at 8% 92%, #43a04726, transparent 60%),
+        radial-gradient(620px circle at 50% 55%, #06b6d41c, transparent 60%);
     background-repeat: no-repeat;
     background-attachment: fixed;
     color: var(--text);
@@ -129,6 +136,65 @@ body {
     font-size: 15px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
+}
+
+/* ===== Floating background orbs =====
+   The aurora wash above drifts too slowly/subtly to read as "animated" on its own - these are real elements
+   (aria-hidden, fixed, pointer-events:none, inserted once in _Layout.cshtml) that visibly drift and breathe
+   on their own slow loops, the way a lot of modern product marketing pages do it. Heavily blurred so they
+   read as soft glowing shapes behind the UI, not sharp circles competing with real content. */
+.bg-orbs {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.bg-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.3;
+}
+
+.bg-orb-1 { width: 420px; height: 420px; top: -8%; left: -6%; background: var(--accent); }
+.bg-orb-2 { width: 380px; height: 380px; top: 48%; right: -10%; background: #8b7cf6; }
+.bg-orb-3 { width: 360px; height: 360px; bottom: -14%; left: 22%; background: #3b82f6; }
+.bg-orb-4 { width: 300px; height: 300px; top: 6%; right: 22%; background: #43a047; }
+.bg-orb-5 { width: 320px; height: 320px; bottom: 6%; right: 38%; background: #06b6d4; }
+
+@media (prefers-reduced-motion: no-preference) {
+    .bg-orb-1 { animation: orb-drift-1 24s ease-in-out infinite; }
+    .bg-orb-2 { animation: orb-drift-2 29s ease-in-out infinite; }
+    .bg-orb-3 { animation: orb-drift-3 33s ease-in-out infinite; }
+    .bg-orb-4 { animation: orb-drift-4 21s ease-in-out infinite; }
+    .bg-orb-5 { animation: orb-drift-5 27s ease-in-out infinite; }
+}
+
+@keyframes orb-drift-1 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(90px, 60px) scale(1.15); }
+}
+
+@keyframes orb-drift-2 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(-70px, 50px) scale(0.9); }
+}
+
+@keyframes orb-drift-3 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(60px, -70px) scale(1.1); }
+}
+
+@keyframes orb-drift-4 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(-60px, -40px) scale(0.92); }
+}
+
+@keyframes orb-drift-5 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(40px, 40px) scale(1.08); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -146,9 +212,9 @@ body {
 }
 
 @keyframes aurora-drift {
-    0% { background-position: 12% 8%, 88% 12%, 80% 92%, 8% 92%; }
-    50% { background-position: 22% 16%, 78% 22%, 70% 80%, 18% 82%; }
-    100% { background-position: 6% 20%, 94% 4%, 88% 96%, 2% 98%; }
+    0% { background-position: 0 0, 12% 8%, 88% 12%, 80% 92%, 8% 92%, 50% 55%; }
+    50% { background-position: 0 0, 22% 16%, 78% 22%, 70% 80%, 18% 82%, 42% 46%; }
+    100% { background-position: 0 0, 6% 20%, 94% 4%, 88% 96%, 2% 98%, 58% 62%; }
 }
 
 a {
@@ -295,19 +361,30 @@ button,
     padding-top: 0;
 }
 
-/* A quieter "go up one level" link (e.g. "← Loyihalar") above a panel's section tabs, or standing alone
-   on pages that don't have section tabs at all (Judge/Order's project drill-down) - deliberately not styled
-   as a .tab itself, so it reads as an escape hatch rather than one more sibling section. */
+/* A "go up one level" link (e.g. "← Loyihalar") above a panel's section tabs, or standing alone on pages
+   that don't have section tabs at all (Judge/Order's project drill-down) - styled as its own bordered pill
+   (same shape as .tab) so it reads as a clickable control rather than plain body text. */
 .sidebar-back {
-    display: block;
-    padding: 6px var(--space-2);
-    font-size: 12.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 7px 14px;
+    margin-bottom: var(--space-2);
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
     color: var(--text-muted);
-    font-weight: 500;
+    background: transparent;
 }
 
 .sidebar-back:hover {
     color: var(--text);
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
     text-decoration: none;
 }
 
@@ -404,7 +481,8 @@ button,
     }
 
     .sidebar-back {
-        padding: 6px 0;
+        width: auto;
+        margin-bottom: 0;
     }
 
     /* Vertical group captions read fine stacked above a column of links but just add clutter inline in a
@@ -617,6 +695,7 @@ button,
 /* ===== Buttons ===== */
 
 .btn {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -631,12 +710,37 @@ button,
     background: linear-gradient(180deg, #ffd35c, var(--accent));
     color: var(--accent-ink);
     box-shadow: 0 1px 0 #ffffff33 inset, 0 8px 20px -10px #ffc52d66;
+    overflow: hidden;
+}
+
+/* A slow, subtle diagonal sheen across primary buttons only (never .btn-outline/.btn-danger) - the one
+   continuously-animated UI chrome in the app, so the handful of primary actions per page (Kirish, Ro'yxatni
+   shakllantirish, ...) read as alive/clickable at a glance instead of flat fills. */
+.btn:not(.btn-outline):not(.btn-danger)::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 35%, #ffffff66 50%, transparent 65%);
+    transform: translateX(-140%);
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .btn:not(.btn-outline):not(.btn-danger)::after {
+        animation: btn-sheen 5s ease-in-out infinite;
+    }
+}
+
+@keyframes btn-sheen {
+    0%, 55% { transform: translateX(-140%); }
+    100% { transform: translateX(140%); }
 }
 
 .btn:hover {
     background: linear-gradient(180deg, #ffdc7a, #ffd35c);
     text-decoration: none;
-    box-shadow: 0 1px 0 #ffffff40 inset, 0 10px 24px -8px #ffc52d80;
+    transform: translateY(-1px);
+    box-shadow: 0 1px 0 #ffffff40 inset, 0 14px 30px -10px #ffc52d99;
 }
 
 .btn:active {
@@ -652,7 +756,8 @@ button,
 
 .btn-outline:hover {
     background: var(--surface-hover);
-    border-color: var(--text-faint);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .btn-block {
@@ -1439,25 +1544,198 @@ button,
     white-space: nowrap;
 }
 
+/* Randomize/Reset side-by-side row on the order stage - each form is a flex item sharing the row instead of
+   two full-width buttons stacked on top of each other, and .btn-sm (below) keeps them from reading as
+   oversized once they're not spanning the whole page width. */
+.order-actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+}
+
+.order-actions-row form {
+    flex: 1 1 200px;
+    margin: 0;
+}
+
 .btn-icon.is-active {
     border-color: var(--accent);
     color: var(--accent);
 }
 
+/* ===== Fullscreen presentation theme =====
+   Same black-and-amber palette as the rest of the app (--bg/--bg-raised/--accent) - deliberately *not* a
+   separate color scheme, just this stage's own layout (starfield, header/badge, big centered heading, pill
+   rows) restyled with the exact tokens the outer panel already uses, so a projector audience sees the same
+   product, not a re-skinned one. Scoped entirely to :fullscreen so the outer, day-to-day operator panel is
+   untouched. */
 .order-stage:fullscreen,
 .order-stage:-webkit-full-screen {
-    background: var(--bg);
-    background-image: inherit;
+    --stage-bg-1: var(--bg);
+    --stage-bg-2: var(--bg-raised);
+    --stage-accent: var(--accent);
+    --stage-accent-dim: var(--accent-dim);
+    --stage-star: var(--accent);
+    --stage-text-muted: var(--text-muted);
+    position: relative;
+    isolation: isolate;
+    background: radial-gradient(circle at 22% 18%, var(--stage-bg-2), var(--stage-bg-1) 62%);
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: var(--space-7) 10vw;
+    padding: var(--space-6) 6vw;
     overflow-y: auto;
 }
 
-/* Only the presenters list and the randomize button stay on screen while fullscreen - title/subtitle, the
-   fullscreen toggle itself, and the success/hint text below the button are all just chrome a projector
-   audience doesn't need. Esc (native browser behavior) is still how the operator exits. */
+/* Twinkling starfield backdrop - a fixed set of elements (populated once by order-shuffle.js, positions
+   randomized client-side) rather than a repeating background-image, so each star can twinkle on its own
+   independent, randomized timing instead of one uniform pulse. Sits behind everything else in the stage via
+   the isolate/-1 pairing already established for .bg-orbs elsewhere in this file. */
+.stage-stars {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.order-stage:fullscreen .stage-stars,
+.order-stage:-webkit-full-screen .stage-stars {
+    display: block;
+}
+
+.stage-star {
+    position: absolute;
+    border-radius: 1px;
+    background: var(--stage-star);
+    opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .stage-star {
+        animation: star-twinkle 3.4s ease-in-out infinite;
+    }
+}
+
+@keyframes star-twinkle {
+    0%, 100% { opacity: 0.12; transform: scale(1); }
+    50% { opacity: 0.95; transform: scale(1.6); }
+}
+
+/* Presentation-style header (logo+name / live badge) and heading - stand-ins for the outer panel's own
+   .order-stage-header (hidden below) and page-title, restyled for this theme instead of reusing them as-is. */
+.stage-fs-header,
+.stage-fs-heading {
+    display: none;
+}
+
+.order-stage:fullscreen .stage-fs-header,
+.order-stage:-webkit-full-screen .stage-fs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+}
+
+.stage-fs-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.stage-fs-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    background: var(--stage-accent-dim);
+    color: var(--stage-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+}
+
+.stage-fs-title {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.stage-fs-subtitle {
+    display: block;
+    font-size: 13px;
+    color: var(--stage-text-muted);
+    margin-top: 2px;
+}
+
+.stage-fs-badge {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    background: #ffffff0d;
+    border: 1px solid #ffffff1a;
+    border-left: 3px solid var(--stage-accent);
+}
+
+.stage-fs-badge-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--stage-accent);
+    box-shadow: 0 0 0 4px var(--stage-accent-dim);
+    flex: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .stage-fs-badge-dot {
+        animation: stage-pulse 1.8s ease-in-out infinite;
+    }
+}
+
+@keyframes stage-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+}
+
+.stage-fs-badge-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.stage-fs-badge-meta {
+    display: block;
+    font-size: 12px;
+    color: var(--stage-text-muted);
+    margin-top: 1px;
+}
+
+.order-stage:fullscreen .stage-fs-heading,
+.order-stage:-webkit-full-screen .stage-fs-heading {
+    display: block;
+    text-align: center;
+    margin: var(--space-6) 0 var(--space-5);
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text);
+    transition: color 200ms ease;
+}
+
+.stage-fs-heading.is-announcing {
+    color: var(--stage-accent);
+}
+
+/* Only the presenters list and the randomize button stay on screen while fullscreen - the outer panel's own
+   title/subtitle, fullscreen toggle, and success/hint text are all just chrome a projector audience doesn't
+   need (the stage-fs-* elements above stand in for them). Esc (native browser behavior) still exits. */
 .order-stage:fullscreen .order-stage-header,
 .order-stage:-webkit-full-screen .order-stage-header,
 .order-stage:fullscreen .notice-success,
@@ -1469,31 +1747,80 @@ button,
     display: none;
 }
 
-.order-stage:fullscreen #queueList,
-.order-stage:-webkit-full-screen #queueList {
-    margin-top: 0 !important;
+.order-stage:fullscreen .queue,
+.order-stage:-webkit-full-screen .queue {
+    background: transparent;
+    border: none;
+    box-shadow: none;
 }
 
+/* A few (2-5) presenters just need a single centered column; 40-50 need several side by side or most of
+   them would be scrolled off screen. column-width lets the browser pick however many ~380px columns fit the
+   available width; --queue-fs-height (set by order-shuffle.js from the actual viewport, since CSS alone has
+   no "fit this many rows in the space I've got" query) plus column-fill:auto is what makes it actually wrap
+   into a new column once a column is full, instead of just growing one column tall enough to need scrolling.
+   width:fit-content + margin:auto is what keeps a short (single-column) list centered instead of pinned to
+   the left edge of the full-width block multi-column layout would otherwise produce. */
+.order-stage:fullscreen #queueList,
+.order-stage:-webkit-full-screen #queueList {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 auto !important;
+    column-width: 380px;
+    column-gap: var(--space-5);
+    column-fill: auto;
+    height: var(--queue-fs-height, auto);
+}
+
+/* Each row reads as its own translucent pill (margin + rounded corners) rather than a continuous
+   bordered list - closer to a real event's own presentation screen than reused admin-table styling. */
 .order-stage:fullscreen .queue-row,
 .order-stage:-webkit-full-screen .queue-row {
-    padding: var(--space-5) 0;
+    padding: 14px 18px;
+    margin: 0 0 var(--space-3);
+    background: #ffffff0d;
+    border: 1px solid #ffffff14;
+    border-bottom: 1px solid #ffffff14;
+    border-radius: var(--radius);
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
 }
 
 .order-stage:fullscreen .queue-index,
 .order-stage:-webkit-full-screen .queue-index {
-    font-size: 22px;
-    width: 46px;
+    font-size: 16px;
+    width: auto;
+    padding: 3px 9px;
+    border-radius: 6px;
+    background: var(--stage-accent-dim);
+    color: var(--stage-accent);
+    text-align: center;
 }
 
 .order-stage:fullscreen .queue-name,
 .order-stage:-webkit-full-screen .queue-name {
-    font-size: 24px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.order-stage:fullscreen .queue.shuffling .queue-name,
+.order-stage:-webkit-full-screen .queue.shuffling .queue-name {
+    color: var(--stage-accent);
 }
 
 .order-stage:fullscreen .btn-block,
 .order-stage:-webkit-full-screen .btn-block {
     max-width: 420px;
     margin: var(--space-5) auto 0;
+}
+
+/* "Jadvalni tozalash" is a rehearsal/setup tool for the operator working the outer (non-fullscreen) panel -
+   not something the audience watching the fullscreen draw should see or be able to trigger. */
+.order-stage:fullscreen #resetForm,
+.order-stage:-webkit-full-screen #resetForm {
+    display: none;
 }
 
 /* Shuffle reveal - a quick client-side flourish that cycles the visible names through a few random

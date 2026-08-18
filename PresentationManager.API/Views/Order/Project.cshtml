@@ -13,6 +13,32 @@
 }
 
 <div class="order-stage" id="orderStage">
+    @* Only rendered/visible while fullscreen (display:none otherwise, see site.css) - a starfield backdrop
+       and a presentation-style header/heading standing in for the outer panel's own chrome, which stays
+       hidden here on purpose (see .order-stage-header rules below). *@
+    <div class="stage-stars" id="stageStars" aria-hidden="true"></div>
+
+    <div class="stage-fs-header">
+        <div class="stage-fs-brand">
+            <span class="stage-fs-mark">
+                <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+            </span>
+            <span>
+                <span class="stage-fs-title">@Model.ProjectName</span>
+                <span class="stage-fs-subtitle">Taqdimotlar tizimi</span>
+            </span>
+        </div>
+        <div class="stage-fs-badge">
+            <span class="stage-fs-badge-dot"></span>
+            <span>
+                <span class="stage-fs-badge-title">Jonli tartib</span>
+                <span class="stage-fs-badge-meta">@Model.PresenterNames.Count ta ishtirokchi</span>
+            </span>
+        </div>
+    </div>
+
+    <h2 class="stage-fs-heading" id="stageHeading">Taqdimotchilar tartibi</h2>
+
     <div class="order-stage-header">
         <div class="order-stage-heading">
             <span class="eyebrow">Taqdimotchilar</span>
@@ -50,32 +76,39 @@
             }
         </div>
 
+        <div class="order-actions-row" style="margin-top: var(--space-5);">
+            @if (Model.PresenterNames.Count >= 2)
+            {
+                <form asp-controller="Order" asp-action="Randomize" method="post" id="randomizeForm">
+                    <input type="hidden" name="projectId" value="@Model.ProjectId" />
+                    <button type="submit" class="btn btn-sm btn-block btn-randomize" id="randomizeBtn">
+                        <svg class="icon" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></svg>
+                        Ro'yxatni shakllantirish
+                    </button>
+                </form>
+            }
+
+            @* Rehearsal-reset for this stage - restores presenters to alphabetical order so any test draws
+               run while checking the fullscreen presentation don't carry over into the real one. Stays
+               outside .order-stage-header on purpose so it's still reachable while fullscreen (hidden there
+               separately via #resetForm, see site.css - this control is for the outer panel only). *@
+            <form asp-controller="Order" asp-action="Reset" method="post" id="resetForm">
+                <input type="hidden" name="projectId" value="@Model.ProjectId" />
+                <button type="submit" class="btn btn-outline btn-sm btn-block" id="resetBtn">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7" /><polyline points="3 4 3 9 8 9" /></svg>
+                    Jadvalni tozalash
+                </button>
+            </form>
+        </div>
+
         @if (Model.PresenterNames.Count < 2)
         {
             <p class="field-hint" style="margin-top: var(--space-4);">Tasodifiy tartib shakllantirish uchun kamida 2 ta taqdimotchi kerak.</p>
         }
         else
         {
-            <form asp-controller="Order" asp-action="Randomize" method="post" id="randomizeForm" style="margin-top: var(--space-5);">
-                <input type="hidden" name="projectId" value="@Model.ProjectId" />
-                <button type="submit" class="btn btn-block btn-randomize" id="randomizeBtn">
-                    <svg class="icon" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></svg>
-                    Ro'yxatni shakllantirish
-                </button>
-            </form>
             <p class="card-meta-mono" style="margin-top: var(--space-3);">Har bir mumkin bo'lgan tartib bir xil ehtimollik bilan tanlanadi.</p>
         }
-
-        @* Rehearsal-reset for this stage - restores the presenters' original registration order so any test
-           draws run while checking the fullscreen presentation don't carry over into the real one. Stays
-           outside .order-stage-header on purpose so it's still reachable while fullscreen. *@
-        <form asp-controller="Order" asp-action="Reset" method="post" id="resetForm" style="margin-top: var(--space-3);">
-            <input type="hidden" name="projectId" value="@Model.ProjectId" />
-            <button type="submit" class="btn btn-outline btn-block" id="resetBtn">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7" /><polyline points="3 4 3 9 8 9" /></svg>
-                Jadvalni tozalash
-            </button>
-        </form>
     }
 </div>
 

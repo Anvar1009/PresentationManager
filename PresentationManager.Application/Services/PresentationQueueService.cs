@@ -133,15 +133,19 @@ public sealed class PresentationQueueService
         await _presentationRepository.ReorderAsync(ids, ct);
     }
 
-    /// <summary>Undoes any number of test draws by restoring the "natural" order presenters were originally
-    /// registered in (oldest CreatedAt first) - the OrderOperator's "Jadvalni tozalash" button on the
-    /// randomize stage, for resetting the queue back to a clean slate after rehearsing the draw and before
-    /// running it for real. Same ReorderAsync/OrderNumber mechanism as <see cref="RandomizeOrderAsync"/>,
-    /// just with a deterministic ordering instead of a shuffled one.</summary>
+    /// <summary>Undoes any number of test draws by restoring the "default" order - alphabetical by full name
+    /// - the OrderOperator's "Jadvalni tozalash" button on the randomize stage, for resetting the queue back
+    /// to a clean, predictable slate after rehearsing the draw and before running it for real. Same
+    /// ReorderAsync/OrderNumber mechanism as <see cref="RandomizeOrderAsync"/>, just with a deterministic
+    /// ordering instead of a shuffled one.</summary>
     public async Task ResetOrderAsync(int projectId, CancellationToken ct = default)
     {
         var current = await _presentationRepository.GetAllOrderedAsync(projectId, ct);
-        var ids = current.OrderBy(p => p.CreatedAt).ThenBy(p => p.Id).Select(p => p.Id).ToList();
+        var ids = current
+            .OrderBy(p => p.FullName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(p => p.Id)
+            .Select(p => p.Id)
+            .ToList();
 
         await _presentationRepository.ReorderAsync(ids, ct);
     }

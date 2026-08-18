@@ -33,10 +33,77 @@
         }
     }
 
+    // Populates the fullscreen theme's starfield backdrop once, up front - the container itself is
+    // display:none outside :fullscreen (see .stage-stars in site.css), so there's no cost to doing this
+    // eagerly rather than only the first time the operator actually goes fullscreen.
+    var starsContainer = document.getElementById("stageStars");
+    if (starsContainer) {
+        var starsHtml = "";
+        var starCount = 70;
+        for (var s = 0; s < starCount; s++) {
+            var top = (Math.random() * 100).toFixed(2);
+            var left = (Math.random() * 100).toFixed(2);
+            var size = (Math.random() * 2 + 1.5).toFixed(1);
+            var duration = (Math.random() * 3 + 2.2).toFixed(2);
+            var delay = (Math.random() * 4).toFixed(2);
+            starsHtml += '<span class="stage-star" style="top:' + top + '%;left:' + left + '%;'
+                + 'width:' + size + 'px;height:' + size + 'px;'
+                + 'animation-duration:' + duration + 's;animation-delay:' + delay + 's;"></span>';
+        }
+        starsContainer.innerHTML = starsHtml;
+    }
+
+    var stageHeading = document.getElementById("stageHeading");
+    var stageHeadingDefault = stageHeading ? stageHeading.textContent : "";
+    var stageHeadingTimer = null;
+
+    // Briefly swaps the fullscreen heading to announce a completed draw (mirrors how a real event's own
+    // presentation screen would confirm "the order is set"), then reverts a few seconds later.
+    function announceOrderReady() {
+        if (!stageHeading) {
+            return;
+        }
+        stageHeading.textContent = "Tartib shakllantirildi!";
+        stageHeading.classList.add("is-announcing");
+        clearTimeout(stageHeadingTimer);
+        stageHeadingTimer = setTimeout(function () {
+            stageHeading.textContent = stageHeadingDefault;
+            stageHeading.classList.remove("is-announcing");
+        }, 4000);
+    }
+
     var queueList = document.getElementById("queueList");
     if (!queueList) {
         return;
     }
+
+    // A handful of presenters just need a single centered column; 40-50 need to be split across several so
+    // they don't get scrolled off a projector screen. CSS (column-width + column-fill:auto on #queueList,
+    // see site.css) does the actual column balancing - it just needs an explicit height to fill before
+    // wrapping into the next column, which is exactly what CSS alone can't compute from "however much
+    // vertical space happens to be left in the fullscreen viewport". This does that math and hands it over
+    // as --queue-fs-height. Re-run after every redraw and on resize/fullscreen-change, since the available
+    // space (and this page never navigates away to naturally recompute it) can change independently of that.
+    function updateQueueFullscreenHeight() {
+        if (!stage) {
+            return;
+        }
+        var isFullscreen = (document.fullscreenElement || document.webkitFullscreenElement) === stage;
+        if (!isFullscreen) {
+            stage.style.removeProperty("--queue-fs-height");
+            return;
+        }
+        requestAnimationFrame(function () {
+            var top = queueList.getBoundingClientRect().top;
+            var reserveBelow = 160; // action button row + its own spacing below the queue
+            var available = window.innerHeight - top - reserveBelow;
+            stage.style.setProperty("--queue-fs-height", Math.max(240, available) + "px");
+        });
+    }
+
+    document.addEventListener("fullscreenchange", updateQueueFullscreenHeight);
+    document.addEventListener("webkitfullscreenchange", updateQueueFullscreenHeight);
+    window.addEventListener("resize", updateQueueFullscreenHeight);
 
     function escapeHtml(text) {
         var div = document.createElement("div");
@@ -55,6 +122,7 @@
                 + '<div class="queue-body"><div class="queue-name">' + escapeHtml(names[i]) + '</div></div></div>';
         }
         queueList.innerHTML = html;
+        updateQueueFullscreenHeight();
     }
 
     function runShuffleReveal(done) {
@@ -149,6 +217,9 @@
                             renderQueue(data.names);
                         }
                         setBusy(false);
+                        if (withReveal) {
+                            announceOrderReady();
+                        }
                     }
 
                     if (withReveal) {

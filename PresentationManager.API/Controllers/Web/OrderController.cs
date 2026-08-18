@@ -102,7 +102,7 @@ public sealed class OrderController : Controller
             return await QueueJson(projectId, ct);
         }
 
-        TempData["Success"] = "Ro'yxat asl holatiga qaytarildi.";
+        TempData["Success"] = "Ro'yxat alifbo tartibida asl holatiga qaytarildi.";
         return RedirectToAction(nameof(Project), new { projectId });
     }
 

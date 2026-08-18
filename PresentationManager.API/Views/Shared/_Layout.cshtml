@@ -37,6 +37,13 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body data-project-id="@(ViewData["ProjectId"])">
+    <div class="bg-orbs" aria-hidden="true">
+        <span class="bg-orb bg-orb-1"></span>
+        <span class="bg-orb bg-orb-2"></span>
+        <span class="bg-orb bg-orb-3"></span>
+        <span class="bg-orb bg-orb-4"></span>
+        <span class="bg-orb bg-orb-5"></span>
+    </div>
     @if (User.Identity?.IsAuthenticated == true)
     {
         <div class="app-shell">
@@ -64,7 +71,7 @@
                             <span class="sidebar-user-role">@RoleLabel(User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value)</span>
                         </span>
                     </div>
-                    <form asp-controller="Account" asp-action="Logout" method="post" onsubmit="return confirm('Chiqishni tasdiqlaysizmi?');">
+                    <form asp-controller="Account" asp-action="Logout" method="post">
                         <button type="submit" class="btn btn-outline btn-block">
                             <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
                             Chiqish
@@ -87,6 +94,7 @@
         </div>
     }
 
+    <script src="~/js/interactive-bg.js" asp-append-version="true"></script>
     <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
     <script src="~/js/order-live.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)

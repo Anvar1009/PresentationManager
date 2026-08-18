@@ -95,6 +95,7 @@ public sealed class PresentationBotHostedService : BackgroundService
     private readonly CriterionService _criterionService;
     private readonly UserService _userService;
     private readonly AdminLinkService _adminLinkService;
+    private readonly PresenterAssignmentService _presenterAssignmentService;
 
     /// <summary>Presenter upload flow state, per chat.</summary>
     private readonly ConcurrentDictionary<long, ChatSession> _sessions = new();
@@ -112,7 +113,8 @@ public sealed class PresentationBotHostedService : BackgroundService
         ScoreService scoreService,
         CriterionService criterionService,
         UserService userService,
-        AdminLinkService adminLinkService)
+        AdminLinkService adminLinkService,
+        PresenterAssignmentService presenterAssignmentService)
     {
         _options = options.Value;
         _projectService = projectService;
@@ -124,6 +126,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         _criterionService = criterionService;
         _userService = userService;
         _adminLinkService = adminLinkService;
+        _presenterAssignmentService = presenterAssignmentService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -366,17 +369,20 @@ public sealed class PresentationBotHostedService : BackgroundService
 
     // ---------- Presenter upload flow ----------
 
-    /// <summary>Every existing project is offered here - a presenter no longer needs Admin's per-project
-    /// approval (<see cref="PresenterAssignmentService"/>) before they can even see it in the picker, only a
-    /// completed bot registration. Admin's "Ishtirokchilar" assign/approve screen still exists (e.g. for
-    /// tracking who Admin has explicitly vetted), it just no longer gates what shows up here.</summary>
+    /// <summary>Only projects Admin has explicitly approved this presenter for (<see cref="PresenterAssignmentService.GetAssignedProjectsAsync"/>)
+    /// are offered here - a completed bot registration alone isn't enough, matching
+    /// <see cref="PresentationQueueService.AddAsync"/>'s own server-side requirement that the upload's
+    /// <c>presenterId</c> actually be assigned to the chosen project. Showing every project here regardless
+    /// (as this used to) meant a presenter could pick and upload to a project they weren't approved for, only
+    /// to have that same check reject it - see <see cref="HandleDocumentAsync"/>'s own error handling for what
+    /// they now see when that happens instead of the request silently going nowhere.</summary>
     private async Task ShowAssignedProjectsOrWaitAsync(ITelegramBotClient botClient, long chatId, int presenterId, string fullName, CancellationToken ct)
     {
-        var projects = await _projectService.GetAllAsync(ct);
+        var projects = await _presenterAssignmentService.GetAssignedProjectsAsync(presenterId, ct);
         if (projects.Count == 0)
         {
             await botClient.SendMessage(chatId,
-                "Hozircha birorta loyiha mavjud emas. Loyiha qo'shilgach, shu yerga xabar keladi va taqdimot yuborishingiz mumkin bo'ladi.",
+                "Hozircha sizga biriktirilgan loyiha yo'q. Administrator sizni loyihaga tasdiqlagach, shu yerga xabar keladi va taqdimot yuborishingiz mumkin bo'ladi.",
                 replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
             return;
         }
@@ -409,7 +415,7 @@ public sealed class PresentationBotHostedService : BackgroundService
             return;
         }
 
-        if (!_sessions.TryGetValue(chatId.Value, out var session))
+        if (!_sessions.TryGetValue(chatId.Value, out var session) || session.PresenterId is not { } presenterId)
         {
             // Stale callback (e.g. app restarted since the button was shown, wiping in-memory sessions) -
             // ask the presenter to start over rather than proceeding with no known identity.
@@ -417,11 +423,15 @@ public sealed class PresentationBotHostedService : BackgroundService
             return;
         }
 
-        var projects = await _projectService.GetAllAsync(ct);
+        // Re-validated against the assigned list (not just "does this project exist") - the button itself
+        // only ever came from that same filtered list in ShowProjectListAsync, but a stale callback (an old
+        // message re-tapped after Admin revoked the approval in between) must not let the upload through on
+        // the strength of a button alone.
+        var projects = await _presenterAssignmentService.GetAssignedProjectsAsync(presenterId, ct);
         var project = projects.FirstOrDefault(p => p.Id == projectId);
         if (project is null)
         {
-            await botClient.AnswerCallbackQuery(callbackQuery.Id, "Bu loyiha endi mavjud emas.", cancellationToken: ct);
+            await botClient.AnswerCallbackQuery(callbackQuery.Id, "Bu loyiha endi mavjud emas yoki siz unga biriktirilmagansiz.", cancellationToken: ct);
             return;
         }
 
@@ -482,6 +492,17 @@ public sealed class PresentationBotHostedService : BackgroundService
             }
 
             await botClient.SendMessage(chatId, confirmation, replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            // Previously uncaught here - it propagated up to HandleUpdateAsync's own catch-all, which only
+            // Debug.WriteLine's it (invisible outside an attached debugger), leaving the presenter with no
+            // response at all after sending their file. The two realistic causes: AddAsync rejecting an
+            // upload to a project this presenter isn't (or no longer is - Admin can revoke mid-upload)
+            // approved for ("Siz bu loyihaga hali biriktirilmagansiz"), or GetInfoAndDownloadFile/
+            // SaveFileAsync failing outright (the Telegram Bot API caps bot file downloads at 20MB, or a
+            // local disk I/O error) - either way the presenter now sees exactly why instead of silence.
+            await botClient.SendMessage(chatId, $"❌ Taqdimotni yuborishda xatolik yuz berdi: {ex.Message}", cancellationToken: ct);
         }
         finally
         {
