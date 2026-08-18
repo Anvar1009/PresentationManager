@@ -12,60 +12,62 @@
     <a class="sidebar-back" asp-controller="Order" asp-action="Dashboard">&larr; Loyihalar</a>
 }
 
-<span class="eyebrow">Taqdimotchilar</span>
-<h1 class="page-title">@Model.ProjectName</h1>
-<p class="page-subtitle">Joriy tartib quyida ko'rsatilgan. Pastdagi tugma bosilganda tartib tasodifiy shakllantiriladi va operatorning navbat oynasida darhol yangilanadi.</p>
-
-@if (TempData["Success"] is string success)
-{
-    <div class="notice-success">@success</div>
-}
-
-@if (Model.PresenterNames.Count == 0)
-{
-    <div class="card empty-state">Bu loyihada hali taqdimotchilar yo'q.</div>
-}
-else
-{
-    <div class="card queue">
-        @{ var index = 0; }
-        @foreach (var name in Model.PresenterNames)
-        {
-            index++;
-            <div class="queue-row">
-                <span class="queue-index">@index.ToString("00")</span>
-                <div class="queue-body">
-                    <div class="queue-name">@name</div>
-                </div>
-            </div>
-        }
+<div class="order-stage" id="orderStage">
+    <div class="order-stage-header">
+        <div class="order-stage-heading">
+            <span class="eyebrow">Taqdimotchilar</span>
+            <h1 class="page-title">@Model.ProjectName</h1>
+            <p class="page-subtitle">Joriy tartib quyida ko'rsatilgan. Pastdagi tugma bosilganda tartib tasodifiy shakllantiriladi va operatorning navbat oynasida darhol yangilanadi.</p>
+        </div>
+        <button type="button" class="btn btn-outline btn-icon" id="fullscreenBtn" title="To'liq ekran">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
+            <span class="fullscreen-label">To'liq ekran</span>
+        </button>
     </div>
 
-    @if (Model.PresenterNames.Count < 2)
+    @if (TempData["Success"] is string success)
     {
-        <p class="field-hint" style="margin-top: var(--space-4);">Tasodifiy tartib shakllantirish uchun kamida 2 ta taqdimotchi kerak.</p>
+        <div class="notice-success" style="margin-top: var(--space-5);">@success</div>
+    }
+
+    @if (Model.PresenterNames.Count == 0)
+    {
+        <div class="card empty-state" style="margin-top: var(--space-5);">Bu loyihada hali taqdimotchilar yo'q.</div>
     }
     else
     {
-        <form asp-controller="Order" asp-action="Randomize" method="post" style="margin-top: var(--space-5);"
-              onsubmit="return confirm('Joriy tartib almashtiriladi. Tasdiqlaysizmi?') && disableOnSubmit(this);">
-            <input type="hidden" name="projectId" value="@Model.ProjectId" />
-            <button type="submit" class="btn btn-block">
-                <svg class="icon" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></svg>
-                Ro'yxatni shakllantirish
-            </button>
-        </form>
-        <p class="card-meta-mono" style="margin-top: var(--space-3);">Har bir mumkin bo'lgan tartib bir xil ehtimollik bilan tanlanadi.</p>
+        <div class="card queue" id="queueList" style="margin-top: var(--space-5);">
+            @{ var index = 0; }
+            @foreach (var name in Model.PresenterNames)
+            {
+                index++;
+                <div class="queue-row">
+                    <span class="queue-index">@index.ToString("00")</span>
+                    <div class="queue-body">
+                        <div class="queue-name">@name</div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (Model.PresenterNames.Count < 2)
+        {
+            <p class="field-hint" style="margin-top: var(--space-4);">Tasodifiy tartib shakllantirish uchun kamida 2 ta taqdimotchi kerak.</p>
+        }
+        else
+        {
+            <form asp-controller="Order" asp-action="Randomize" method="post" id="randomizeForm" style="margin-top: var(--space-5);">
+                <input type="hidden" name="projectId" value="@Model.ProjectId" />
+                <button type="submit" class="btn btn-block btn-randomize" id="randomizeBtn">
+                    <svg class="icon" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></svg>
+                    Ro'yxatni shakllantirish
+                </button>
+            </form>
+            <p class="card-meta-mono" style="margin-top: var(--space-3);">Har bir mumkin bo'lgan tartib bir xil ehtimollik bilan tanlanadi.</p>
+        }
     }
-}
+</div>
 
 @section Scripts {
-    <script>
-        function disableOnSubmit(form) {
-            var button = form.querySelector("button[type=submit]");
-            button.disabled = true;
-            button.textContent = "Shakllantirilmoqda...";
-            return true;
-        }
-    </script>
+    <script src="~/js/order-shuffle.js"></script>
 }

@@ -2,6 +2,17 @@
 @{
     ViewData["Title"] = "Login/parolni tiklash";
     ViewData["Brand"] = "SuperAdmin paneli";
+
+    static string Initials(string fullName)
+    {
+        var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            >= 2 => $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant(),
+            1 => parts[0][0].ToString().ToUpperInvariant(),
+            _ => "?"
+        };
+    }
 }
 
 @section Sidebar {
@@ -13,6 +24,14 @@
 <p class="page-subtitle">Parolni bo'sh qoldirsangiz, joriy parol o'zgarmaydi.</p>
 
 <div class="card" style="max-width: 460px;">
+    <div class="profile-header">
+        <span class="profile-avatar">@Initials(Model.FullName)</span>
+        <div class="profile-header-text">
+            <div class="profile-header-name">@Model.FullName</div>
+            <div class="profile-header-meta">@@@Model.Username · @Model.Role</div>
+        </div>
+    </div>
+
     <div asp-validation-summary="All" class="validation-summary"></div>
 
     <form asp-controller="SuperAdmin" asp-action="EditUser" method="post">
