@@ -13,6 +13,16 @@
 <p class="page-subtitle">Login va parolni foydalanuvchiga alohida yetkazing.</p>
 
 <div class="card" style="max-width: 460px;">
+    <div class="profile-header">
+        <span class="profile-avatar">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" /></svg>
+        </span>
+        <div class="profile-header-text">
+            <div class="profile-header-name">Yangi hisob</div>
+            <div class="profile-header-meta">Ma'lumotlarni to'ldiring</div>
+        </div>
+    </div>
+
     <div asp-validation-summary="All" class="validation-summary"></div>
 
     <form asp-controller="SuperAdmin" asp-action="CreateUser" method="post">

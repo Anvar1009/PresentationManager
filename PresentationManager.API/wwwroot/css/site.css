@@ -106,10 +106,24 @@ html {
     color-scheme: dark;
 }
 
+/* ===== Animated aurora background =====
+   Applied to body itself (not a fixed pseudo-element) so it can't get painted over by body's own background
+   layer or need a manual stacking-context fix - the radial gradients simply are the background, with the
+   flat --bg token as their last layer/fallback. Reuses the same tokens the rest of the app already uses
+   (accent-dim, chart-1/2/3) so it reads as this product's palette, not a generic gradient background.
+   Motion is confined to background-position (cheap, no layout/paint of real content) and fully skipped under
+   prefers-reduced-motion. */
 body {
     margin: 0;
     min-height: 100vh;
-    background: var(--bg);
+    background-color: var(--bg);
+    background-image:
+        radial-gradient(900px circle at 12% 8%, var(--accent-dim), transparent 55%),
+        radial-gradient(820px circle at 88% 12%, #8b7cf629, transparent 55%),
+        radial-gradient(780px circle at 80% 92%, #3b82f620, transparent 55%),
+        radial-gradient(680px circle at 8% 92%, #43a04720, transparent 60%);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
     color: var(--text);
     font-family: var(--font-body);
     font-size: 15px;
@@ -121,6 +135,20 @@ body {
     a, button, .card-link, .score-btn {
         transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, transform 80ms ease;
     }
+
+    body {
+        animation: aurora-drift 32s ease-in-out infinite alternate;
+    }
+
+    .card-link, .stat-card {
+        transition: background-color 120ms ease, border-color 120ms ease, transform 160ms ease, box-shadow 160ms ease;
+    }
+}
+
+@keyframes aurora-drift {
+    0% { background-position: 12% 8%, 88% 12%, 80% 92%, 8% 92%; }
+    50% { background-position: 22% 16%, 78% 22%, 70% 80%, 18% 82%; }
+    100% { background-position: 6% 20%, 94% 4%, 88% 96%, 2% 98%; }
 }
 
 a {
@@ -431,6 +459,7 @@ a:hover {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: var(--space-5);
+    box-shadow: 0 1px 2px #00000026, 0 12px 28px -18px #000000b3;
 }
 
 .stack > * + * {
@@ -455,6 +484,8 @@ a:hover {
     border-color: var(--border-strong);
     background: var(--surface-hover);
     text-decoration: none;
+    transform: translateY(-2px);
+    box-shadow: 0 1px 2px #00000026, 0 18px 32px -16px #000000cc;
 }
 
 .card-title {
@@ -578,13 +609,15 @@ a:hover {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    background: var(--accent);
+    background: linear-gradient(180deg, #ffd35c, var(--accent));
     color: var(--accent-ink);
+    box-shadow: 0 1px 0 #ffffff33 inset, 0 8px 20px -10px #ffc52d66;
 }
 
 .btn:hover {
-    background: #ffd35c;
+    background: linear-gradient(180deg, #ffdc7a, #ffd35c);
     text-decoration: none;
+    box-shadow: 0 1px 0 #ffffff40 inset, 0 10px 24px -8px #ffc52d80;
 }
 
 .btn:active {
@@ -823,6 +856,13 @@ a:hover {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+    box-shadow: 0 1px 2px #00000026, 0 12px 28px -18px #000000b3;
+}
+
+.stat-card:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-2px);
+    box-shadow: 0 1px 2px #00000026, 0 18px 32px -16px #000000cc;
 }
 
 .stat-card-icon {
@@ -1094,6 +1134,7 @@ a:hover {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     margin-bottom: var(--space-5);
+    box-shadow: 0 1px 2px #00000026, 0 12px 28px -18px #000000b3;
 }
 
 .table {
@@ -1225,4 +1266,152 @@ a:hover {
     .topbar {
         padding: var(--space-3) var(--space-4);
     }
+}
+
+/* ===== Profile header (CreateUser/EditUser cards - a large initials avatar above the form fields, same
+   visual language as .sidebar-user-avatar so a user's own account and the account being edited read as the
+   same kind of "profile" object) ===== */
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+    padding-bottom: var(--space-5);
+    border-bottom: 1px solid var(--border);
+}
+
+.profile-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--accent-dim);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 18px;
+    flex: none;
+}
+
+.profile-header-text {
+    min-width: 0;
+}
+
+.profile-header-name {
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.profile-header-meta {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-top: 2px;
+}
+
+/* ===== Order stage (OrderOperator's randomize screen - a self-contained "stage" element so it can be
+   thrown into the Fullscreen API as-is and get its own, more theatrical styling while fullscreen, without
+   touching the sidebar/shell around it) ===== */
+
+.order-stage-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+}
+
+.order-stage-header .page-title,
+.order-stage-header .page-subtitle {
+    margin-bottom: 0;
+}
+
+.order-stage-header .eyebrow {
+    margin-bottom: var(--space-2);
+}
+
+.order-stage-heading {
+    min-width: 0;
+}
+
+.order-stage-heading .page-subtitle {
+    margin-top: var(--space-2);
+}
+
+.btn-icon {
+    flex: none;
+    white-space: nowrap;
+}
+
+.btn-icon.is-active {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.order-stage:fullscreen,
+.order-stage:-webkit-full-screen {
+    background: var(--bg);
+    background-image: inherit;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: var(--space-7) 10vw;
+    overflow-y: auto;
+}
+
+.order-stage:fullscreen .page-title,
+.order-stage:-webkit-full-screen .page-title {
+    font-size: 40px;
+}
+
+.order-stage:fullscreen .queue-row,
+.order-stage:-webkit-full-screen .queue-row {
+    padding: var(--space-5) 0;
+}
+
+.order-stage:fullscreen .queue-index,
+.order-stage:-webkit-full-screen .queue-index {
+    font-size: 22px;
+    width: 46px;
+}
+
+.order-stage:fullscreen .queue-name,
+.order-stage:-webkit-full-screen .queue-name {
+    font-size: 24px;
+}
+
+.order-stage:fullscreen .btn-block,
+.order-stage:-webkit-full-screen .btn-block {
+    max-width: 420px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Shuffle reveal - a quick client-side flourish that cycles the visible names through a few random
+   permutations before the real (server-decided) order comes back from the Randomize post, so the "random"
+   part of this panel actually reads as a random draw instead of an instant swap. See order-shuffle.js. */
+
+.queue.shuffling .queue-row {
+    border-color: var(--border-strong);
+}
+
+.queue.shuffling .queue-name {
+    color: var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .queue.shuffling .queue-row {
+        animation: shuffle-pulse 260ms ease-in-out infinite;
+    }
+}
+
+@keyframes shuffle-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.012); opacity: 0.85; }
+}
+
+.btn-randomize.is-shuffling {
+    cursor: progress;
 }
