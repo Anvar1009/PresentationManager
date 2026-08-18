@@ -73,7 +73,29 @@ public sealed class OrderController : Controller
         await _queueService.RandomizeOrderAsync(projectId, ct);
         await _orderHub.Clients.All.SendAsync("OrderRandomized", projectId, ct);
 
+        // The stage view (order-shuffle.js) submits this via fetch instead of a normal form post, so its
+        // fullscreen presentation never gets torn down by a full page navigation - see that script for the
+        // in-place DOM update this response feeds. Falls back to the old redirect+reload for any non-JS
+        // client hitting this endpoint directly.
+        if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+        {
+            return await QueueJson(projectId, ct);
+        }
+
         TempData["Success"] = "Ro'yxat shakllantirildi.";
         return RedirectToAction(nameof(Project), new { projectId });
+    }
+
+    /// <summary>Current presenter order as JSON - used by order-shuffle.js to redraw the queue in place
+    /// (both right after this operator's own <see cref="Randomize"/> call, and whenever
+    /// PresentationOrderHub reports another source - a different operator's tab, or the desktop AdminForm's
+    /// drag-and-drop reorder - changed it) without ever navigating this page away from fullscreen.</summary>
+    [HttpGet]
+    public Task<IActionResult> Queue(int projectId, CancellationToken ct) => QueueJson(projectId, ct);
+
+    private async Task<IActionResult> QueueJson(int projectId, CancellationToken ct)
+    {
+        var presentations = await _queueService.GetAllAsync(projectId, ct);
+        return Json(new { names = presentations.Select(p => p.FullName) });
     }
 }

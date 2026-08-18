@@ -34,7 +34,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>@(ViewData["Title"] is string t && t.Length > 0 ? $"{t} — {brand}" : brand)</title>
-    <link rel="stylesheet" href="~/css/site.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body data-project-id="@(ViewData["ProjectId"])">
     @if (User.Identity?.IsAuthenticated == true)
@@ -88,7 +88,7 @@
     }
 
     <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
-    <script src="~/js/order-live.js"></script>
+    <script src="~/js/order-live.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
