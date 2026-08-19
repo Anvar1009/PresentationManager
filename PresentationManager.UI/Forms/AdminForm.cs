@@ -1141,19 +1141,28 @@ public sealed class AdminForm : Form
     /// <summary>The optional extra-time counterpart to <see cref="ConfirmAndStartDiscussionAsync"/> — fired
     /// automatically as soon as <see cref="PresentationStatus.ExtraDiscussionReady"/> is reached (see
     /// WireSessionEvents), which only happens when the presentation actually has extra discussion time
-    /// configured. Declining leaves the state parked; <see cref="OnAdvanceClick"/>'s ExtraDiscussionReady
-    /// branch calls this same method again if the operator then clicks "Keyingi" to retry.</summary>
+    /// configured. Declining used to just leave the state parked with no way forward except clicking
+    /// "Keyingi", which re-asked this exact same question forever (<see cref="OnAdvanceClick"/>'s
+    /// ExtraDiscussionReady branch calls this same method) - declining now immediately offers the other
+    /// realistic action (skip the extra time and move on) instead of stranding the operator on a dead end.</summary>
     private async Task ConfirmAndStartExtraDiscussionAsync()
     {
         var confirm = MessageBox.Show(this,
             "Qo'shimcha muhokama vaqtini boshlashni tasdiqlaysizmi?",
             "Qo'shimcha muhokama", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-        if (confirm != DialogResult.Yes)
+        if (confirm == DialogResult.Yes)
         {
+            await _session.StartExtraDiscussionAsync();
             return;
         }
 
-        await _session.StartExtraDiscussionAsync();
+        var moveNext = MessageBox.Show(this,
+            "Qo'shimcha vaqtsiz keyingi taqdimotchiga o'tishni xohlaysizmi?",
+            "Keyingisiga o'tish", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (moveNext == DialogResult.Yes)
+        {
+            await _session.NextPresenterAsync();
+        }
     }
 
     /// <summary>Shown once a discussion is finished — lets the operator choose which queued presentation

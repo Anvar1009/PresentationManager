@@ -17,7 +17,9 @@ public sealed record AdminParticipantsViewModel(
     int ProjectId, string ProjectName, string? Query, IReadOnlyList<ProjectParticipant> Participants,
     DateTime? SubmissionDeadline);
 
-public sealed record AdminPresentationRow(int PresentationId, string PresenterFullName, string Title, string StatusLabel, string CreatedAt);
+public sealed record AdminPresentationRow(
+    int PresentationId, string PresenterFullName, string Title, string StatusLabel, string CreatedAt,
+    int ExtraDiscussionMinutes);
 
 public sealed record AdminPresentationsViewModel(
     int ProjectId, string ProjectName, string? Query, IReadOnlyList<AdminPresentationRow> Presentations);

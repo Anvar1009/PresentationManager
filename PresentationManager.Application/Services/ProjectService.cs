@@ -37,7 +37,7 @@ public sealed class ProjectService
 
     public async Task<Project> CreateAsync(
         string name, DateOnly eventStartDate, DateOnly eventEndDate, TimeOnly? eventTime, string? location,
-        int? createdByUserId = null, CancellationToken ct = default)
+        int? createdByUserId = null, DateTime? submissionDeadline = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -56,7 +56,8 @@ public sealed class ProjectService
             EventEndDate = eventEndDate,
             EventTime = eventTime,
             Location = string.IsNullOrWhiteSpace(location) ? null : location.Trim(),
-            CreatedByUserId = createdByUserId
+            CreatedByUserId = createdByUserId,
+            SubmissionDeadline = submissionDeadline
         };
         return await _projectRepository.AddAsync(project, ct);
     }

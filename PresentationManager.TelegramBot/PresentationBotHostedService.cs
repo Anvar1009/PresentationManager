@@ -780,7 +780,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         {
             var project = await _projectService.CreateAsync(
                 session.NewProjectName, session.NewProjectStartDate, session.NewProjectEndDate, null, location,
-                session.UserId, ct);
+                session.UserId, ct: ct);
 
             await botClient.SendMessage(chatId, $"✅ \"{project.Name}\" loyihasi yaratildi!", cancellationToken: ct);
             await ShowAdminProjectMenuAsync(botClient, chatId, project.Id, project.Name, ct);
