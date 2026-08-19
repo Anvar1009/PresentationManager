@@ -86,6 +86,15 @@ public sealed class LiveSlideShowDisplayService : ISlideDisplayService
             await RunOnComThreadAsync(() =>
             {
                 _app = new PowerPoint.Application();
+                // Suppresses every COM-automation alert PowerPoint would otherwise pop up during this
+                // session - the one that actually mattered in practice was "Do you want to save changes to
+                // <file>?" on close, which PowerPoint can ask even for a ReadOnly-opened presentation (just
+                // running the slideshow can dirty transient state like the last-viewed-slide bookmark). Safe
+                // here specifically because this app never intends to persist anything back into the
+                // presenter's source file - see CloseAsync's Saved=true below for the same guarantee applied
+                // a second way, directly on the presentation itself rather than relying on this app-wide
+                // setting alone.
+                _app.DisplayAlerts = PowerPoint.PpAlertLevel.ppAlertsNone;
                 _presentation = _app.Presentations.Open(
                     absoluteFilePath,
                     Office.MsoTriState.msoTrue,  // ReadOnly
@@ -152,6 +161,10 @@ public sealed class LiveSlideShowDisplayService : ISlideDisplayService
             await RunOnComThreadAsync(() =>
             {
                 try { _slideShowWindow?.View.Exit(); } catch { /* best-effort - Quit below is the real teardown */ }
+                // Belt-and-suspenders alongside DisplayAlerts=ppAlertsNone in OpenAsync - marking the
+                // presentation itself as "nothing to save" means PowerPoint has no reason to prompt on Close
+                // even if some other code path ever touches DisplayAlerts back to its default in between.
+                try { if (_presentation is not null) _presentation.Saved = Office.MsoTriState.msoTrue; } catch { /* ignored */ }
                 try { _presentation?.Close(); } catch { /* ignored, same as PptxToPdfConverter */ }
                 try { _app?.Quit(); } catch { /* ignored */ }
 

@@ -16,13 +16,28 @@ public sealed class StartPresentationGateForm : Form
         ForeColor = AppColors.TextPrimary;
         Font = new Font("Segoe UI", 9.5f);
         FormBorderStyle = FormBorderStyle.FixedDialog;
-        // CenterScreen, not CenterParent — a lesson from PresentationPickerForm: centering relative to an
-        // owner that's not yet shown at all (first start of the day, from AdminForm) can park this dialog
-        // somewhere the operator can't actually see or reach.
-        StartPosition = FormStartPosition.CenterScreen;
+        // Not CenterParent — a lesson from PresentationPickerForm: centering relative to an owner that's not
+        // yet shown at all (first start of the day, from AdminForm) can park this dialog somewhere the
+        // operator can't actually see or reach. Also deliberately not CenterScreen either, despite looking
+        // like the obvious fix for that: with no owner, WinForms centers a CenterScreen form on whichever
+        // monitor the mouse cursor happens to be over at that instant, not reliably the operator's own
+        // screen - on a laptop+projector setup that meant this gate would sometimes pop up on the shared
+        // projector screen instead of in front of the operator, depending on where the mouse last was. Manual
+        // positioning onto Screen.PrimaryScreen (see Load below) is what PresentationForm's own
+        // PositionOnTargetMonitor treats as "the operator's screen" too, so this is always where AdminForm
+        // itself lives, never the shared one.
+        StartPosition = FormStartPosition.Manual;
         MaximizeBox = false;
         MinimizeBox = false;
         ClientSize = new Size(440, 240);
+
+        Load += (_, _) =>
+        {
+            var operatorScreen = Screen.PrimaryScreen?.WorkingArea ?? Screen.AllScreens[0].WorkingArea;
+            Location = new Point(
+                operatorScreen.X + (operatorScreen.Width - Width) / 2,
+                operatorScreen.Y + (operatorScreen.Height - Height) / 2);
+        };
 
         var nameLabel = new Label
         {

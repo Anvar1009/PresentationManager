@@ -4,7 +4,9 @@ public interface IAlarmSoundService
 {
     void Play(string? customSoundPath);
 
-    /// <summary>A quiet, fixed countdown tick — deliberately ignores the operator's custom alarm sound, since
-    /// it's meant to read as a soft heads-up rather than the loud expiry alarm.</summary>
-    void PlayTick();
+    /// <summary>The bundled "time's almost up" bell - fired once when a timer has 7 seconds left (see
+    /// PresentationForm's own warning-state handling), not per-second like <see cref="PlayTick"/>. Always
+    /// this specific sound, not the operator's configurable <see cref="Play"/> path - it's the app's own
+    /// fixed countdown signal, not something meant to be swapped out.</summary>
+    void PlayCountdownBell();
 }
