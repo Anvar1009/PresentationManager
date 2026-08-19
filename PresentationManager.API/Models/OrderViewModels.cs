@@ -1,6 +1,8 @@
 namespace PresentationManager.API.Models;
 
-public sealed record OrderProjectOption(int ProjectId, string ProjectName, int PresentationCount);
+/// <summary><paramref name="IsOrdered"/> drives the "Tartiblangan" badge on the Order dashboard - see
+/// <see cref="PresentationManager.Domain.Entities.Project.OrderRandomizedAt"/>.</summary>
+public sealed record OrderProjectOption(int ProjectId, string ProjectName, int PresentationCount, bool IsOrdered);
 
 public sealed record OrderDashboardViewModel(string OrderOperatorFullName, IReadOnlyList<OrderProjectOption> Projects);
 

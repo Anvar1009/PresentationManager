@@ -30,6 +30,12 @@ public class Project
     /// only the projects they created - see <c>IProjectRepository.GetByCreatorAsync</c>.</summary>
     public int? CreatedByUserId { get; set; }
 
+    /// <summary>When the OrderOperator's "Ro'yxatni shakllantirish" last actually ran for this project - null
+    /// means it never has (or "Jadvalni tozalash" undid it back to a rehearsal state). Purely a status flag
+    /// for the Order dashboard's "Tartiblangan" badge (see OrderController.Dashboard) - the real order itself
+    /// always lives in each Presentation's own OrderNumber regardless of this field.</summary>
+    public DateTime? OrderRandomizedAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

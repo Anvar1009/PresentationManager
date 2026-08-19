@@ -52,6 +52,11 @@
     <Content Include="appsettings.Local.json" Condition="Exists('appsettings.Local.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- Same "baked into the exe, not a loose file next to it" reasoning as appsettings.json above - a
+         single-file publish shouldn't depend on a separate .mp3 shipping alongside the .exe. Read back via
+         Assembly.GetManifestResourceStream in AlarmSoundService.PlayCountdownBell and played straight from
+         that stream (NAudio's Mp3FileReader takes a Stream directly), never touching disk. -->
+    <EmbeddedResource Include="Sounds\timer-alarm.mp3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -63,6 +68,9 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2957.106" />
     <PackageReference Include="Microsoft.Office.Interop.PowerPoint" Version="15.0.4420.1018" />
     <PackageReference Include="PDFtoImage" Version="5.3.0" />
+    <!-- System.Media.SoundPlayer (used elsewhere in AlarmSoundService for the operator's own custom .wav)
+         only understands .wav - NAudio is what actually decodes/plays the bundled .mp3 countdown bell. -->
+    <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
 
   <ItemGroup>

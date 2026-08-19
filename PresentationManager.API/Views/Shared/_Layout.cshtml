@@ -37,13 +37,7 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body data-project-id="@(ViewData["ProjectId"])">
-    <div class="bg-orbs" aria-hidden="true">
-        <span class="bg-orb bg-orb-1"></span>
-        <span class="bg-orb bg-orb-2"></span>
-        <span class="bg-orb bg-orb-3"></span>
-        <span class="bg-orb bg-orb-4"></span>
-        <span class="bg-orb bg-orb-5"></span>
-    </div>
+    <div class="bg-stars" id="bgStars" aria-hidden="true"></div>
     @if (User.Identity?.IsAuthenticated == true)
     {
         <div class="app-shell">

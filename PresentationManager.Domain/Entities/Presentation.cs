@@ -22,6 +22,12 @@ public class Presentation
 
     public int OrderNumber { get; set; }
 
+    /// <summary>1-based event day this presentation was drawn into when the OrderOperator's randomize ran
+    /// with more than one day configured (see PresentationQueueService.RandomizeOrderAsync) - null for a
+    /// single-day draw, a manually-added presentation, or after "Jadvalni tozalash" clears it. OrderNumber
+    /// stays one continuous sequence across every day regardless; this is purely a display grouping.</summary>
+    public int? DayNumber { get; set; }
+
     public int PresentationTimeSeconds { get; set; } = 180;
 
     public int DiscussionTimeSeconds { get; set; } = 120;

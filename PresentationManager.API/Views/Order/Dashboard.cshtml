@@ -27,6 +27,13 @@ else
                 {
                     <span class="card-meta">@project.PresentationCount ta taqdimotchi</span>
                 }
+                @if (project.IsOrdered)
+                {
+                    <span class="badge badge-success" style="margin-top: var(--space-2); gap: 4px;">
+                        <svg class="icon" viewBox="0 0 24 24" style="width: 12px; height: 12px;"><polyline points="20 6 9 17 4 12" /></svg>
+                        Tartiblangan
+                    </span>
+                }
             </a>
         }
     </div>
