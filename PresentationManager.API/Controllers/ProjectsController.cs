@@ -56,6 +56,27 @@ public sealed class ProjectsController : ControllerBase
         return Ok(ProjectDto.FromEntity(created));
     }
 
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, UpdateProjectRequest request, CancellationToken ct)
+    {
+        var existing = await _projectRepository.GetByIdAsync(id, ct);
+        if (existing is null)
+        {
+            return NotFound();
+        }
+
+        existing.Name = request.Name;
+        existing.EventStartDate = request.EventStartDate;
+        existing.EventEndDate = request.EventEndDate;
+        existing.EventTime = request.EventTime;
+        existing.Location = request.Location;
+        existing.SubmissionDeadline = request.SubmissionDeadline;
+        existing.UpdatedAt = DateTime.UtcNow;
+
+        await _projectRepository.UpdateAsync(existing, ct);
+        return Ok(ProjectDto.FromEntity(existing));
+    }
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {

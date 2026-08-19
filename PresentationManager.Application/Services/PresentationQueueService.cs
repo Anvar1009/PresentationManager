@@ -34,6 +34,30 @@ public sealed class PresentationQueueService
             ? _presentationRepository.GetAllOrderedAsync(projectId, ct)
             : _presentationRepository.SearchByNameAsync(query, projectId, ct);
 
+    /// <summary>Admin-facing "Qo'shimcha muhokama vaqti" control on the web Presentations page - the desktop
+    /// PresentationEditForm already exposes this as part of full add/edit (Operator-only), but Admin's own
+    /// web panel is otherwise deliberately read-only (see AdminController's own doc comment), so this is a
+    /// narrow, single-field update rather than opening up full presentation editing there too.</summary>
+    public async Task SetExtraDiscussionTimeAsync(int id, int extraDiscussionTimeSeconds, CancellationToken ct = default)
+    {
+        var presentation = await _presentationRepository.GetByIdAsync(id, ct)
+            ?? throw new InvalidOperationException($"Presentation {id} not found.");
+
+        presentation.ExtraDiscussionTimeSeconds = extraDiscussionTimeSeconds;
+        presentation.UpdatedAt = DateTime.UtcNow;
+        await _presentationRepository.UpdateAsync(presentation, ct);
+    }
+
+    /// <summary>This presenter's existing submission to this project, if any - the Telegram bot's upload flow
+    /// checks this before accepting a new file, so a second submission to the same project updates that one
+    /// (<see cref="UpdateAsync"/>) instead of creating a duplicate queue entry (see
+    /// <c>PresentationBotHostedService.HandleProjectSelectionCallbackAsync</c>/<c>HandleDocumentAsync</c>).</summary>
+    public async Task<Presentation?> GetByPresenterAndProjectAsync(int projectId, int presenterId, CancellationToken ct = default)
+    {
+        var presentations = await _presentationRepository.GetAllOrderedAsync(projectId, ct);
+        return presentations.FirstOrDefault(p => p.PresenterId == presenterId);
+    }
+
     public async Task<Presentation> AddAsync(
         int projectId, string fullName, string title,
         string sourceFilePath, PresentationFileType fileType,

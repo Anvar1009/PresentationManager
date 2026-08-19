@@ -13,6 +13,43 @@
 <h1 class="page-title">@Model.ProjectName</h1>
 <p class="page-subtitle">Ushbu loyihaga kamida bitta taqdimot yuborgan har bir qatnashchi.</p>
 
+@if (TempData["Success"] is string success)
+{
+    <div class="notice-success">@success</div>
+}
+
+<div class="card" style="margin-bottom: var(--space-5); max-width: 460px;">
+    <span class="eyebrow">Taqdimot topshirish muddati</span>
+    @if (Model.SubmissionDeadline is { } deadline)
+    {
+        <p class="card-meta" style="margin: var(--space-1) 0 var(--space-4);">
+            Hozirgi muddat: <strong style="color: var(--text);">@deadline.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</strong> dan keyin
+            botda taqdimot yuborish/yangilash yopiladi.
+        </p>
+    }
+    else
+    {
+        <p class="card-meta" style="margin: var(--space-1) 0 var(--space-4);">Muddat belgilanmagan - taqdimotchilar istalgan vaqtda yuborishi/yangilashi mumkin.</p>
+    }
+    <div style="display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap;">
+        <form asp-controller="Admin" asp-action="SetSubmissionDeadline" method="post" style="display: flex; gap: var(--space-3); align-items: flex-end; flex: 1 1 220px;">
+            <input type="hidden" name="projectId" value="@Model.ProjectId" />
+            <div class="field" style="margin-bottom: 0; flex: 1 1 auto;">
+                <label for="deadline">Sana va vaqt</label>
+                <input type="datetime-local" id="deadline" name="deadline" value="@(Model.SubmissionDeadline?.ToLocalTime().ToString("yyyy-MM-ddTHH:mm"))" />
+            </div>
+            <button type="submit" class="btn btn-sm">Saqlash</button>
+        </form>
+        @if (Model.SubmissionDeadline is not null)
+        {
+            <form asp-controller="Admin" asp-action="SetSubmissionDeadline" method="post">
+                <input type="hidden" name="projectId" value="@Model.ProjectId" />
+                <button type="submit" class="btn btn-outline btn-sm">Bekor qilish</button>
+            </form>
+        }
+    </div>
+</div>
+
 <div class="toolbar">
     <form method="get" asp-controller="Admin" asp-action="Participants">
         <input type="hidden" name="projectId" value="@Model.ProjectId" />

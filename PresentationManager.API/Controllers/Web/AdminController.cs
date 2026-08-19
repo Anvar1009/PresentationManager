@@ -15,11 +15,14 @@ namespace PresentationManager.API.Controllers.Web;
 
 /// <summary>Web mirror of the WinForms <c>AdminPanelForm</c> - project picker, Qatnashchilar/Taqdimotlar/
 /// Yakuniy baholar (all scoped to this Admin's own projects, see <see cref="FindOwnedProjectAsync"/>), and a
-/// project's Baholash mezonlari/Hakamlar/Ishtirokchilar management. Deliberately does not add
+/// project's Baholash mezonlari/Hakamlar/Ishtirokchilar management. Deliberately does not add full
 /// presentation upload/edit/delete - <c>AdminPanelForm</c>'s own "Taqdimotlar" section is read-only + open-
-/// file only; full presentation CRUD only exists in the separate Operator-only <c>PresentationManagementForm</c>,
-/// which has no web equivalent (out of scope here). Every action reuses the same Application-layer services
-/// the desktop panel already calls - no new business logic, only a new presentation layer.</summary>
+/// file only, and that stays true here too; full presentation CRUD only exists in the separate Operator-only
+/// <c>PresentationManagementForm</c>, which has no web equivalent (out of scope here). The one exception is
+/// <see cref="SetExtraDiscussionTime"/> - a narrow, single-field update (not full editing) so Admin doesn't
+/// need Operator access just to configure a presentation's optional extra discussion time. Every action
+/// reuses the same Application-layer services the desktop panel already calls - no new business logic, only
+/// a new presentation layer.</summary>
 [Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme, Roles = nameof(UserRole.Admin))]
 public sealed class AdminController : Controller
 {
@@ -69,11 +72,16 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> CreateProject(string name, DateOnly eventStartDate, DateOnly eventEndDate, TimeOnly? eventTime, string? location, CancellationToken ct)
+    public async Task<IActionResult> CreateProject(
+        string name, DateOnly eventStartDate, DateOnly eventEndDate, TimeOnly? eventTime, string? location,
+        DateTime? submissionDeadline, CancellationToken ct)
     {
         try
         {
-            await _projectService.CreateAsync(name, eventStartDate, eventEndDate, eventTime, location, CurrentUserId, ct);
+            // Naive local wall-clock value from <input type="datetime-local">, same treatment as
+            // SetSubmissionDeadline - converted to UTC before storage.
+            var deadlineUtc = submissionDeadline is { } local ? DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime() : (DateTime?)null;
+            await _projectService.CreateAsync(name, eventStartDate, eventEndDate, eventTime, location, CurrentUserId, deadlineUtc, ct);
         }
         catch (InvalidOperationException ex)
         {
@@ -102,7 +110,32 @@ public sealed class AdminController : Controller
                 .ToList();
         }
 
-        return View(new AdminParticipantsViewModel(project.Id, project.Name, q, participants));
+        return View(new AdminParticipantsViewModel(project.Id, project.Name, q, participants, project.SubmissionDeadline));
+    }
+
+    /// <summary>Sets (or, when <paramref name="deadline"/> is left empty, clears) the cutoff past which the
+    /// Telegram bot stops accepting a new submission or a file/title update for this project - see
+    /// <see cref="ProjectService.SetSubmissionDeadlineAsync"/>. The &lt;input type="datetime-local"&gt; posts a
+    /// naive local wall-clock value with no timezone info; treated as this server's own local time and
+    /// converted to UTC before storage, matching how an operator physically at the venue would read "19-avgust
+    /// 23:59" on the wall clock.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetSubmissionDeadline(int projectId, DateTime? deadline, CancellationToken ct)
+    {
+        var project = await FindOwnedProjectAsync(projectId, ct);
+        if (project is null)
+        {
+            return NotFound();
+        }
+
+        var deadlineUtc = deadline is { } local ? DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime() : (DateTime?)null;
+        await _projectService.SetSubmissionDeadlineAsync(projectId, deadlineUtc, ct);
+
+        TempData["Success"] = deadlineUtc is null
+            ? "Taqdimot topshirish muddati bekor qilindi."
+            : "Taqdimot topshirish muddati saqlandi.";
+        return RedirectToAction(nameof(Participants), new { projectId });
     }
 
     public async Task<IActionResult> Presentations(int projectId, string? q, CancellationToken ct)
@@ -118,10 +151,37 @@ public sealed class AdminController : Controller
             : await _queueService.SearchAsync(q, projectId, ct);
 
         var rows = presentations
-            .Select(p => new AdminPresentationRow(p.Id, p.FullName, p.Title, UzbekText.StatusLabel(p.Status), p.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")))
+            .Select(p => new AdminPresentationRow(
+                p.Id, p.FullName, p.Title, UzbekText.StatusLabel(p.Status), p.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
+                p.ExtraDiscussionTimeSeconds / 60))
             .ToList();
 
         return View(new AdminPresentationsViewModel(project.Id, project.Name, q, rows));
+    }
+
+    /// <summary>Narrow, single-field update - see <see cref="PresentationQueueService.SetExtraDiscussionTimeAsync"/>
+    /// for why this exists instead of full presentation editing on Admin's otherwise read-only web panel.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetExtraDiscussionTime(int projectId, int presentationId, int extraDiscussionMinutes, CancellationToken ct)
+    {
+        var project = await FindOwnedProjectAsync(projectId, ct);
+        if (project is null)
+        {
+            return NotFound();
+        }
+
+        var presentation = await _presentationRepository.GetByIdAsync(presentationId, ct);
+        if (presentation is null || presentation.ProjectId != projectId)
+        {
+            return NotFound();
+        }
+
+        var seconds = Math.Clamp(extraDiscussionMinutes, 0, 60) * 60;
+        await _queueService.SetExtraDiscussionTimeAsync(presentationId, seconds, ct);
+
+        TempData["Success"] = "Qo'shimcha muhokama vaqti saqlandi.";
+        return RedirectToAction(nameof(Presentations), new { projectId });
     }
 
     /// <summary>Web equivalent of the desktop panel's "Faylni ochish" (native open) - a server process can't

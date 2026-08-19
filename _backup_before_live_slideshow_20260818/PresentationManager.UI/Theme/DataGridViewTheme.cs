@@ -1,0 +1,84 @@
+namespace PresentationManager.UI.Theme;
+
+/// <summary>Builds a themed, read-only <see cref="DataGridView"/> — used by the Admin/SuperAdmin panels, the
+/// first place in this app tabular DB data is shown directly rather than through a custom-drawn list.</summary>
+public static class DataGridViewTheme
+{
+    /// <summary>The app's usual dark palette.</summary>
+    public static DataGridView CreateReadOnlyGrid() => CreateReadOnlyGrid(
+        background: AppColors.PanelAlt,
+        alternatingBackground: AppColors.Panel,
+        headerBackground: AppColors.Panel,
+        headerForeground: AppColors.TextSecondary,
+        textColor: AppColors.TextPrimary,
+        accent: AppColors.Accent,
+        selectionForeground: AppColors.Background,
+        gridLines: AppColors.Border);
+
+    /// <summary>Same grid, themed for a light-background screen (SuperAdmin panel) instead of the app's
+    /// usual dark one.</summary>
+    public static DataGridView CreateReadOnlyGrid(
+        Color background, Color alternatingBackground, Color headerBackground, Color headerForeground,
+        Color textColor, Color accent, Color selectionForeground, Color gridLines)
+    {
+        var grid = new DataGridView
+        {
+            Dock = DockStyle.Fill,
+            BackgroundColor = background,
+            GridColor = gridLines,
+            BorderStyle = BorderStyle.None,
+            ReadOnly = true,
+            AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
+            AllowUserToResizeRows = false,
+            RowHeadersVisible = false,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            MultiSelect = false,
+            Font = new Font("Segoe UI", 9.5f)
+        };
+
+        grid.DefaultCellStyle.BackColor = background;
+        grid.DefaultCellStyle.ForeColor = textColor;
+        grid.DefaultCellStyle.SelectionBackColor = accent;
+        grid.DefaultCellStyle.SelectionForeColor = selectionForeground;
+        grid.DefaultCellStyle.Padding = new Padding(10, 0, 10, 0);
+
+        grid.ColumnHeadersDefaultCellStyle.BackColor = headerBackground;
+        grid.ColumnHeadersDefaultCellStyle.ForeColor = headerForeground;
+        // Clicking any cell marks that column's header as "current", which WinForms paints using these
+        // Selection* colors regardless of EnableHeadersVisualStyles - trying to just recolor that highlight
+        // (e.g. white text on the accent color) still came out unreadable in practice. Setting both to
+        // exactly match the header's normal (non-selected) colors is the reliable fix: the header simply
+        // never visually changes when a cell in its column is clicked, so there's nothing left to go wrong.
+        grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = headerBackground;
+        grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = headerForeground;
+        grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+        grid.ColumnHeadersDefaultCellStyle.Padding = new Padding(10, 8, 10, 8);
+        // AutoSize computes the header row's height from its content the first time the grid lays out - if
+        // that first layout happens while the control is still effectively 0x0 (e.g. SuperAdminPanelForm
+        // binds its grid from Form.Load, before the Maximized window has actually been sized on screen), the
+        // header row gets stuck at that collapsed height and the header text never becomes visible, even
+        // after later resizes recompute everything else. A fixed height sidesteps that timing dependency
+        // entirely - tall enough for the bold 9pt header font plus its 8px top/bottom padding above.
+        grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        grid.ColumnHeadersHeight = 40;
+        grid.EnableHeadersVisualStyles = false;
+
+        grid.AlternatingRowsDefaultCellStyle.BackColor = alternatingBackground;
+        grid.RowTemplate.Height = 34;
+        grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+
+        // WinForms auto-selects row 0 the moment data is bound, which - combined with FullRowSelect - paints
+        // that entire first row (most noticeably its first cell) with SelectionBackColor even though nothing
+        // was actually clicked. These are read-only reference grids, not something a "current row" concept
+        // is useful for, so every rebind clears it back to plain, uncolored cells like all the others.
+        grid.DataBindingComplete += (_, _) =>
+        {
+            grid.ClearSelection();
+            grid.CurrentCell = null;
+        };
+
+        return grid;
+    }
+}

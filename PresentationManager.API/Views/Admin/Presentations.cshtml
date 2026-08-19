@@ -11,7 +11,12 @@
 
 <span class="eyebrow">Taqdimotlar</span>
 <h1 class="page-title">@Model.ProjectName</h1>
-<p class="page-subtitle">Ushbu loyihaga yuborilgan taqdimotlar (faqat ko'rish, yuklab olish mumkin).</p>
+<p class="page-subtitle">Ushbu loyihaga yuborilgan taqdimotlar (ko'rish, yuklab olish va qo'shimcha muhokama vaqtini belgilash mumkin).</p>
+
+@if (TempData["Success"] is string success)
+{
+    <div class="notice-success">@success</div>
+}
 
 <div class="toolbar">
     <form method="get" asp-controller="Admin" asp-action="Presentations">
@@ -34,6 +39,7 @@ else
                     <th>Sarlavha</th>
                     <th>Holat</th>
                     <th>Qo'shilgan vaqt</th>
+                    <th>Qo'shimcha muhokama (daq.)</th>
                     <th>Fayl</th>
                 </tr>
             </thead>
@@ -45,6 +51,14 @@ else
                         <td class="wrap">@presentation.Title</td>
                         <td>@presentation.StatusLabel</td>
                         <td>@presentation.CreatedAt</td>
+                        <td>
+                            <form asp-controller="Admin" asp-action="SetExtraDiscussionTime" method="post" style="display: flex; gap: 6px; align-items: center;">
+                                <input type="hidden" name="projectId" value="@Model.ProjectId" />
+                                <input type="hidden" name="presentationId" value="@presentation.PresentationId" />
+                                <input type="number" name="extraDiscussionMinutes" value="@presentation.ExtraDiscussionMinutes" min="0" max="60" style="width: 64px; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg-raised); color: var(--text); font-family: var(--font-body); font-size: 13px;" />
+                                <button type="submit" class="btn btn-outline btn-sm">Saqlash</button>
+                            </form>
+                        </td>
                         <td><a asp-controller="Admin" asp-action="DownloadPresentation" asp-route-presentationId="@presentation.PresentationId">Yuklab olish</a></td>
                     </tr>
                 }
