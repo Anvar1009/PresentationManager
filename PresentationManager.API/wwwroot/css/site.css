@@ -106,31 +106,18 @@ html {
     color-scheme: dark;
 }
 
-/* ===== Animated aurora background =====
-   Applied to body itself (not a fixed pseudo-element) so it can't get painted over by body's own background
-   layer or need a manual stacking-context fix - the radial gradients simply are the background, with the
-   flat --bg token as their last layer/fallback. Reuses the same tokens the rest of the app already uses
-   (accent-dim, chart-1..6) so it reads as this product's palette, not a generic gradient background.
-   The first layer is a spotlight that tracks the cursor (--spot-x/--spot-y, set by interactive-bg.js) - the
-   one genuinely *interactive* part of the background; the rest drift on their own via background-position.
-   Both are fully skipped under prefers-reduced-motion (interactive-bg.js checks the same media query itself,
-   so --spot-x/--spot-y just never move and that layer sits inert at its default center position). */
+/* ===== Site-wide background =====
+   Deliberately the exact same look as the OrderOperator fullscreen stage (.order-stage:fullscreen further
+   down) - a static two-tone radial gradient plus a twinkling starfield - rather than the busier multi-color
+   aurora/floating-orbs combination this used to be. Applied to body itself (not a fixed pseudo-element) so
+   it can't get painted over by body's own background layer or need a manual stacking-context fix. */
 body {
     margin: 0;
     min-height: 100vh;
-    /* Own stacking context, so .bg-orbs below can use z-index:-1 and be guaranteed to stay behind every
+    /* Own stacking context, so .bg-stars below can use z-index:-1 and be guaranteed to stay behind every
        real (z-index:auto) piece of UI, instead of that -1 being compared against the page root itself. */
     isolation: isolate;
-    background-color: var(--bg);
-    background-image:
-        radial-gradient(480px circle at var(--spot-x, 50%) var(--spot-y, 22%), #ffc52d22, transparent 62%),
-        radial-gradient(900px circle at 12% 8%, var(--accent-dim), transparent 55%),
-        radial-gradient(820px circle at 88% 12%, #8b7cf62e, transparent 55%),
-        radial-gradient(780px circle at 80% 92%, #3b82f626, transparent 55%),
-        radial-gradient(680px circle at 8% 92%, #43a04726, transparent 60%),
-        radial-gradient(620px circle at 50% 55%, #06b6d41c, transparent 60%);
-    background-repeat: no-repeat;
-    background-attachment: fixed;
+    background: radial-gradient(circle at 22% 18%, var(--bg-raised), var(--bg) 62%);
     color: var(--text);
     font-family: var(--font-body);
     font-size: 15px;
@@ -138,63 +125,40 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* ===== Floating background orbs =====
-   The aurora wash above drifts too slowly/subtly to read as "animated" on its own - these are real elements
-   (aria-hidden, fixed, pointer-events:none, inserted once in _Layout.cshtml) that visibly drift and breathe
-   on their own slow loops, the way a lot of modern product marketing pages do it. Heavily blurred so they
-   read as soft glowing shapes behind the UI, not sharp circles competing with real content. */
-.bg-orbs {
+/* ===== Site-wide starfield =====
+   The same twinkling-star setup as the OrderOperator fullscreen stage's own .stage-stars (order-shuffle.js -
+   same 70-star count, same size/timing ranges) so the whole site now shares one consistent background
+   treatment instead of the fullscreen stage looking like a different product. Populated once by
+   interactive-bg.js. Reuses the star-twinkle keyframes (defined further down, CSS keyframes are global
+   regardless of where they're declared) so both places twinkle identically. --parallax-x/--parallax-y (also
+   interactive-bg.js) give the whole layer a small drift opposite the cursor - the one part of this
+   background that's genuinely interactive, not just animated on its own. */
+.bg-stars {
     position: fixed;
-    inset: 0;
+    inset: -3%;
     z-index: -1;
     overflow: hidden;
     pointer-events: none;
+    transform: translate(var(--parallax-x, 0px), var(--parallax-y, 0px));
 }
-
-.bg-orb {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(80px);
-    opacity: 0.3;
-}
-
-.bg-orb-1 { width: 420px; height: 420px; top: -8%; left: -6%; background: var(--accent); }
-.bg-orb-2 { width: 380px; height: 380px; top: 48%; right: -10%; background: #8b7cf6; }
-.bg-orb-3 { width: 360px; height: 360px; bottom: -14%; left: 22%; background: #3b82f6; }
-.bg-orb-4 { width: 300px; height: 300px; top: 6%; right: 22%; background: #43a047; }
-.bg-orb-5 { width: 320px; height: 320px; bottom: 6%; right: 38%; background: #06b6d4; }
 
 @media (prefers-reduced-motion: no-preference) {
-    .bg-orb-1 { animation: orb-drift-1 24s ease-in-out infinite; }
-    .bg-orb-2 { animation: orb-drift-2 29s ease-in-out infinite; }
-    .bg-orb-3 { animation: orb-drift-3 33s ease-in-out infinite; }
-    .bg-orb-4 { animation: orb-drift-4 21s ease-in-out infinite; }
-    .bg-orb-5 { animation: orb-drift-5 27s ease-in-out infinite; }
+    .bg-stars {
+        transition: transform 400ms ease-out;
+    }
 }
 
-@keyframes orb-drift-1 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(90px, 60px) scale(1.15); }
+.bg-star {
+    position: absolute;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.5;
 }
 
-@keyframes orb-drift-2 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(-70px, 50px) scale(0.9); }
-}
-
-@keyframes orb-drift-3 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(60px, -70px) scale(1.1); }
-}
-
-@keyframes orb-drift-4 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(-60px, -40px) scale(0.92); }
-}
-
-@keyframes orb-drift-5 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(40px, 40px) scale(1.08); }
+@media (prefers-reduced-motion: no-preference) {
+    .bg-star {
+        animation: star-twinkle 3.4s ease-in-out infinite;
+    }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -202,19 +166,9 @@ body {
         transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, transform 80ms ease;
     }
 
-    body {
-        animation: aurora-drift 32s ease-in-out infinite alternate;
-    }
-
     .card-link, .stat-card {
         transition: background-color 120ms ease, border-color 120ms ease, transform 160ms ease, box-shadow 160ms ease;
     }
-}
-
-@keyframes aurora-drift {
-    0% { background-position: 0 0, 12% 8%, 88% 12%, 80% 92%, 8% 92%, 50% 55%; }
-    50% { background-position: 0 0, 22% 16%, 78% 22%, 70% 80%, 18% 82%, 42% 46%; }
-    100% { background-position: 0 0, 6% 20%, 94% 4%, 88% 96%, 2% 98%, 58% 62%; }
 }
 
 a {
@@ -1580,10 +1534,17 @@ button,
     position: relative;
     isolation: isolate;
     background: radial-gradient(circle at 22% 18%, var(--stage-bg-2), var(--stage-bg-1) 62%);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: var(--space-6) 6vw;
+    /* Grid, not a centered flex column - display:none children (order-stage-header, notice-success, ...)
+       drop out of grid auto-placement entirely, so the remaining visible ones (stage-fs-header, then
+       stage-fs-heading, then #queueList, then .order-actions-row) land in these four rows in that exact
+       order with no explicit grid-row assignment needed. The 1fr row is what actually does "header/heading
+       pinned near the top, the list itself dominating the center, the action button tucked in a corner
+       at the bottom" - #queueList and .order-actions-row each just position themselves within their own row
+       below. */
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    row-gap: var(--space-4);
+    padding: var(--space-5) 6vw var(--space-6);
     overflow-y: auto;
 }
 
@@ -1720,7 +1681,10 @@ button,
 .order-stage:-webkit-full-screen .stage-fs-heading {
     display: block;
     text-align: center;
-    margin: var(--space-6) 0 var(--space-5);
+    /* Was margin: var(--space-6) 0 var(--space-5) - the grid's own row-gap (see .order-stage:fullscreen)
+       handles spacing now, so header+heading stay compact near the top instead of pushing themselves (and
+       therefore the list below) further down the screen than they need to. */
+    margin: 0;
     font-size: 22px;
     font-weight: 800;
     letter-spacing: 0.08em;
@@ -1755,20 +1719,25 @@ button,
 }
 
 /* A few (2-5) presenters just need a single centered column; 40-50 need several side by side or most of
-   them would be scrolled off screen. column-width lets the browser pick however many ~380px columns fit the
-   available width; --queue-fs-height (set by order-shuffle.js from the actual viewport, since CSS alone has
-   no "fit this many rows in the space I've got" query) plus column-fill:auto is what makes it actually wrap
-   into a new column once a column is full, instead of just growing one column tall enough to need scrolling.
-   width:fit-content + margin:auto is what keeps a short (single-column) list centered instead of pinned to
-   the left edge of the full-width block multi-column layout would otherwise produce. */
+   them would be scrolled off screen. column-count is set by order-shuffle.js (not a CSS column-width guess)
+   from the actual measured row height and viewport space, so however many participants there are, exactly
+   as many columns as needed are used to fit them all within one screen with no scrolling - CSS alone has no
+   "fit this many rows in the space I've got" query to do that. column-fill:auto plus that explicit
+   --queue-fs-height is what makes rows actually wrap into a new column once one is full, instead of just
+   growing one column tall enough to need scrolling. width:fit-content + margin:auto is what keeps a short
+   (single-column) list centered instead of pinned to the left edge of a full-width block. */
 .order-stage:fullscreen #queueList,
 .order-stage:-webkit-full-screen #queueList {
     display: block;
     width: fit-content;
     max-width: 100%;
+    /* Centers within the grid's own 1fr row (see .order-stage:fullscreen) both ways - horizontally via
+       margin auto, vertically via align-self so a short list sits in the middle of the available space
+       instead of pinned to its top. */
     margin: 0 auto !important;
-    column-width: 380px;
-    column-gap: var(--space-5);
+    align-self: center;
+    justify-self: center;
+    column-gap: var(--space-6);
     column-fill: auto;
     height: var(--queue-fs-height, auto);
 }
@@ -1777,8 +1746,8 @@ button,
    bordered list - closer to a real event's own presentation screen than reused admin-table styling. */
 .order-stage:fullscreen .queue-row,
 .order-stage:-webkit-full-screen .queue-row {
-    padding: 14px 18px;
-    margin: 0 0 var(--space-3);
+    padding: 20px 26px;
+    margin: 0 0 var(--space-4);
     background: #ffffff0d;
     border: 1px solid #ffffff14;
     border-bottom: 1px solid #ffffff14;
@@ -1789,9 +1758,9 @@ button,
 
 .order-stage:fullscreen .queue-index,
 .order-stage:-webkit-full-screen .queue-index {
-    font-size: 16px;
+    font-size: 20px;
     width: auto;
-    padding: 3px 9px;
+    padding: 4px 11px;
     border-radius: 6px;
     background: var(--stage-accent-dim);
     color: var(--stage-accent);
@@ -1800,7 +1769,7 @@ button,
 
 .order-stage:fullscreen .queue-name,
 .order-stage:-webkit-full-screen .queue-name {
-    font-size: 18px;
+    font-size: 25px;
     font-weight: 700;
     color: var(--text);
 }
@@ -1810,10 +1779,21 @@ button,
     color: var(--stage-accent);
 }
 
+/* Tucked into the bottom-right corner (the grid's own last "auto" row - see .order-stage:fullscreen) rather
+   than centered under the list, so it reads as a persistent action control instead of competing with the
+   presenter list for the audience's attention in the middle of the screen. #resetForm is already
+   display:none in fullscreen (see below), so this row only ever has the one Randomize form/button in it here. */
+.order-stage:fullscreen .order-actions-row,
+.order-stage:-webkit-full-screen .order-actions-row {
+    justify-self: end;
+    align-self: end;
+}
+
 .order-stage:fullscreen .btn-block,
 .order-stage:-webkit-full-screen .btn-block {
-    max-width: 420px;
-    margin: var(--space-5) auto 0;
+    width: auto;
+    max-width: 300px;
+    margin: 0;
 }
 
 /* "Jadvalni tozalash" is a rehearsal/setup tool for the operator working the outer (non-fullscreen) panel -

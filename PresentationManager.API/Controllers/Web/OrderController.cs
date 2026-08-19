@@ -41,7 +41,7 @@ public sealed class OrderController : Controller
         foreach (var project in projects)
         {
             var count = await _projectService.CountPresentationsAsync(project.Id, ct);
-            options.Add(new OrderProjectOption(project.Id, project.Name, count));
+            options.Add(new OrderProjectOption(project.Id, project.Name, count, project.OrderRandomizedAt is not null));
         }
 
         return View(new OrderDashboardViewModel(User.Identity?.Name ?? string.Empty, options));
@@ -71,6 +71,7 @@ public sealed class OrderController : Controller
     public async Task<IActionResult> Randomize(int projectId, CancellationToken ct)
     {
         await _queueService.RandomizeOrderAsync(projectId, ct);
+        await _projectService.SetOrderRandomizedAtAsync(projectId, DateTime.UtcNow, ct);
         await _orderHub.Clients.All.SendAsync("OrderRandomized", projectId, ct);
 
         // The stage view (order-shuffle.js) submits this via fetch instead of a normal form post, so its
@@ -95,6 +96,7 @@ public sealed class OrderController : Controller
     public async Task<IActionResult> Reset(int projectId, CancellationToken ct)
     {
         await _queueService.ResetOrderAsync(projectId, ct);
+        await _projectService.SetOrderRandomizedAtAsync(projectId, null, ct);
         await _orderHub.Clients.All.SendAsync("OrderRandomized", projectId, ct);
 
         if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")

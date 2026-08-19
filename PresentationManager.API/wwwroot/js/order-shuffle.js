@@ -77,13 +77,13 @@
         return;
     }
 
-    // A handful of presenters just need a single centered column; 40-50 need to be split across several so
-    // they don't get scrolled off a projector screen. CSS (column-width + column-fill:auto on #queueList,
-    // see site.css) does the actual column balancing - it just needs an explicit height to fill before
-    // wrapping into the next column, which is exactly what CSS alone can't compute from "however much
-    // vertical space happens to be left in the fullscreen viewport". This does that math and hands it over
-    // as --queue-fs-height. Re-run after every redraw and on resize/fullscreen-change, since the available
-    // space (and this page never navigates away to naturally recompute it) can change independently of that.
+    // A handful of presenters just need a single centered column; 40+ need to be split across several so
+    // everyone still fits on one screen with no scrolling. Rather than let CSS guess a column-width and
+    // hope the browser's own balancing works out, this measures the actual rendered row height and the
+    // actual available viewport space, then computes the exact column count needed to fit every row within
+    // that height - column-fill:auto (see site.css) then just lays rows into that many columns in order.
+    // Re-run after every redraw and on resize/fullscreen-change, since row count/available space can change
+    // independently of each other and this page never navigates away to naturally recompute it.
     function updateQueueFullscreenHeight() {
         if (!stage) {
             return;
@@ -91,13 +91,27 @@
         var isFullscreen = (document.fullscreenElement || document.webkitFullscreenElement) === stage;
         if (!isFullscreen) {
             stage.style.removeProperty("--queue-fs-height");
+            queueList.style.removeProperty("column-count");
             return;
         }
         requestAnimationFrame(function () {
             var top = queueList.getBoundingClientRect().top;
             var reserveBelow = 160; // action button row + its own spacing below the queue
-            var available = window.innerHeight - top - reserveBelow;
-            stage.style.setProperty("--queue-fs-height", Math.max(240, available) + "px");
+            var availableHeight = Math.max(240, window.innerHeight - top - reserveBelow);
+            stage.style.setProperty("--queue-fs-height", availableHeight + "px");
+
+            var rows = queueList.querySelectorAll(".queue-row");
+            if (rows.length === 0) {
+                queueList.style.removeProperty("column-count");
+                return;
+            }
+
+            var rowBox = rows[0].getBoundingClientRect();
+            var rowStyle = window.getComputedStyle(rows[0]);
+            var rowOuterHeight = rowBox.height + parseFloat(rowStyle.marginBottom || "0");
+            var rowsPerColumn = Math.max(1, Math.floor(availableHeight / Math.max(1, rowOuterHeight)));
+            var neededColumns = Math.max(1, Math.ceil(rows.length / rowsPerColumn));
+            queueList.style.setProperty("column-count", String(neededColumns));
         });
     }
 

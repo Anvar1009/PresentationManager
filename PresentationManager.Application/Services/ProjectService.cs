@@ -76,6 +76,20 @@ public sealed class ProjectService
         await _projectRepository.UpdateAsync(project, ct);
     }
 
+    /// <summary>Marks (or, passed null, clears) this project's "Tartiblangan" status - set to the current
+    /// time by OrderController.Randomize right after a real draw, and cleared back to null by
+    /// OrderController.Reset ("Jadvalni tozalash" undoes the draw, so the project reads as not-yet-ordered
+    /// again). See <see cref="Project.OrderRandomizedAt"/>.</summary>
+    public async Task SetOrderRandomizedAtAsync(int projectId, DateTime? randomizedAtUtc, CancellationToken ct = default)
+    {
+        var project = await _projectRepository.GetByIdAsync(projectId, ct)
+            ?? throw new InvalidOperationException("Loyiha topilmadi.");
+
+        project.OrderRandomizedAt = randomizedAtUtc;
+        project.UpdatedAt = DateTime.UtcNow;
+        await _projectRepository.UpdateAsync(project, ct);
+    }
+
     /// <summary>Returns how many presentations currently belong to <paramref name="projectId"/> — used by the
     /// UI to warn the operator before they confirm a delete that will take those presentations down with it.</summary>
     public async Task<int> CountPresentationsAsync(int projectId, CancellationToken ct = default) =>

@@ -88,10 +88,11 @@
                 </form>
             }
 
-            @* Rehearsal-reset for this stage - restores presenters to alphabetical order so any test draws
-               run while checking the fullscreen presentation don't carry over into the real one. Stays
-               outside .order-stage-header on purpose so it's still reachable while fullscreen (hidden there
-               separately via #resetForm, see site.css - this control is for the outer panel only). *@
+            @* Rehearsal-reset for this stage - restores presenters to alphabetical order (no day grouping) so
+               any test draws run while checking the fullscreen presentation don't carry over into the real
+               one. Stays outside .order-stage-header on purpose so it's still reachable while fullscreen
+               (hidden there separately via #resetForm, see site.css - this control is for the outer panel
+               only). *@
             <form asp-controller="Order" asp-action="Reset" method="post" id="resetForm">
                 <input type="hidden" name="projectId" value="@Model.ProjectId" />
                 <button type="submit" class="btn btn-outline btn-sm btn-block" id="resetBtn">
