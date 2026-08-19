@@ -17,6 +17,13 @@ public class Project
 
     public string? Location { get; set; }
 
+    /// <summary>Admin-set cutoff (server/UTC time) past which the Telegram bot no longer accepts a new
+    /// submission or a file/title update to an existing one for this project - null means no deadline, the
+    /// current unrestricted behavior. Deliberately does not gate Admin's own manual queue management (adding/
+    /// editing a presentation directly), only the presenter self-service bot flow - see
+    /// <c>PresentationBotHostedService.HandleDocumentAsync</c>.</summary>
+    public DateTime? SubmissionDeadline { get; set; }
+
     /// <summary>The Admin who created this project - null for projects created before this field existed, or
     /// created from the Operator's own "Loyihalar" dialog (<see cref="Enums.UserRole.Operator"/> accounts have
     /// no creator-scoped project list, unlike Admin's). Used to scope each Admin's "Loyihalar" dropdown to

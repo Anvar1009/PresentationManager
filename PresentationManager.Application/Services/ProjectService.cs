@@ -61,6 +61,20 @@ public sealed class ProjectService
         return await _projectRepository.AddAsync(project, ct);
     }
 
+    /// <summary>Admin-facing "Taqdimot topshirish muddati" control - the Telegram bot checks this before
+    /// accepting a new submission or a file/title update to an existing one (see
+    /// <c>PresentationBotHostedService.HandleDocumentAsync</c>). Pass null to clear a previously-set
+    /// deadline.</summary>
+    public async Task SetSubmissionDeadlineAsync(int projectId, DateTime? deadlineUtc, CancellationToken ct = default)
+    {
+        var project = await _projectRepository.GetByIdAsync(projectId, ct)
+            ?? throw new InvalidOperationException("Loyiha topilmadi.");
+
+        project.SubmissionDeadline = deadlineUtc;
+        project.UpdatedAt = DateTime.UtcNow;
+        await _projectRepository.UpdateAsync(project, ct);
+    }
+
     /// <summary>Returns how many presentations currently belong to <paramref name="projectId"/> — used by the
     /// UI to warn the operator before they confirm a delete that will take those presentations down with it.</summary>
     public async Task<int> CountPresentationsAsync(int projectId, CancellationToken ct = default) =>

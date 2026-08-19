@@ -31,4 +31,10 @@ public sealed class ChatSession
     public string FullName { get; set; } = string.Empty;
 
     public string Title { get; set; } = string.Empty;
+
+    /// <summary>Set (in <c>HandleProjectSelectionCallbackAsync</c>) when this presenter already has a
+    /// presentation in the chosen project - the upload that follows then goes through
+    /// <c>PresentationQueueService.UpdateAsync</c> against this Id instead of <c>AddAsync</c>, replacing the
+    /// existing title/file rather than creating a second, duplicate entry for the same project.</summary>
+    public int? ExistingPresentationId { get; set; }
 }

@@ -49,6 +49,13 @@ public sealed class HttpProjectRepository : IProjectRepository
         return wire.ToEntity();
     }
 
+    public async Task UpdateAsync(Project project, CancellationToken ct = default)
+    {
+        var response = await _http.PutAsJsonAsync(
+            $"api/projects/{project.Id}", UpdateProjectWireRequest.FromEntity(project), ApiJsonOptions.Default, ct);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task DeleteAsync(int id, CancellationToken ct = default)
     {
         var response = await _http.DeleteAsync($"api/projects/{id}", ct);

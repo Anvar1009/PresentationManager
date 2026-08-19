@@ -1,0 +1,595 @@
+using System.Diagnostics;
+using Microsoft.Extensions.Options;
+using PresentationManager.Application.Common;
+using PresentationManager.Application.Interfaces;
+using PresentationManager.Application.Services;
+using PresentationManager.Domain.Entities;
+using PresentationManager.TelegramBot;
+using PresentationManager.UI.Controls;
+using PresentationManager.UI.Theme;
+
+namespace PresentationManager.UI.Forms;
+
+/// <summary>Admin role's dashboard — distinct from the operator-facing <see cref="AdminForm"/> (that name
+/// predates the Admin/SuperAdmin roles and refers to the operator, not this role; kept as-is to avoid a
+/// large unrelated rename). An Admin creates projects, defines their judging criteria and judges, and
+/// reviews participants/presentations/final scores — everything here is scoped to whichever project is
+/// selected at the top. Its section nav (Qatnashchilar/Taqdimotlar/Yakuniy baholar) sits in a left-hand
+/// column, mirroring <see cref="SuperAdminPanelForm"/>'s layout, rather than tabs across the content area.</summary>
+public sealed class AdminPanelForm : Form
+{
+    private static readonly (string Icon, string Label)[] Sections =
+    [
+        ("👥", "Qatnashchilar"),
+        ("🎤", "Taqdimotlar"),
+        ("⭐", "Yakuniy baholar")
+    ];
+
+    private readonly ProjectService _projectService;
+    private readonly CriterionService _criterionService;
+    private readonly JudgeService _judgeService;
+    private readonly PresenterAssignmentService _presenterAssignmentService;
+    private readonly ScoreService _scoreService;
+    private readonly PresentationQueueService _queueService;
+    private readonly IPresenterRepository _presenterRepository;
+    private readonly AdminLinkService _adminLinkService;
+    private readonly IFileStorageService _fileStorageService;
+    private readonly UserService _userService;
+    private readonly PresentationBotOptions _botOptions;
+
+    private readonly ComboBox _projectCombo;
+    private readonly SectionNavListBox _sectionList;
+    private readonly Panel _participantsSection;
+    private readonly Panel _presentationsSection;
+    private readonly Panel _finalScoresSection;
+    private readonly DataGridView _participantsGrid;
+    private readonly DataGridView _presentationsGrid;
+    private readonly DataGridView _finalScoresGrid;
+    private readonly TextBox _participantsSearchBox;
+    private readonly TextBox _presentationsSearchBox;
+    private readonly TextBox _finalScoresSearchBox;
+    private List<Project> _projects = [];
+
+    /// <summary>Unfiltered participants for the selected project - <see cref="ApplyParticipantsFilter"/>'s
+    /// source, re-applied on every <see cref="_participantsSearchBox"/> keystroke without re-fetching.</summary>
+    private List<ProjectParticipant> _allParticipants = [];
+
+    /// <summary>Unfiltered presentations for the selected project - <see cref="ApplyPresentationsFilter"/>'s
+    /// source; <see cref="_currentPresentations"/> is what's actually bound to the grid right now (possibly
+    /// filtered), not this.</summary>
+    private List<Presentation> _allPresentations = [];
+
+    /// <summary>Mirrors <see cref="_presentationsGrid"/>'s bound rows in the same order, since the grid is
+    /// bound to an anonymous-object projection (display-only) that loses <see cref="Presentation.FilePath"/> -
+    /// this is what a selected row is resolved back to for <see cref="OnOpenPresentationFileClick"/>.</summary>
+    private List<Presentation> _currentPresentations = [];
+
+    private List<EvaluationCriterion> _finalScoreCriteria = [];
+
+    /// <summary>Unfiltered final-score rows for the selected project - <see cref="ApplyFinalScoresFilter"/>'s
+    /// source.</summary>
+    private List<PresentationScoreSummary> _finalScoreSummaries = [];
+
+    /// <summary>Set via <see cref="SetCurrentUser"/> right after this singleton form is resolved from DI in
+    /// Program.cs (it's constructed without any user context, since login happens after the DI container is
+    /// built) - scopes <see cref="LoadProjectsAsync"/> and <see cref="OnNewProjectClick"/> to this Admin's own
+    /// projects, per <see cref="Project.CreatedByUserId"/>.</summary>
+    private int? _currentUserId;
+
+    /// <summary>Same instance handed to <see cref="SetCurrentUser"/> - kept around (and mutated in place by
+    /// <see cref="UserMenuHelper"/> on a successful self-service login change) so <see cref="RefreshUserMenu"/>
+    /// can rebuild the popup without re-fetching from the API.</summary>
+    private User? _currentUser;
+
+    /// <summary>Profile-info/Chiqish popup shown by <see cref="_userMenuButton"/>, at the bottom of the left
+    /// nav column - populated once the logged-in user is known, see <see cref="SetCurrentUser"/>.</summary>
+    private readonly ContextMenuStrip _userMenu = new();
+    private readonly Button _userMenuButton;
+
+    private Project? SelectedProject => _projectCombo.SelectedItem as Project;
+
+    public AdminPanelForm(
+        ProjectService projectService,
+        CriterionService criterionService,
+        JudgeService judgeService,
+        PresenterAssignmentService presenterAssignmentService,
+        ScoreService scoreService,
+        PresentationQueueService queueService,
+        IPresenterRepository presenterRepository,
+        AdminLinkService adminLinkService,
+        IFileStorageService fileStorageService,
+        UserService userService,
+        IOptions<PresentationBotOptions> botOptions)
+    {
+        _projectService = projectService;
+        _criterionService = criterionService;
+        _judgeService = judgeService;
+        _presenterAssignmentService = presenterAssignmentService;
+        _scoreService = scoreService;
+        _queueService = queueService;
+        _presenterRepository = presenterRepository;
+        _adminLinkService = adminLinkService;
+        _fileStorageService = fileStorageService;
+        _userService = userService;
+        _botOptions = botOptions.Value;
+
+        Text = "Admin paneli";
+        BackColor = LightColors.Background;
+        ForeColor = LightColors.TextPrimary;
+        Font = new Font("Segoe UI", 10.5f);
+        StartPosition = FormStartPosition.CenterScreen;
+        MinimumSize = new Size(900, 600);
+        WindowState = FormWindowState.Maximized;
+
+        var topPanel = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(20, 12, 20, 12), BackColor = LightColors.Panel };
+        var topPanelRule = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = LightColors.Border };
+        var topLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 8, RowCount = 1 };
+        // Spacer first - absorbs the window's extra width so "Loyiha:"/combo and the action buttons end up
+        // pushed together against the right edge, contiguous, instead of the combo sitting off on the left
+        // with a gap before the buttons.
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
+        // Fixed, not Percent - a DropDownList combo stretched across most of a maximized window's width
+        // (the old Percent-100 sizing) reads as an oversized, empty-looking control. Wide enough for a long
+        // project name without needing the whole row.
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+
+        var projectLabel = new Label { Text = "Loyiha:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = LightColors.TextSecondary, Font = new Font("Segoe UI", 10.5f) };
+        _projectCombo = new ComboBox
+        {
+            Dock = DockStyle.Fill,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            DisplayMember = nameof(Project.Name),
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            Font = new Font("Segoe UI", 11.5f)
+        };
+        _projectCombo.SelectedIndexChanged += async (_, _) => await RefreshAllAsync();
+
+        var newProjectButton = new Button { Text = "+ Yangi loyiha", Dock = DockStyle.Fill, Margin = new Padding(8, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.Success, ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
+        newProjectButton.Click += OnNewProjectClick;
+
+        var criteriaButton = new Button { Text = "Baholash mezonlari", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.Accent, ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
+        criteriaButton.Click += OnCriteriaClick;
+
+        var judgesButton = new Button { Text = "Hakamlar", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(124, 58, 237), ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
+        judgesButton.Click += OnJudgesClick;
+
+        var participantsAssignButton = new Button { Text = "Ishtirokchilar", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 0), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(20, 141, 116), ForeColor = Color.White, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold) };
+        participantsAssignButton.Click += OnParticipantsAssignClick;
+
+        var linkBotButton = new Button { Text = "🤖 Botga ulash", Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), FlatStyle = FlatStyle.Flat, BackColor = LightColors.PanelAlt, ForeColor = LightColors.TextPrimary, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
+        linkBotButton.FlatAppearance.BorderColor = LightColors.Border;
+        linkBotButton.Click += OnLinkBotClick;
+
+        // Column 0 (Percent 100) is deliberately left empty - see the spacer comment above.
+        topLayout.Controls.Add(projectLabel, 1, 0);
+        topLayout.Controls.Add(_projectCombo, 2, 0);
+        topLayout.Controls.Add(newProjectButton, 3, 0);
+        topLayout.Controls.Add(criteriaButton, 4, 0);
+        topLayout.Controls.Add(judgesButton, 5, 0);
+        topLayout.Controls.Add(participantsAssignButton, 6, 0);
+        topLayout.Controls.Add(linkBotButton, 7, 0);
+        topPanel.Controls.Add(topLayout);
+
+        // ---------- Left nav ----------
+        _sectionList = new SectionNavListBox();
+        _sectionList.SetSections(Sections);
+        _sectionList.SelectedIndexChanged += (_, _) => UpdateSectionVisibility();
+
+        // Populated once the logged-in user is known - see SetCurrentUser. Sits below the section list
+        // (Qatnashchilar/Taqdimotlar/Yakuniy baholar), same placement as SuperAdminPanelForm's nav column.
+        _userMenuButton = new Button
+        {
+            Text = "👤",
+            Dock = DockStyle.Fill,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            AutoEllipsis = true
+        };
+        _userMenuButton.FlatAppearance.BorderColor = LightColors.Border;
+        // AboveRight, not the default below-the-control placement: this button sits at the bottom of a
+        // maximized window's left column, so a downward-opening popup would routinely be clipped by (or
+        // fall behind) the taskbar.
+        _userMenuButton.Click += (_, _) => _userMenu.Show(_userMenuButton, new Point(0, 0), ToolStripDropDownDirection.AboveRight);
+
+        var userMenuWrap = new Panel { Dock = DockStyle.Bottom, Height = 52, Padding = new Padding(0, 12, 0, 0) };
+        userMenuWrap.Controls.Add(_userMenuButton);
+
+        var navWrap = new Panel { Dock = DockStyle.Left, Width = 232, BackColor = LightColors.Panel, Padding = new Padding(10, 16, 10, 16) };
+        navWrap.Controls.Add(_sectionList);
+        navWrap.Controls.Add(userMenuWrap);
+
+        var navDivider = new Panel { Dock = DockStyle.Left, Width = 1, BackColor = LightColors.Border };
+
+        // ---------- Content: one panel per section, toggled by _sectionList's selection ----------
+        var contentPanel = new Panel { Dock = DockStyle.Fill, BackColor = LightColors.Background };
+
+        _participantsGrid = LightGrid();
+        _participantsSearchBox = SearchBox("Ism yoki telefon bo'yicha qidirish...");
+        _participantsSearchBox.Dock = DockStyle.Left;
+        _participantsSearchBox.Width = 320;
+        _participantsSearchBox.TextChanged += (_, _) => ApplyParticipantsFilter();
+        var participantsToolbar = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(12, 8, 12, 8) };
+        participantsToolbar.Controls.Add(_participantsSearchBox);
+        _participantsSection = new Panel { Dock = DockStyle.Fill, Visible = false };
+        _participantsSection.Controls.Add(_participantsGrid);
+        _participantsSection.Controls.Add(participantsToolbar);
+
+        _presentationsGrid = LightGrid();
+        _presentationsGrid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) OnOpenPresentationFileClick(null, EventArgs.Empty); };
+        var presentationsToolbar = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(12, 8, 12, 8) };
+        var openFileButton = new Button
+        {
+            Text = "📂 Faylni ochish", Dock = DockStyle.Left, Width = 190, FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.Accent, ForeColor = Color.White, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Cursor = Cursors.Hand
+        };
+        openFileButton.FlatAppearance.BorderSize = 0;
+        openFileButton.Click += OnOpenPresentationFileClick;
+        _presentationsSearchBox = SearchBox("Taqdimotchi yoki sarlavha bo'yicha qidirish...");
+        _presentationsSearchBox.TextChanged += (_, _) => ApplyPresentationsFilter();
+        var presentationsSearchWrap = new Panel { Dock = DockStyle.Left, Width = 320, Padding = new Padding(12, 0, 0, 0) };
+        presentationsSearchWrap.Controls.Add(_presentationsSearchBox);
+        presentationsToolbar.Controls.Add(presentationsSearchWrap);
+        presentationsToolbar.Controls.Add(openFileButton);
+        _presentationsSection = new Panel { Dock = DockStyle.Fill, Visible = false };
+        _presentationsSection.Controls.Add(_presentationsGrid);
+        _presentationsSection.Controls.Add(presentationsToolbar);
+
+        _finalScoresGrid = LightGrid();
+        var exportToolbar = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(12, 8, 12, 8) };
+        var exportButton = new Button
+        {
+            Text = "📊 Excel'ga eksport", Dock = DockStyle.Left, Width = 190, FlatStyle = FlatStyle.Flat,
+            BackColor = LightColors.Success, ForeColor = Color.White, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Cursor = Cursors.Hand
+        };
+        exportButton.FlatAppearance.BorderSize = 0;
+        exportButton.Click += OnExportFinalScoresClick;
+        _finalScoresSearchBox = SearchBox("Taqdimotchi yoki sarlavha bo'yicha qidirish...");
+        _finalScoresSearchBox.TextChanged += (_, _) => ApplyFinalScoresFilter();
+        var finalScoresSearchWrap = new Panel { Dock = DockStyle.Left, Width = 320, Padding = new Padding(12, 0, 0, 0) };
+        finalScoresSearchWrap.Controls.Add(_finalScoresSearchBox);
+        exportToolbar.Controls.Add(finalScoresSearchWrap);
+        exportToolbar.Controls.Add(exportButton);
+        _finalScoresSection = new Panel { Dock = DockStyle.Fill, Visible = false };
+        _finalScoresSection.Controls.Add(_finalScoresGrid);
+        _finalScoresSection.Controls.Add(exportToolbar);
+
+        contentPanel.Controls.Add(_finalScoresSection);
+        contentPanel.Controls.Add(_presentationsSection);
+        contentPanel.Controls.Add(_participantsSection);
+
+        Controls.Add(contentPanel);
+        Controls.Add(navDivider);
+        Controls.Add(navWrap);
+        Controls.Add(topPanelRule);
+        Controls.Add(topPanel);
+
+        Load += async (_, _) => await LoadProjectsAsync();
+        Load += (_, _) => _sectionList.SelectedIndex = 0;
+    }
+
+    private void UpdateSectionVisibility()
+    {
+        var label = _sectionList.SelectedSection?.Label;
+        _participantsSection.Visible = label == "Qatnashchilar";
+        _presentationsSection.Visible = label == "Taqdimotlar";
+        _finalScoresSection.Visible = label == "Yakuniy baholar";
+    }
+
+    /// <summary>Called once, from Program.cs, right after this form is resolved from DI and before it's run -
+    /// see <see cref="_currentUserId"/>.</summary>
+    public void SetCurrentUser(User user)
+    {
+        _currentUserId = user.Id;
+        _currentUser = user;
+        _userMenuButton.Text = $"👤 {user.Role}";
+        RefreshUserMenu();
+    }
+
+    /// <summary>Rebuilds the account popup from <see cref="_currentUser"/> - called once from
+    /// <see cref="SetCurrentUser"/> and again after a successful self-service login change (see
+    /// <see cref="UserMenuHelper"/>) so the bold "Username · Role" row reflects the new login.</summary>
+    private void RefreshUserMenu()
+    {
+        _userMenu.Items.Clear();
+        _userMenu.Items.AddRange(UserMenuHelper.BuildItems(_currentUser!, _userService, this, RefreshUserMenu));
+    }
+
+    private static TextBox SearchBox(string placeholder) => new()
+    {
+        Dock = DockStyle.Fill,
+        PlaceholderText = placeholder,
+        BackColor = LightColors.PanelAlt,
+        ForeColor = LightColors.TextPrimary,
+        BorderStyle = BorderStyle.FixedSingle,
+        Font = new Font("Segoe UI", 9.5f)
+    };
+
+    private static DataGridView LightGrid() => DataGridViewTheme.CreateReadOnlyGrid(
+        background: LightColors.Panel,
+        alternatingBackground: LightColors.PanelAlt,
+        headerBackground: LightColors.PanelAlt,
+        headerForeground: LightColors.TextSecondary,
+        textColor: LightColors.TextPrimary,
+        accent: LightColors.Accent,
+        selectionForeground: Color.White,
+        gridLines: LightColors.Border);
+
+    private async Task LoadProjectsAsync()
+    {
+        var selectedId = SelectedProject?.Id;
+        _projects = _currentUserId is int userId
+            ? await _projectService.GetByCreatorAsync(userId)
+            : await _projectService.GetAllAsync();
+
+        _projectCombo.DataSource = null;
+        _projectCombo.DataSource = _projects;
+
+        if (selectedId is int id)
+        {
+            var restored = _projects.FirstOrDefault(p => p.Id == id);
+            if (restored is not null)
+            {
+                _projectCombo.SelectedItem = restored;
+            }
+        }
+    }
+
+    private async Task RefreshAllAsync()
+    {
+        var project = SelectedProject;
+        if (project is null)
+        {
+            _participantsGrid.DataSource = null;
+            _presentationsGrid.DataSource = null;
+            _finalScoresGrid.Rows.Clear();
+            _finalScoresGrid.Columns.Clear();
+            return;
+        }
+
+        await RefreshParticipantsAsync(project.Id);
+        await RefreshPresentationsAsync(project.Id);
+        await RefreshFinalScoresAsync(project.Id);
+    }
+
+    private async Task RefreshParticipantsAsync(int projectId)
+    {
+        _allParticipants = await _projectService.GetParticipantsAsync(projectId);
+        ApplyParticipantsFilter();
+    }
+
+    private void ApplyParticipantsFilter()
+    {
+        var filter = _participantsSearchBox.Text.Trim();
+        var filtered = string.IsNullOrEmpty(filter)
+            ? _allParticipants
+            : _allParticipants.Where(p =>
+                    p.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || (p.PhoneNumber?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+
+        _participantsGrid.DataSource = filtered
+            .Select(p => new { Ism = p.FullName, Telefon = p.PhoneNumber ?? "-", Taqdimotlar = p.PresentationCount })
+            .ToList();
+    }
+
+    private async Task RefreshPresentationsAsync(int projectId)
+    {
+        _allPresentations = await _queueService.GetAllAsync(projectId);
+        ApplyPresentationsFilter();
+    }
+
+    private void ApplyPresentationsFilter()
+    {
+        var filter = _presentationsSearchBox.Text.Trim();
+        _currentPresentations = string.IsNullOrEmpty(filter)
+            ? _allPresentations
+            : _allPresentations.Where(p =>
+                    p.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || p.Title.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        _presentationsGrid.DataSource = _currentPresentations
+            .Select(p => new
+            {
+                Taqdimotchi = p.FullName,
+                Sarlavha = p.Title,
+                Holat = UzbekText.StatusLabel(p.Status),
+                QoshilganVaqt = p.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
+                Fayl = Path.GetFileName(p.FilePath)
+            })
+            .ToList();
+    }
+
+    /// <summary>Opens the selected presentation's uploaded file with the OS's default viewer - the same file
+    /// the presenter submitted via the Telegram bot, resolved from managed storage exactly as the operator's
+    /// live preview does (see <c>AdminForm.UpdatePreviewAsync</c>).</summary>
+    private async void OnOpenPresentationFileClick(object? sender, EventArgs e)
+    {
+        var rowIndex = _presentationsGrid.CurrentCell?.RowIndex ?? -1;
+        if (rowIndex < 0 || rowIndex >= _currentPresentations.Count)
+        {
+            MessageBox.Show(this, "Avval taqdimotni tanlang.", "Taqdimot tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var presentation = _currentPresentations[rowIndex];
+        var absolutePath = await _fileStorageService.GetAbsolutePathAsync(presentation.FilePath);
+        if (!File.Exists(absolutePath))
+        {
+            MessageBox.Show(this, "Fayl topilmadi.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(absolutePath) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Faylni ochishda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task RefreshFinalScoresAsync(int projectId)
+    {
+        _finalScoreCriteria = await _criterionService.GetByProjectIdAsync(projectId);
+        _finalScoreSummaries = await _scoreService.GetFinalScoresAsync(projectId);
+        ApplyFinalScoresFilter();
+    }
+
+    private void ApplyFinalScoresFilter()
+    {
+        var filter = _finalScoresSearchBox.Text.Trim();
+        var filtered = string.IsNullOrEmpty(filter)
+            ? _finalScoreSummaries
+            : _finalScoreSummaries.Where(s =>
+                    s.PresenterFullName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || s.Title.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        _finalScoresGrid.DataSource = null;
+        _finalScoresGrid.Columns.Clear();
+        _finalScoresGrid.Rows.Clear();
+
+        _finalScoresGrid.Columns.Add("Presenter", "Taqdimotchi");
+        _finalScoresGrid.Columns.Add("Title", "Sarlavha");
+        foreach (var criterion in _finalScoreCriteria)
+        {
+            _finalScoresGrid.Columns.Add($"c{criterion.Id}", $"{criterion.Name} (max {criterion.MaxScore})");
+        }
+        _finalScoresGrid.Columns.Add("Total", "Jami");
+
+        foreach (var summary in filtered)
+        {
+            var row = new List<object> { summary.PresenterFullName, summary.Title };
+            row.AddRange(_finalScoreCriteria.Select(c => summary.AverageByCriterionId.GetValueOrDefault(c.Id, 0).ToString("0.##")));
+            row.Add(summary.Total.ToString("0.##"));
+            _finalScoresGrid.Rows.Add(row.ToArray());
+        }
+    }
+
+    private async void OnNewProjectClick(object? sender, EventArgs e)
+    {
+        using var dialog = new ProjectEditForm();
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            var created = await _projectService.CreateAsync(
+                dialog.ProjectName, dialog.EventStartDate, dialog.EventEndDate, dialog.EventTime, dialog.Location,
+                _currentUserId);
+
+            // LoadProjectsAsync on its own restores whatever was selected *before* this call - with nothing
+            // selected yet (very first project) or a different one already active, the newly created project
+            // would land in the dropdown's list but never become the visible/selected text, reading as if it
+            // "didn't show up" even though it's right there once the dropdown is opened.
+            await LoadProjectsAsync();
+            _projectCombo.SelectedItem = _projects.FirstOrDefault(p => p.Id == created.Id);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Loyiha yaratishda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async void OnCriteriaClick(object? sender, EventArgs e)
+    {
+        var project = SelectedProject;
+        if (project is null)
+        {
+            MessageBox.Show(this, "Avval loyihani tanlang.", "Loyiha tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dialog = new CriteriaManagementForm(_criterionService, project.Id, project.Name);
+        dialog.ShowDialog(this);
+        await RefreshFinalScoresAsync(project.Id);
+    }
+
+    private async void OnJudgesClick(object? sender, EventArgs e)
+    {
+        var project = SelectedProject;
+        if (project is null)
+        {
+            MessageBox.Show(this, "Avval loyihani tanlang.", "Loyiha tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dialog = new JudgeManagementForm(_judgeService, _presenterRepository, project.Id, project.Name);
+        dialog.ShowDialog(this);
+    }
+
+    private async void OnParticipantsAssignClick(object? sender, EventArgs e)
+    {
+        var project = SelectedProject;
+        if (project is null)
+        {
+            MessageBox.Show(this, "Avval loyihani tanlang.", "Loyiha tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dialog = new PresenterAssignmentManagementForm(_presenterAssignmentService, _presenterRepository, project.Id, project.Name);
+        dialog.ShowDialog(this);
+        await RefreshParticipantsAsync(project.Id);
+    }
+
+    /// <summary>Generates a one-time, 15-minute deep-link code (<see cref="AdminLinkService"/>, via
+    /// <see cref="BotLinkHelper"/>) that links this Admin's desktop account to whichever Telegram chat opens
+    /// it - after that, the bot shows them the same projects/participants/presentations/final scores this
+    /// panel does, plus basic project/criteria/judge management, and it's also what lets "Parolni
+    /// unutdingizmi?" deliver reset codes to this account.</summary>
+    private async void OnLinkBotClick(object? sender, EventArgs e) =>
+        await BotLinkHelper.ShowLinkDialogAsync(this, _adminLinkService, _botOptions, _currentUserId);
+
+    private void OnExportFinalScoresClick(object? sender, EventArgs e)
+    {
+        var project = SelectedProject;
+        if (project is null)
+        {
+            MessageBox.Show(this, "Avval loyihani tanlang.", "Loyiha tanlanmagan", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (_finalScoresGrid.Rows.Count == 0)
+        {
+            MessageBox.Show(this, "Eksport qilish uchun ma'lumot yo'q.", "Bo'sh jadval", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var safeName = string.Join("_", project.Name.Split(Path.GetInvalidFileNameChars()));
+        using var dialog = new SaveFileDialog
+        {
+            Filter = "Excel fayli (*.xlsx)|*.xlsx",
+            FileName = $"{safeName} - Yakuniy baholar.xlsx"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            ExcelExportHelper.ExportGrid(_finalScoresGrid, dialog.FileName, "Yakuniy baholar");
+            MessageBox.Show(this, "Excel fayli muvaffaqiyatli saqlandi.", "Eksport", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Eksport qilishda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+}

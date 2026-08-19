@@ -34,6 +34,16 @@ public sealed class PresentationQueueService
             ? _presentationRepository.GetAllOrderedAsync(projectId, ct)
             : _presentationRepository.SearchByNameAsync(query, projectId, ct);
 
+    /// <summary>This presenter's existing submission to this project, if any - the Telegram bot's upload flow
+    /// checks this before accepting a new file, so a second submission to the same project updates that one
+    /// (<see cref="UpdateAsync"/>) instead of creating a duplicate queue entry (see
+    /// <c>PresentationBotHostedService.HandleProjectSelectionCallbackAsync</c>/<c>HandleDocumentAsync</c>).</summary>
+    public async Task<Presentation?> GetByPresenterAndProjectAsync(int projectId, int presenterId, CancellationToken ct = default)
+    {
+        var presentations = await _presentationRepository.GetAllOrderedAsync(projectId, ct);
+        return presentations.FirstOrDefault(p => p.PresenterId == presenterId);
+    }
+
     public async Task<Presentation> AddAsync(
         int projectId, string fullName, string title,
         string sourceFilePath, PresentationFileType fileType,

@@ -24,6 +24,7 @@ public sealed class PresentationForm : Form
 
     private readonly PresentationSessionController _session;
     private readonly PdfSlideDisplayService _pdfDisplayService;
+    private readonly LiveSlideShowDisplayService _liveSlideShowService;
     private readonly IFileStorageService _fileStorageService;
     private readonly ISettingsRepository _settingsRepository;
     private readonly IAlarmSoundService _alarmSoundService;
@@ -68,6 +69,12 @@ public sealed class PresentationForm : Form
     /// file instead of opening the new one.</summary>
     private int? _openPresentationId;
 
+    /// <summary>Whichever of <see cref="_pdfDisplayService"/>/<see cref="_liveSlideShowService"/> is actually
+    /// showing the currently-open presentation - set in <see cref="OpenCurrentSlideAsync"/> based on
+    /// <see cref="PresentationFileType"/>, then used by every later Show/Hide/Close call so those don't need
+    /// to re-derive which service is in play from the file type every time.</summary>
+    private ISlideDisplayService? _activeDisplayService;
+
     public PresentationForm(
         PresentationSessionController session,
         IFileStorageService fileStorageService,
@@ -102,6 +109,14 @@ public sealed class PresentationForm : Form
         {
             Font = new Font("Segoe UI", 32, FontStyle.Bold),
             ForeColor = AppColors.Success,
+            // Floats over whatever the live slide/video is showing underneath - bare colored digits with no
+            // backing (the old behavior) could disappear entirely against similarly-toned or busy slide
+            // content. A small, snug dark chip (sized to the digits via Padding, not a large bar) guarantees
+            // the countdown stays readable regardless of what's playing behind it - same reasoning as
+            // _miniTimerCaptionLabel's own pill just below.
+            PillColor = AppColors.Background,
+            PillBorderColor = AppColors.Border,
+            Padding = new Padding(16, 6, 16, 6),
             AutoSize = true,
             Text = "00:00",
             Visible = false
@@ -124,11 +139,14 @@ public sealed class PresentationForm : Form
 
         ContentHost = new Panel { Dock = DockStyle.Fill, BackColor = Color.Black, Visible = false };
 
-        // Owned directly rather than DI-injected: PdfSlideDisplayService needs ContentHost itself, and
-        // injecting it via the constructor would create a PresentationForm -> service -> PresentationForm
-        // cycle. Both .pptx and .pdf end up shown through this same embedded viewer — see
-        // PptxToPdfConverter for why .pptx never opens a separate PowerPoint window.
+        // Owned directly rather than DI-injected: both display services need ContentHost itself, and
+        // injecting them via the constructor would create a PresentationForm -> service -> PresentationForm
+        // cycle. .pdf (and, previously, .pptx too) is shown through the embedded WebView2 PDF viewer; .pptx
+        // now instead runs as a real, live PowerPoint slideshow embedded into the same panel — see
+        // LiveSlideShowDisplayService's own remarks for why (animations/embedded video+audio, and a physical
+        // clicker, need the real PowerPoint engine, not a flattened PDF export).
         _pdfDisplayService = new PdfSlideDisplayService(ContentHost);
+        _liveSlideShowService = new LiveSlideShowDisplayService(ContentHost);
 
         _blinkTimer = new System.Windows.Forms.Timer { Interval = 500 };
         _blinkTimer.Tick += (_, _) =>
@@ -247,7 +265,10 @@ public sealed class PresentationForm : Form
         // keys/PageUp/PageDown silently do nothing until the operator clicks the slide with the mouse.
         // Activate() first so the subsequent Focus() actually sticks.
         Activate();
-        await _pdfDisplayService.ShowAsync();
+        if (_activeDisplayService is not null)
+        {
+            await _activeDisplayService.ShowAsync();
+        }
     }
 
     /// <summary>Opens (or re-shows) the current presentation's slide on the projector screen without
@@ -263,9 +284,9 @@ public sealed class PresentationForm : Form
         try
         {
             ContentHost.Visible = true;
-            if (_slideOpen && _openPresentationId == _session.CurrentPresentation?.Id)
+            if (_slideOpen && _openPresentationId == _session.CurrentPresentation?.Id && _activeDisplayService is not null)
             {
-                await _pdfDisplayService.ShowAsync();
+                await _activeDisplayService.ShowAsync();
             }
             else
             {
@@ -468,9 +489,9 @@ public sealed class PresentationForm : Form
             {
                 case PresentationStatus.Running or PresentationStatus.Discussion or PresentationStatus.DiscussionReady
                     or PresentationStatus.ExtraDiscussionReady or PresentationStatus.ExtraDiscussion:
-                    if (_slideOpen && _openPresentationId == _session.CurrentPresentation?.Id)
+                    if (_slideOpen && _openPresentationId == _session.CurrentPresentation?.Id && _activeDisplayService is not null)
                     {
-                        await _pdfDisplayService.ShowAsync();
+                        await _activeDisplayService.ShowAsync();
                     }
                     else
                     {
@@ -506,15 +527,18 @@ public sealed class PresentationForm : Form
         }
 
         var absolutePath = await _fileStorageService.GetAbsolutePathAsync(current.FilePath);
-        if (current.FileType == PresentationFileType.Pptx)
-        {
-            // Converted (once, cached) to PDF and shown through the same embedded viewer as real PDFs —
-            // no separate PowerPoint window ever opens. See PptxToPdfConverter's doc comment for the trade-off.
-            absolutePath = await PptxToPdfConverter.EnsureConvertedToPdfAsync(absolutePath);
-        }
-
         var bounds = new ScreenBounds(Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height);
-        await _pdfDisplayService.OpenAsync(absolutePath, bounds);
+
+        // .pptx now runs as a real, live PowerPoint slideshow (animations/transitions and embedded
+        // video+audio all play, and a physical clicker just works) instead of the flattened-to-PDF path —
+        // see LiveSlideShowDisplayService's own remarks. .pdf never had any of that to begin with, so it
+        // keeps going through the same embedded WebView2 viewer as before.
+        ISlideDisplayService displayService = current.FileType == PresentationFileType.Pptx
+            ? _liveSlideShowService
+            : _pdfDisplayService;
+
+        await displayService.OpenAsync(absolutePath, bounds);
+        _activeDisplayService = displayService;
         _slideOpen = true;
         _openPresentationId = current.Id;
     }
@@ -526,7 +550,12 @@ public sealed class PresentationForm : Form
             return;
         }
 
-        await _pdfDisplayService.CloseAsync();
+        if (_activeDisplayService is not null)
+        {
+            await _activeDisplayService.CloseAsync();
+        }
+
+        _activeDisplayService = null;
         _slideOpen = false;
         _openPresentationId = null;
     }

@@ -14,5 +14,7 @@ public interface IProjectRepository
 
     Task<Project> AddAsync(Project project, CancellationToken ct = default);
 
+    Task UpdateAsync(Project project, CancellationToken ct = default);
+
     Task DeleteAsync(int id, CancellationToken ct = default);
 }

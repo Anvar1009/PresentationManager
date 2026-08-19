@@ -14,7 +14,8 @@ public sealed record AdminDashboardViewModel(string AdminFullName, IReadOnlyList
 /// <summary>Reuses <see cref="ProjectParticipant"/> as-is - it's already exactly this row's shape (the same
 /// type <see cref="ProjectService.GetParticipantsAsync"/> returns for the desktop Admin panel).</summary>
 public sealed record AdminParticipantsViewModel(
-    int ProjectId, string ProjectName, string? Query, IReadOnlyList<ProjectParticipant> Participants);
+    int ProjectId, string ProjectName, string? Query, IReadOnlyList<ProjectParticipant> Participants,
+    DateTime? SubmissionDeadline);
 
 public sealed record AdminPresentationRow(int PresentationId, string PresenterFullName, string Title, string StatusLabel, string CreatedAt);
 

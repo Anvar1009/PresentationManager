@@ -43,6 +43,13 @@ public class ProjectRepository : IProjectRepository
         return project;
     }
 
+    public async Task UpdateAsync(Project project, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        db.Projects.Update(project);
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task DeleteAsync(int id, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

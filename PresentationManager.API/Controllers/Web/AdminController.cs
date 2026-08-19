@@ -102,7 +102,32 @@ public sealed class AdminController : Controller
                 .ToList();
         }
 
-        return View(new AdminParticipantsViewModel(project.Id, project.Name, q, participants));
+        return View(new AdminParticipantsViewModel(project.Id, project.Name, q, participants, project.SubmissionDeadline));
+    }
+
+    /// <summary>Sets (or, when <paramref name="deadline"/> is left empty, clears) the cutoff past which the
+    /// Telegram bot stops accepting a new submission or a file/title update for this project - see
+    /// <see cref="ProjectService.SetSubmissionDeadlineAsync"/>. The &lt;input type="datetime-local"&gt; posts a
+    /// naive local wall-clock value with no timezone info; treated as this server's own local time and
+    /// converted to UTC before storage, matching how an operator physically at the venue would read "19-avgust
+    /// 23:59" on the wall clock.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetSubmissionDeadline(int projectId, DateTime? deadline, CancellationToken ct)
+    {
+        var project = await FindOwnedProjectAsync(projectId, ct);
+        if (project is null)
+        {
+            return NotFound();
+        }
+
+        var deadlineUtc = deadline is { } local ? DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime() : (DateTime?)null;
+        await _projectService.SetSubmissionDeadlineAsync(projectId, deadlineUtc, ct);
+
+        TempData["Success"] = deadlineUtc is null
+            ? "Taqdimot topshirish muddati bekor qilindi."
+            : "Taqdimot topshirish muddati saqlandi.";
+        return RedirectToAction(nameof(Participants), new { projectId });
     }
 
     public async Task<IActionResult> Presentations(int projectId, string? q, CancellationToken ct)

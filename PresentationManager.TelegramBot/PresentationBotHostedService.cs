@@ -435,12 +435,30 @@ public sealed class PresentationBotHostedService : BackgroundService
             return;
         }
 
+        if (project.SubmissionDeadline is { } deadline && DateTime.UtcNow > deadline)
+        {
+            await botClient.AnswerCallbackQuery(callbackQuery.Id, "Taqdimot topshirish muddati tugagan.", cancellationToken: ct);
+            await botClient.SendMessage(chatId.Value,
+                $"⏰ \"{project.Name}\" loyihasi uchun taqdimot topshirish/yangilash muddati tugagan ({deadline.ToLocalTime():dd.MM.yyyy HH:mm}).",
+                cancellationToken: ct);
+            return;
+        }
+
+        // Already has a submission here? The upload that follows updates it (see HandleDocumentAsync)
+        // instead of creating a second, duplicate queue entry for the same presenter+project.
+        var existing = await _queueService.GetByPresenterAndProjectAsync(project.Id, presenterId, ct);
+
         session.Step = SessionStep.AwaitingTitle;
         session.ProjectId = project.Id;
         session.ProjectName = project.Name;
+        session.ExistingPresentationId = existing?.Id;
 
         await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
-        await botClient.SendMessage(chatId.Value, $"Loyiha: {project.Name}\nTaqdimot sarlavhasini kiriting:", cancellationToken: ct);
+        var prompt = existing is not null
+            ? $"Loyiha: {project.Name}\nSiz bu loyihaga allaqachon taqdimot yuborgansiz: \"{existing.Title}\".\n" +
+              "Yangi sarlavha kiriting (yuboradigan fayl avvalgisining o'rnini bosadi):"
+            : $"Loyiha: {project.Name}\nTaqdimot sarlavhasini kiriting:";
+        await botClient.SendMessage(chatId.Value, prompt, cancellationToken: ct);
     }
 
     private async Task HandleDocumentAsync(ITelegramBotClient botClient, long chatId, ChatSession session, Document document, CancellationToken ct)
@@ -457,35 +475,59 @@ public sealed class PresentationBotHostedService : BackgroundService
 
         try
         {
+            // Re-checked here too (not just when the project was picked, in HandleProjectSelectionCallbackAsync)
+            // - the presenter could easily spend longer than that typing the title/finding the file on their
+            // phone than the gap between a deadline and "now", so the check right before it actually lands is
+            // the one that matters. The reminder text below reuses this same lookup rather than fetching twice.
+            var projects = await _projectService.GetAllAsync(ct);
+            var project = projects.FirstOrDefault(p => p.Id == session.ProjectId);
+            if (project?.SubmissionDeadline is { } deadline && DateTime.UtcNow > deadline)
+            {
+                await botClient.SendMessage(chatId,
+                    $"⏰ Taqdimot topshirish/yangilash muddati tugagan ({deadline.ToLocalTime():dd.MM.yyyy HH:mm}). Fayl qabul qilinmadi.",
+                    replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
+                return;
+            }
+
             await using (var fileStream = File.Create(tempFilePath))
             {
                 await botClient.GetInfoAndDownloadFile(document.FileId, fileStream, ct);
             }
 
             var settings = await _settingsRepository.GetAsync(ct);
-            await _queueService.AddAsync(
-                session.ProjectId, session.FullName, session.Title,
-                tempFilePath, fileType,
-                settings.DefaultPresentationTimeSeconds, settings.DefaultDiscussionTimeSeconds,
-                extraDiscussionTimeSeconds: 0,
-                presenterId: session.PresenterId, ct: ct);
+            var isUpdate = session.ExistingPresentationId is not null;
+            if (isUpdate)
+            {
+                // Replaces the existing entry's title/file in place - same queue position, no duplicate row.
+                await _queueService.UpdateAsync(
+                    session.ExistingPresentationId!.Value, session.FullName, session.Title,
+                    settings.DefaultPresentationTimeSeconds, settings.DefaultDiscussionTimeSeconds, extraDiscussionTimeSeconds: 0,
+                    tempFilePath, fileType, ct: ct);
+            }
+            else
+            {
+                await _queueService.AddAsync(
+                    session.ProjectId, session.FullName, session.Title,
+                    tempFilePath, fileType,
+                    settings.DefaultPresentationTimeSeconds, settings.DefaultDiscussionTimeSeconds,
+                    extraDiscussionTimeSeconds: 0,
+                    presenterId: session.PresenterId, ct: ct);
+            }
 
             // Explicitly restates what was actually captured (project/title/file type) rather than just a
             // generic "qabul qilindi" - so the presenter can immediately catch a wrong title or a misread
             // file type instead of only finding out when Admin reviews the queue.
             var fileTypeLabel = fileType == PresentationFileType.Pdf ? "PDF" : "PowerPoint";
             var confirmation =
-                "✅ Taqdimotingiz qabul qilindi!\n\n" +
+                (isUpdate ? "✅ Taqdimotingiz yangilandi!\n\n" : "✅ Taqdimotingiz qabul qilindi!\n\n") +
                 $"🏛 Loyiha: {session.ProjectName}\n" +
                 $"📌 Nomi: {session.Title}\n" +
                 $"📄 Fayl turi: {fileTypeLabel}\n\n" +
                 "Yana yuborish uchun pastdagi \"📤 Taqdimot jo'natish\" tugmasini bosing.";
 
-            // The reminder is best-effort - the project could in principle have been deleted in the moment
-            // between picking it and finishing the upload; the upload itself already succeeded above
-            // regardless, so a missing project here just means no reminder gets appended, not a failure.
-            var projects = await _projectService.GetAllAsync(ct);
-            var project = projects.FirstOrDefault(p => p.Id == session.ProjectId);
+            // Best-effort - the project could in principle have been deleted in the moment between picking it
+            // and finishing the upload; the upload itself already succeeded above regardless, so a missing
+            // project here just means no reminder gets appended, not a failure.
             if (project is not null)
             {
                 confirmation += $"\n\n{EventReminderFormatter.Format(project)}";
