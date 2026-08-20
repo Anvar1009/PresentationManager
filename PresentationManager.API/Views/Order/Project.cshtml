@@ -28,12 +28,26 @@
                 <span class="stage-fs-subtitle">Taqdimotlar tizimi</span>
             </span>
         </div>
-        <div class="stage-fs-badge">
-            <span class="stage-fs-badge-dot"></span>
-            <span>
-                <span class="stage-fs-badge-title">Jonli tartib</span>
-                <span class="stage-fs-badge-meta">@Model.PresenterNames.Count ta ishtirokchi</span>
-            </span>
+        <div class="stage-fs-actions">
+            <div class="stage-fs-badge">
+                <span class="stage-fs-badge-dot"></span>
+                <span>
+                    <span class="stage-fs-badge-title">Jonli tartib</span>
+                    <span class="stage-fs-badge-meta">@Model.PresenterNames.Count ta ishtirokchi</span>
+                </span>
+            </div>
+
+            @* A real, visible click target for entering fullscreen here, rather than relying only on an
+               anywhere-in-the-page click to retry it (see tryEnterFullscreen in order-shuffle.js, which
+               wires this one up too) - the automatic attempt on load still runs first and often succeeds
+               outright, but when a browser blocks that, this is the obvious, discoverable way to finish the
+               job instead of the operator having to guess that any old click will do it. order-shuffle.js
+               hides it once actually in fullscreen and brings it back on exiting (fullscreenchange), so it
+               never sits there uselessly. *@
+            <button type="button" class="btn btn-sm btn-outline stage-fs-fullscreen-btn" id="stageFullscreenBtn">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
+                To'liq ekran
+            </button>
         </div>
     </div>
 

@@ -17,7 +17,10 @@ else
     <div class="card-grid">
         @foreach (var project in Model.Projects)
         {
-            <a class="card card-link" asp-controller="Order" asp-action="Project" asp-route-projectId="@project.ProjectId">
+            @* target=_blank + present=1 opens straight into the presenting tab's fullscreen-ready layout
+               (see order-shuffle.js's isPresentingWindow) in one click - the operator no longer needs to
+               land on this same tab's outer panel first and then press a separate "To'liq ekran" button. *@
+            <a class="card card-link" asp-controller="Order" asp-action="Project" asp-route-projectId="@project.ProjectId" asp-route-present="1" target="_blank" rel="noopener">
                 <span class="card-title">@project.ProjectName</span>
                 @if (project.PresentationCount == 0)
                 {

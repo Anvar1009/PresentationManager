@@ -1551,6 +1551,36 @@ button,
     row-gap: var(--space-4);
     padding: var(--space-5) 6vw var(--space-6);
     overflow-y: auto;
+    /* The native Fullscreen API this used to run under filled the whole screen automatically, as a browser-
+       level behavior; now that presenting is just this popup window's own normal page instead, nothing does
+       that for free - min-height (not height - .app-shell/.main/.container's own heights are otherwise
+       intrinsic/content-sized, and a hard height could clip a very tall draw instead of letting this
+       element's own overflow-y:auto handle it) is what makes it fill the popup exactly like fullscreen did.
+       Sidebar/container chrome around this is separately hidden/unset via body.is-presenting below - both
+       need to agree for the popup to show only this stage, edge to edge. */
+    min-height: 100vh;
+}
+
+/* order-shuffle.js adds .is-presenting to <body> itself (not just #orderStage) from the same ?present=1
+   flag, since the surrounding app chrome - sidebar, the .container's own centered/padded width - lives
+   outside #orderStage and no amount of styling inside that element could reach out and hide it. This is
+   what actually makes the presenting popup window show nothing but the stage, edge to edge, the same as the
+   old native Fullscreen API used to - without it the popup would open showing this same page's ordinary
+   sidebar+padded-column layout with the stage merely sitting inside it, not replacing it. */
+body.is-presenting .sidebar {
+    display: none;
+}
+
+body.is-presenting .container {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+}
+
+body.is-presenting .bg-stars {
+    /* #orderStage draws its own starfield (#stageStars) once presenting - this body-level one would just be
+       a second, misaligned copy showing through behind it. */
+    display: none;
 }
 
 /* Twinkling starfield backdrop - a fixed set of elements (populated once by order-shuffle.js, positions
@@ -1635,6 +1665,13 @@ button,
     margin-top: 2px;
 }
 
+.stage-fs-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
 .stage-fs-badge {
     display: flex;
     align-items: center;
@@ -1644,6 +1681,11 @@ button,
     background: #ffffff0d;
     border: 1px solid #ffffff1a;
     border-left: 3px solid var(--stage-accent);
+}
+
+.stage-fs-fullscreen-btn {
+    flex: none;
+    white-space: nowrap;
 }
 
 .stage-fs-badge-dot {
@@ -1735,8 +1777,15 @@ button,
     grid-template-columns: repeat(var(--queue-cols, 1), 1fr);
     grid-template-rows: repeat(var(--queue-rows, 1), 1fr);
     gap: var(--space-3) var(--space-6);
+    /* order-shuffle.js always sets an explicit pixel width/height (never wider/taller than what's actually
+       available) via inline style - 100%/auto here are just the fallback before that first runs. Centered
+       horizontally (margin-left/right, not the margin shorthand - see .is-presenting below) so a handful of
+       presenters read as one narrow column in the middle of the screen instead of stretched edge to edge;
+       30+ naturally widen toward the full available width as more columns are needed. */
     width: 100%;
     max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
     height: var(--queue-fs-height, auto);
     overflow: hidden;
 }
@@ -1744,9 +1793,12 @@ button,
 /* The presenting stage's own row-gap (see .order-stage.is-presenting) already spaces the heading/list/
    actions apart - the inline margin-top the outer panel gives this same card (for its own spacing under the
    "Joriy tartib..." paragraph) would just add an unwanted extra gap on top of that there, so only cancel it
-   in presenting mode; the outer panel keeps its own spacing untouched. */
+   in presenting mode (margin-top specifically - not the margin shorthand, which would also wipe out the
+   horizontal auto-centering margins above); the outer panel keeps its own spacing untouched. align-self
+   centers this vertically within the stage's own 1fr row too, same reasoning as the horizontal centering -
+   a short list (few presenters) no longer needs to stretch to fill that whole row's height either. */
 .order-stage.is-presenting #queueList {
-    margin: 0 !important;
+    margin-top: 0 !important;
     align-self: center;
 }
 
@@ -1880,9 +1932,11 @@ button,
 }
 
 /* Tucked into the bottom-right corner (the grid's own last "auto" row - see .order-stage.is-presenting)
-   rather than centered under the list, so it reads as a persistent action control instead of competing with the
-   presenter list for the audience's attention in the middle of the screen. #resetForm is hidden below, so
-   this row only ever has the one Randomize form/button in it here. */
+   rather than centered under the list, so it reads as a persistent action control instead of competing with
+   the presenter list for the audience's attention in the middle of the screen. Randomize and Reset sit side
+   by side here, same as the outer panel (.order-actions-row is already a flex row - see its own base rule) -
+   the operator now lands straight in this presenting tab from the project list (see Dashboard.cshtml), so
+   Reset needs to be reachable here too, not just from a separate outer-panel tab. */
 .order-stage.is-presenting .order-actions-row {
     justify-self: end;
     align-self: end;
@@ -1892,14 +1946,6 @@ button,
     width: auto;
     max-width: 300px;
     margin: 0;
-}
-
-/* "Ro'yxatni tozalash" is a rehearsal/setup tool for the operator working the outer panel, and now also the
-   only way to unlock Randomize again once it's locked itself after a draw (see order-shuffle.js) - not
-   something the audience watching the presenting window's draw should see or be able to trigger. An
-   operator who needs it mid-presentation switches back to the outer panel's own tab/window to reach it. */
-.order-stage.is-presenting #resetForm {
-    display: none;
 }
 
 /* Randomize locks itself (disabled + dimmed) after a completed draw - see order-shuffle.js - so it can't

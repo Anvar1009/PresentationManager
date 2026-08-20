@@ -23,8 +23,53 @@
     // fullscreenBtn click below) says as plainly as anything - checked and applied before anything else
     // runs so the very first paint already has the right layout, not a flash of the outer chrome first.
     var isPresentingWindow = new URLSearchParams(window.location.search).get("present") === "1";
-    if (stage && isPresentingWindow) {
-        stage.classList.add("is-presenting");
+    if (isPresentingWindow) {
+        // On <body> too, not just #orderStage - the sidebar and the .container's own centered/padded width
+        // live outside #orderStage, in _Layout.cshtml, so hiding/unsetting those (see body.is-presenting in
+        // site.css) needs a hook reachable from there. This is what makes the popup show nothing but the
+        // stage, edge to edge, same as the old native Fullscreen API used to - not this same page's ordinary
+        // sidebar+padded layout with the stage merely sitting inside it.
+        document.body.classList.add("is-presenting");
+        if (stage) {
+            stage.classList.add("is-presenting");
+
+            // .is-presenting styling alone only makes this tab's own content look right - the browser's own
+            // address bar/tabs are still there unless this tab is *actually* put into the native Fullscreen
+            // API, same as the old in-place toggle used to do (just on this tab's own stage now). Opening
+            // via a real clicked link (see fsBtn/Dashboard.cshtml) carries a "this came from a genuine user
+            // gesture" status into the new tab far more reliably than window.open() ever did, so this often
+            // succeeds immediately with no further interaction - but no browser guarantees that outright, so
+            // #stageFullscreenBtn (shown only while not yet actually fullscreen) is a real, visible click
+            // target to finish the job instead of leaving the operator to guess that some click will do it.
+            var requestFullscreen = stage.requestFullscreen || stage.webkitRequestFullscreen;
+            var isActuallyFullscreen = function () {
+                return !!(document.fullscreenElement || document.webkitFullscreenElement);
+            };
+            var tryEnterFullscreen = function () {
+                if (!requestFullscreen || isActuallyFullscreen()) {
+                    return;
+                }
+                var result = requestFullscreen.call(stage);
+                if (result && result.catch) {
+                    result.catch(function () {});
+                }
+            };
+
+            var stageFsBtn = document.getElementById("stageFullscreenBtn");
+            var updateStageFsBtn = function () {
+                if (stageFsBtn) {
+                    stageFsBtn.style.display = isActuallyFullscreen() ? "none" : "";
+                }
+            };
+            if (stageFsBtn) {
+                stageFsBtn.addEventListener("click", tryEnterFullscreen);
+            }
+            document.addEventListener("fullscreenchange", updateStageFsBtn);
+            document.addEventListener("webkitfullscreenchange", updateStageFsBtn);
+
+            tryEnterFullscreen();
+            updateStageFsBtn();
+        }
     }
 
     var fsBtn = document.getElementById("fullscreenBtn");
@@ -32,7 +77,20 @@
         fsBtn.addEventListener("click", function () {
             var url = new URL(window.location.href);
             url.searchParams.set("present", "1");
-            window.open(url.toString(), "_blank", "noopener");
+
+            // A synthetic click on a real <a target="_blank"> - not window.open() - since browsers carry a
+            // clicked link's own "this came from a real user gesture" status into the tab it opens far more
+            // reliably than a script-driven window.open() ever does, which is what the new tab's own
+            // requestFullscreen() attempt on load (see isPresentingWindow below) actually depends on to
+            // succeed immediately instead of needing a click inside that tab first. Same approach
+            // Dashboard.cshtml's own project links use for exactly this reason.
+            var link = document.createElement("a");
+            link.href = url.toString();
+            link.target = "_blank";
+            link.rel = "noopener";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         });
     }
 
@@ -80,22 +138,45 @@
         return;
     }
 
-    // A plain top-to-bottom list of names, split into however many side-by-side columns of ~8-10 rows it
-    // takes so everyone fits within one screen's height, instead of one long list needing vertical scroll -
-    // this now runs the same way whether this page is the outer operator panel or a presenting window (see
-    // .is-presenting above), so both read as the same list; only the surrounding chrome differs between
-    // them. Column count is driven primarily by height (how many rows of comfortable, fixed-size text
-    // actually fit top to bottom), the same way a printed program's presenter list would wrap into a second
-    // column rather than by trying to force a square/grid-of-cards shape - width only ever caps that column
-    // count (and shrinks text) if the screen is too narrow for that many columns at a readable size. Re-run
-    // after every redraw and on resize, since row count/available space can change independently of each
-    // other and this page never navigates away to naturally recompute it.
+    // A plain top-to-bottom list of names, split into columns of QUEUE_TARGET_ROWS_PER_COLUMN each (e.g. 40
+    // -> 4 columns of 10, 27 -> 3 columns of 9, 36 -> 4 columns of 9 - always evenly split, never a
+    // shorter/longer column left over) so everyone fits within one screen's height with no scrolling - the
+    // same rule in both the presenting tab and the outer operator panel (only the surrounding chrome differs
+    // between them), so both read as the same list and both stay on one page. Deliberately a fixed target,
+    // not derived from the current window's actual height: a presenting tab's real viewport height changes
+    // the moment it actually enters fullscreen (see tryEnterFullscreen above), and computing column count
+    // from whatever height happened to be true at that exact instant used to make the layout visibly jump
+    // between "tab freshly opened" and "now truly fullscreen" - a fixed target keeps both looking identical.
+    // Available height still matters as a pure safety net: if it can't actually fit that many rows at the
+    // base font size (a short window, or many more presenters than usual), text shrinks just enough that it
+    // still does, and width still caps the column count on a too-narrow screen. reserveBelow is measured
+    // directly off whatever actually follows the list (the action buttons, plus - outer panel only - the
+    // hint text under them) rather than a guessed constant, since that guess is what used to clip the last
+    // row whenever the real footer came out taller than expected. Re-run after every redraw and on resize,
+    // since row count/available space can change independently of each other and this page never navigates
+    // away to naturally recompute it.
     var QUEUE_BASE_NAME_FONT = 22; // px - matches the CSS fallback and .queue-row's own padding below
     var QUEUE_BASE_INDEX_FONT = 18; // px
     var QUEUE_ROW_PADDING_Y = 28; // px - .queue-row's top+bottom padding (14px each) in site.css
     var QUEUE_ROW_GAP = 12; // px - --space-3, the grid's row-gap
     var QUEUE_COLUMN_GAP = 32; // px - --space-6, the grid's column-gap
     var QUEUE_MIN_COLUMN_WIDTH = 220; // px - below this, a full-length name has no reasonable room even wrapped
+    var QUEUE_IDEAL_COLUMN_WIDTH = 340; // px - how wide a column gets when it isn't forced narrower by width
+    var QUEUE_TARGET_ROWS_PER_COLUMN = 10; // fewer than this many presenters -> a single column
+
+    // Sums the rendered height of whatever comes after the list itself (the action buttons row, and - only
+    // in the outer panel, where they're not display:none - the hint/meta line under it) plus a little
+    // breathing room, instead of guessing a fixed pixel figure that has no way to know how tall that footer
+    // actually turned out in either context.
+    function measureReserveBelow() {
+        var reserve = 24;
+        var sibling = queueList.nextElementSibling;
+        while (sibling) {
+            reserve += sibling.offsetHeight;
+            sibling = sibling.nextElementSibling;
+        }
+        return reserve;
+    }
 
     function updateQueueFullscreenLayout() {
         if (!stage) {
@@ -103,44 +184,49 @@
         }
         requestAnimationFrame(function () {
             var count = queueList.querySelectorAll(".queue-row").length;
-
-            var top = queueList.getBoundingClientRect().top;
-            // Tuned for the presenting window's own action-row-only footer; the outer panel has a little
-            // more below the list (both actions plus the field-hint/meta line under them), so this reserves
-            // more room than strictly needed there - a minor, acceptable trade for one shared calculation
-            // instead of two separately-tuned constants.
-            var reserveBelow = 160;
-            var availableHeight = Math.max(240, window.innerHeight - top - reserveBelow);
-            // queueList itself is always the grid's full width (width:100% in site.css, independent of
-            // grid-template-columns) - safe to measure straight off it with no chicken-and-egg risk.
-            var availableWidth = Math.max(320, queueList.clientWidth || stage.clientWidth);
-            stage.style.setProperty("--queue-fs-height", availableHeight + "px");
-
             if (count === 0) {
+                stage.style.removeProperty("--queue-fs-height");
+                queueList.style.removeProperty("width");
                 queueList.style.removeProperty("--queue-cols");
                 queueList.style.removeProperty("--queue-rows");
                 return;
             }
 
+            // queueList's own width is only ever explicitly set below (never wider than this) - safe to
+            // measure its clientWidth straight off it with no chicken-and-egg risk, since a narrower value
+            // set on a previous run only ever shrinks it, never invalidates this measurement of the space
+            // actually available to grow back into.
+            var availableWidth = Math.max(320, queueList.clientWidth || stage.clientWidth);
+            var maxColumnsByWidth = Math.max(1, Math.floor((availableWidth + QUEUE_COLUMN_GAP) / (QUEUE_MIN_COLUMN_WIDTH + QUEUE_COLUMN_GAP)));
+
+            var top = queueList.getBoundingClientRect().top;
+            var availableHeight = Math.max(240, window.innerHeight - top - measureReserveBelow());
+
             var nameFont = QUEUE_BASE_NAME_FONT;
             var indexFont = QUEUE_BASE_INDEX_FONT;
             var rowHeight = QUEUE_ROW_PADDING_Y + nameFont * 1.25; // single reading line at the base size
 
-            var rowsPerColumn = Math.max(1, Math.floor((availableHeight + QUEUE_ROW_GAP) / (rowHeight + QUEUE_ROW_GAP)));
-            var columns = Math.max(1, Math.ceil(count / rowsPerColumn));
+            // Fixed target, not derived from availableHeight - see the comment above this function for why.
+            var idealColumns = Math.max(1, Math.ceil(count / QUEUE_TARGET_ROWS_PER_COLUMN));
+            var columns = Math.min(idealColumns, maxColumnsByWidth);
+            var rowsPerColumn = Math.ceil(count / columns); // evenly split across whatever columns this leaves
 
-            var maxColumnsByWidth = Math.max(1, Math.floor((availableWidth + QUEUE_COLUMN_GAP) / (QUEUE_MIN_COLUMN_WIDTH + QUEUE_COLUMN_GAP)));
-            if (columns > maxColumnsByWidth) {
-                // The screen isn't wide enough for that many readable columns - pack more rows into fewer,
-                // wider columns instead, then shrink text just enough that they still all fit the height.
-                columns = maxColumnsByWidth;
-                rowsPerColumn = Math.ceil(count / columns);
-                var neededHeight = rowsPerColumn * rowHeight + (rowsPerColumn - 1) * QUEUE_ROW_GAP;
-                var shrink = Math.min(1, availableHeight / Math.max(1, neededHeight));
+            var neededHeight = rowsPerColumn * rowHeight + (rowsPerColumn - 1) * QUEUE_ROW_GAP;
+            if (neededHeight > availableHeight) {
+                // rowsPerColumn rows at the base font size doesn't actually fit this window's height (either
+                // a too-narrow screen capped columns below the ideal target, or the window itself is just
+                // short) - shrink text just enough that they still all fit.
+                var shrink = availableHeight / neededHeight;
                 nameFont = Math.max(11, nameFont * shrink);
                 indexFont = Math.max(9, indexFont * shrink);
+                rowHeight = QUEUE_ROW_PADDING_Y + nameFont * 1.25;
+                neededHeight = rowsPerColumn * rowHeight + (rowsPerColumn - 1) * QUEUE_ROW_GAP;
             }
 
+            var neededWidth = columns * QUEUE_IDEAL_COLUMN_WIDTH + (columns - 1) * QUEUE_COLUMN_GAP;
+
+            stage.style.setProperty("--queue-fs-height", Math.min(neededHeight, availableHeight) + "px");
+            queueList.style.width = Math.min(neededWidth, availableWidth) + "px";
             queueList.style.setProperty("--queue-cols", String(columns));
             queueList.style.setProperty("--queue-rows", String(rowsPerColumn));
             queueList.style.setProperty("--queue-name-font", nameFont.toFixed(1) + "px");
@@ -149,6 +235,11 @@
     }
 
     window.addEventListener("resize", updateQueueFullscreenLayout);
+    // Entering/exiting real fullscreen (see tryEnterFullscreen above) usually fires its own resize too, but
+    // not guaranteed on every browser - this covers it directly, since window.innerHeight/innerWidth (what
+    // updateQueueFullscreenLayout actually measures) change substantially at that exact transition.
+    document.addEventListener("fullscreenchange", updateQueueFullscreenLayout);
+    document.addEventListener("webkitfullscreenchange", updateQueueFullscreenLayout);
     updateQueueFullscreenLayout();
 
     function escapeHtml(text) {
