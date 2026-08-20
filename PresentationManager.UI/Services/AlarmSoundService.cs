@@ -19,15 +19,24 @@ public class AlarmSoundService : IAlarmSoundService
     /// EmbeddedResource entry in PresentationManager.UI.csproj.</summary>
     private const string CountdownBellResourceName = "PresentationManager.UI.Sounds.timer-alarm.mp3";
 
+    private readonly object _lock = new();
+    private SoundPlayer? _activeSoundPlayer;
+    private WaveOutEvent? _activeWaveOut;
+
     public void Play(string? customSoundPath)
     {
+        Stop();
+
         if (!string.IsNullOrWhiteSpace(customSoundPath) && File.Exists(customSoundPath))
         {
             try
             {
                 // Not disposed immediately: Play() starts async playback on a background thread, and
-                // disposing right away would cut the sound off before it finishes.
-                new SoundPlayer(customSoundPath).Play();
+                // disposing right away would cut the sound off before it finishes. Kept alive in
+                // _activeSoundPlayer instead, so a later Stop() can still reach and silence it.
+                var player = new SoundPlayer(customSoundPath);
+                lock (_lock) { _activeSoundPlayer = player; }
+                player.Play();
                 return;
             }
             catch
@@ -41,6 +50,8 @@ public class AlarmSoundService : IAlarmSoundService
 
     public void PlayCountdownBell()
     {
+        Stop();
+
         try
         {
             var resourceStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(CountdownBellResourceName);
@@ -59,14 +70,42 @@ public class AlarmSoundService : IAlarmSoundService
             output.Init(reader);
             output.PlaybackStopped += (_, _) =>
             {
+                lock (_lock)
+                {
+                    if (ReferenceEquals(_activeWaveOut, output)) _activeWaveOut = null;
+                }
                 output.Dispose();
                 reader.Dispose();
             };
+
+            lock (_lock) { _activeWaveOut = output; }
             output.Play();
         }
         catch
         {
             SystemSounds.Exclamation.Play();
         }
+    }
+
+    public void Stop()
+    {
+        SoundPlayer? soundPlayer;
+        WaveOutEvent? waveOut;
+        lock (_lock)
+        {
+            soundPlayer = _activeSoundPlayer;
+            _activeSoundPlayer = null;
+            waveOut = _activeWaveOut;
+        }
+
+        if (soundPlayer is not null)
+        {
+            try { soundPlayer.Stop(); } catch { }
+            soundPlayer.Dispose();
+        }
+
+        // Triggers PlaybackStopped synchronously, which clears _activeWaveOut and disposes it/its reader -
+        // no need to duplicate that cleanup here.
+        waveOut?.Stop();
     }
 }

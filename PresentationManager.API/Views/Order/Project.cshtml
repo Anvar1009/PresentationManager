@@ -37,7 +37,7 @@
         </div>
     </div>
 
-    <h2 class="stage-fs-heading" id="stageHeading">Taqdimotchilar tartibi</h2>
+    <h2 class="stage-fs-heading" id="stageHeading">@Model.ProjectName loyihasi ishtirokchilari tartibi</h2>
 
     <div class="order-stage-header">
         <div class="order-stage-heading">
@@ -88,16 +88,15 @@
                 </form>
             }
 
-            @* Rehearsal-reset for this stage - restores presenters to alphabetical order (no day grouping) so
-               any test draws run while checking the fullscreen presentation don't carry over into the real
-               one. Stays outside .order-stage-header on purpose so it's still reachable while fullscreen
-               (hidden there separately via #resetForm, see site.css - this control is for the outer panel
-               only). *@
+            @* Restores presenters to alphabetical order (no day grouping) and, once Randomize has locked
+               itself after a draw (see order-shuffle.js), is what unlocks it again - visible in fullscreen
+               right alongside Randomize itself (not hidden there anymore) so the operator has a way back to
+               a fresh draw without leaving this screen. *@
             <form asp-controller="Order" asp-action="Reset" method="post" id="resetForm">
                 <input type="hidden" name="projectId" value="@Model.ProjectId" />
                 <button type="submit" class="btn btn-outline btn-sm btn-block" id="resetBtn">
                     <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7" /><polyline points="3 4 3 9 8 9" /></svg>
-                    Jadvalni tozalash
+                    Ro'yxatni tozalash
                 </button>
             </form>
         </div>

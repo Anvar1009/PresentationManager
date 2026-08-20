@@ -107,7 +107,7 @@ html {
 }
 
 /* ===== Site-wide background =====
-   Deliberately the exact same look as the OrderOperator fullscreen stage (.order-stage:fullscreen further
+   Deliberately the exact same look as the OrderOperator presenting stage (.order-stage.is-presenting further
    down) - a static two-tone radial gradient plus a twinkling starfield - rather than the busier multi-color
    aurora/floating-orbs combination this used to be. Applied to body itself (not a fixed pseudo-element) so
    it can't get painted over by body's own background layer or need a manual stacking-context fix. */
@@ -1517,14 +1517,19 @@ button,
     color: var(--accent);
 }
 
-/* ===== Fullscreen presentation theme =====
+/* ===== Presentation stage theme =====
    Same black-and-amber palette as the rest of the app (--bg/--bg-raised/--accent) - deliberately *not* a
    separate color scheme, just this stage's own layout (starfield, header/badge, big centered heading, pill
    rows) restyled with the exact tokens the outer panel already uses, so a projector audience sees the same
-   product, not a re-skinned one. Scoped entirely to :fullscreen so the outer, day-to-day operator panel is
-   untouched. */
-.order-stage:fullscreen,
-.order-stage:-webkit-full-screen {
+   product, not a re-skinned one. .is-presenting is set by order-shuffle.js (from a ?present=1 query flag)
+   only in the popup window "To'liq ekran" opens - see that script - never on the outer, day-to-day operator
+   panel, which instead gets just the list/grid rules below applied directly (no .is-presenting needed for
+   those) so its own queue reads the same way without adopting this whole chrome-swap too. Used to be scoped
+   to the native :fullscreen pseudo-class instead of a plain class, back when this same page's own Fullscreen
+   API toggle was what launched it in-place; now that toggle opens a separate window instead (so an operator
+   can keep working this page while a projector shows the other one), so a real class is what that window's
+   own load flag sets instead. */
+.order-stage.is-presenting {
     --stage-bg-1: var(--bg);
     --stage-bg-2: var(--bg-raised);
     --stage-accent: var(--accent);
@@ -1561,8 +1566,7 @@ button,
     pointer-events: none;
 }
 
-.order-stage:fullscreen .stage-stars,
-.order-stage:-webkit-full-screen .stage-stars {
+.order-stage.is-presenting .stage-stars {
     display: block;
 }
 
@@ -1591,8 +1595,7 @@ button,
     display: none;
 }
 
-.order-stage:fullscreen .stage-fs-header,
-.order-stage:-webkit-full-screen .stage-fs-header {
+.order-stage.is-presenting .stage-fs-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1677,11 +1680,10 @@ button,
     margin-top: 1px;
 }
 
-.order-stage:fullscreen .stage-fs-heading,
-.order-stage:-webkit-full-screen .stage-fs-heading {
+.order-stage.is-presenting .stage-fs-heading {
     display: block;
     text-align: center;
-    /* Was margin: var(--space-6) 0 var(--space-5) - the grid's own row-gap (see .order-stage:fullscreen)
+    /* Was margin: var(--space-6) 0 var(--space-5) - the grid's own row-gap (see .order-stage.is-presenting)
        handles spacing now, so header+heading stay compact near the top instead of pushing themselves (and
        therefore the list below) further down the screen than they need to. */
     margin: 0;
@@ -1697,127 +1699,245 @@ button,
     color: var(--stage-accent);
 }
 
-/* Only the presenters list and the randomize button stay on screen while fullscreen - the outer panel's own
-   title/subtitle, fullscreen toggle, and success/hint text are all just chrome a projector audience doesn't
-   need (the stage-fs-* elements above stand in for them). Esc (native browser behavior) still exits. */
-.order-stage:fullscreen .order-stage-header,
-.order-stage:-webkit-full-screen .order-stage-header,
-.order-stage:fullscreen .notice-success,
-.order-stage:-webkit-full-screen .notice-success,
-.order-stage:fullscreen .card-meta-mono,
-.order-stage:-webkit-full-screen .card-meta-mono,
-.order-stage:fullscreen .field-hint,
-.order-stage:-webkit-full-screen .field-hint {
+/* Only the presenters list and the randomize button stay on screen in the presenting window - the outer
+   panel's own title/subtitle, fullscreen toggle, and success/hint text are all just chrome a projector
+   audience doesn't need (the stage-fs-* elements above stand in for them). */
+.order-stage.is-presenting .order-stage-header,
+.order-stage.is-presenting .notice-success,
+.order-stage.is-presenting .card-meta-mono,
+.order-stage.is-presenting .field-hint {
     display: none;
 }
 
-.order-stage:fullscreen .queue,
-.order-stage:-webkit-full-screen .queue {
+.order-stage.is-presenting .queue {
     background: transparent;
     border: none;
     box-shadow: none;
 }
 
-/* A few (2-5) presenters just need a single centered column; 40-50 need several side by side or most of
-   them would be scrolled off screen. column-count is set by order-shuffle.js (not a CSS column-width guess)
-   from the actual measured row height and viewport space, so however many participants there are, exactly
-   as many columns as needed are used to fit them all within one screen with no scrolling - CSS alone has no
-   "fit this many rows in the space I've got" query to do that. column-fill:auto plus that explicit
-   --queue-fs-height is what makes rows actually wrap into a new column once one is full, instead of just
-   growing one column tall enough to need scrolling. width:fit-content + margin:auto is what keeps a short
-   (single-column) list centered instead of pinned to the left edge of a full-width block. */
-.order-stage:fullscreen #queueList,
-.order-stage:-webkit-full-screen #queueList {
-    display: block;
-    width: fit-content;
+/* A plain top-to-bottom list split into however many side-by-side columns of ~8-10 names each it takes to
+   fit everyone within one screen's height, instead of one long list that would need vertical scrolling -
+   applies whenever this list is inside .order-stage (the outer operator panel's own copy of this page, and
+   the presenting popup window alike; a plain .queue/.queue-row elsewhere, e.g. Judge/Project.cshtml, is
+   untouched, still the simple flex list it always was) rather than only once .is-presenting, so the
+   operator's own working view already reads the same way the audience's projector window will.
+   grid-auto-flow:column is what gives that "read down, then start the next column" order (row 1 of column 1,
+   row 2 of column 1, ... then row 1 of column 2); order-shuffle.js computes --queue-cols/--queue-rows from
+   the actual available viewport space and a comfortable reading row height, capping the column count so a
+   very large N packs into fewer, denser columns instead of ever demanding more width than the screen has -
+   CSS alone has no "fit exactly N rows into this box, this many per column" query to do that. Every
+   column/row here is a strict 1fr, so nothing (a long name included - see .queue-name) can ever push the
+   grid wider or taller than the screen, unlike the old CSS multi-column layout this replaces, whose own
+   width:fit-content sizing is what used to force a sideways scrollbar. */
+.order-stage #queueList {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: repeat(var(--queue-cols, 1), 1fr);
+    grid-template-rows: repeat(var(--queue-rows, 1), 1fr);
+    gap: var(--space-3) var(--space-6);
+    width: 100%;
     max-width: 100%;
-    /* Centers within the grid's own 1fr row (see .order-stage:fullscreen) both ways - horizontally via
-       margin auto, vertically via align-self so a short list sits in the middle of the available space
-       instead of pinned to its top. */
-    margin: 0 auto !important;
-    align-self: center;
-    justify-self: center;
-    column-gap: var(--space-6);
-    column-fill: auto;
     height: var(--queue-fs-height, auto);
+    overflow: hidden;
 }
 
-/* Each row reads as its own translucent pill (margin + rounded corners) rather than a continuous
-   bordered list - closer to a real event's own presentation screen than reused admin-table styling. */
-.order-stage:fullscreen .queue-row,
-.order-stage:-webkit-full-screen .queue-row {
-    padding: 20px 26px;
-    margin: 0 0 var(--space-4);
+/* The presenting stage's own row-gap (see .order-stage.is-presenting) already spaces the heading/list/
+   actions apart - the inline margin-top the outer panel gives this same card (for its own spacing under the
+   "Joriy tartib..." paragraph) would just add an unwanted extra gap on top of that there, so only cancel it
+   in presenting mode; the outer panel keeps its own spacing untouched. */
+.order-stage.is-presenting #queueList {
+    margin: 0 !important;
+    align-self: center;
+}
+
+/* Each row reads as its own translucent pill (closer to a real event's own presentation screen than reused
+   admin-table styling), sized by the grid cell it sits in rather than its own content. min-width/
+   min-height: 0 override flex's default auto minimum, which would otherwise refuse to shrink below content
+   size and defeat the grid's own fixed 1fr sizing once there are enough presenters to need it. */
+.order-stage .queue-row {
+    position: relative;
+    padding: 14px 20px;
+    margin: 0;
     background: #ffffff0d;
     border: 1px solid #ffffff14;
-    border-bottom: 1px solid #ffffff14;
     border-radius: var(--radius);
-    break-inside: avoid;
-    -webkit-column-break-inside: avoid;
+    min-width: 0;
+    min-height: 0;
+    /* visible, not hidden: .queue-name's own overflow:hidden (below) already clips its text for the
+       line-clamp, so this only ever needed to contain the particle burst a reveal spawns (see
+       .queue-burst) - which needs to be free to fly out past the row's own edges into the grid gap. */
+    overflow: visible;
 }
 
-.order-stage:fullscreen .queue-index,
-.order-stage:-webkit-full-screen .queue-index {
-    font-size: 20px;
+.order-stage .queue-index {
+    font-size: var(--queue-index-font, 18px);
     width: auto;
-    padding: 4px 11px;
+    padding: 3px 10px;
     border-radius: 6px;
-    background: var(--stage-accent-dim);
-    color: var(--stage-accent);
+    background: var(--accent-dim);
+    color: var(--accent);
     text-align: center;
+    flex: none;
 }
 
-.order-stage:fullscreen .queue-name,
-.order-stage:-webkit-full-screen .queue-name {
-    font-size: 25px;
+/* -webkit-line-clamp is the safety net for an unusually long name once a lot of columns are needed (a
+   narrower column wraps to a second line before this triggers): it wraps normally up to 2 lines, then
+   ellipsizes rather than ever overflowing its pill, which at a fixed grid row height would otherwise bleed
+   into the row below instead of just looking a little cramped. */
+.order-stage .queue-name {
+    font-size: var(--queue-name-font, 22px);
+    line-height: 1.25;
     font-weight: 700;
     color: var(--text);
+    overflow-wrap: break-word;
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
-.order-stage:fullscreen .queue.shuffling .queue-name,
-.order-stage:-webkit-full-screen .queue.shuffling .queue-name {
-    color: var(--stage-accent);
+/* Blurred + translucent rather than legible-but-scrambled: order-shuffle.js still cycles each not-yet-
+   revealed cell through random letters underneath (see runShuffleReveal), but this is what actually keeps
+   a name from being readable during the draw - scrambled text alone still *reads* as text at a glance,
+   letting an eager audience member catch a real name mid-swap. Heavy blur removes that risk outright
+   regardless of what text is under it. Scoped to the row's own .is-scrambling (added/removed per row, not
+   the whole list at once) so an already-revealed position's real name is never blurred, even while its
+   still-spinning neighbors are. animation-delay is set per row by order-shuffle.js (staggered, not synced)
+   so the flicker travels across the grid like a wave instead of every cell pulsing in lockstep. */
+.order-stage .queue-row.is-scrambling .queue-name {
+    color: var(--accent);
+    filter: blur(6px);
+    opacity: 0.42;
 }
 
-/* Tucked into the bottom-right corner (the grid's own last "auto" row - see .order-stage:fullscreen) rather
-   than centered under the list, so it reads as a persistent action control instead of competing with the
-   presenter list for the audience's attention in the middle of the screen. #resetForm is already
-   display:none in fullscreen (see below), so this row only ever has the one Randomize form/button in it here. */
-.order-stage:fullscreen .order-actions-row,
-.order-stage:-webkit-full-screen .order-actions-row {
+@media (prefers-reduced-motion: no-preference) {
+    .order-stage .queue-row.is-scrambling .queue-name {
+        animation: queue-name-flicker 900ms ease-in-out infinite;
+        /* Inherited from the row's own --shuffle-delay (custom properties inherit by default) - keeps the
+           blur pulse in step with that same row's shimmer sweep instead of drifting out of sync with it. */
+        animation-delay: var(--shuffle-delay, 0ms);
+    }
+}
+
+@keyframes queue-name-flicker {
+    0%, 100% { filter: blur(6px); opacity: 0.34; }
+    50% { filter: blur(3px); opacity: 0.58; }
+}
+
+/* The "landed!" flourish for the instant a position's real name locks in (see revealNext in
+   order-shuffle.js, which adds this class briefly and spawns a .queue-burst alongside it). */
+.order-stage .queue-row.just-revealed {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .order-stage .queue-row.just-revealed {
+        animation: queue-reveal-pop 650ms ease-out;
+    }
+}
+
+@keyframes queue-reveal-pop {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 var(--accent-dim); }
+    35% { transform: scale(1.05); box-shadow: 0 0 0 10px transparent; }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Small dots flying outward from a just-revealed cell's center and fading - see spawnParticleBurst in
+   order-shuffle.js, which builds one of these per reveal and removes it once its animation finishes.
+   pointer-events:none keeps it purely decorative even while it's on top of the row's own content. */
+.queue-burst {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.queue-burst-dot {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px 1px var(--accent);
+    opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .queue-burst-dot {
+        animation: queue-burst-fly 600ms ease-out forwards;
+        animation-delay: var(--burst-delay, 0ms);
+    }
+}
+
+@keyframes queue-burst-fly {
+    0% { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(var(--dx), var(--dy)) scale(0.2); opacity: 0; }
+}
+
+/* Tucked into the bottom-right corner (the grid's own last "auto" row - see .order-stage.is-presenting)
+   rather than centered under the list, so it reads as a persistent action control instead of competing with the
+   presenter list for the audience's attention in the middle of the screen. #resetForm is hidden below, so
+   this row only ever has the one Randomize form/button in it here. */
+.order-stage.is-presenting .order-actions-row {
     justify-self: end;
     align-self: end;
 }
 
-.order-stage:fullscreen .btn-block,
-.order-stage:-webkit-full-screen .btn-block {
+.order-stage.is-presenting .btn-block {
     width: auto;
     max-width: 300px;
     margin: 0;
 }
 
-/* "Jadvalni tozalash" is a rehearsal/setup tool for the operator working the outer (non-fullscreen) panel -
-   not something the audience watching the fullscreen draw should see or be able to trigger. */
-.order-stage:fullscreen #resetForm,
-.order-stage:-webkit-full-screen #resetForm {
+/* "Ro'yxatni tozalash" is a rehearsal/setup tool for the operator working the outer panel, and now also the
+   only way to unlock Randomize again once it's locked itself after a draw (see order-shuffle.js) - not
+   something the audience watching the presenting window's draw should see or be able to trigger. An
+   operator who needs it mid-presentation switches back to the outer panel's own tab/window to reach it. */
+.order-stage.is-presenting #resetForm {
     display: none;
 }
 
-/* Shuffle reveal - a quick client-side flourish that cycles the visible names through a few random
-   permutations before the real (server-decided) order comes back from the Randomize post, so the "random"
-   part of this panel actually reads as a random draw instead of an instant swap. See order-shuffle.js. */
-
-.queue.shuffling .queue-row {
-    border-color: var(--border-strong);
+/* Randomize locks itself (disabled + dimmed) after a completed draw - see order-shuffle.js - so it can't
+   be re-run by accident once the real order is set; "Ro'yxatni tozalash" is what unlocks it again. Slightly
+   stronger than the browser's own default disabled dimming so "locked" reads as a deliberate state, not
+   just "busy right now" (see .is-shuffling, used only momentarily during the request itself). */
+.btn-randomize.is-locked {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
-.queue.shuffling .queue-name {
+/* Shuffle reveal - a quick client-side flourish that flickers each not-yet-revealed row through random
+   letters (see runShuffleReveal in order-shuffle.js) before that position's real name locks in, so the
+   "random" part of this panel actually reads as a random draw instead of an instant swap. Scoped to each
+   row's own .is-scrambling (added/removed per row, not the whole list at once) so an already-revealed
+   position stops shimmering the moment its real name is shown instead of only once the entire draw ends. */
+
+.queue-row.is-scrambling {
+    border-color: var(--border-strong);
+    /* A moving diagonal highlight band, swept left-to-right by queue-shimmer below - background-size wider
+       than the row itself is what gives the band room to travel in from off-screen on one edge and out the
+       other rather than just fading in place. */
+    background-image: linear-gradient(120deg, transparent 25%, #ffffff22 48%, transparent 72%);
+    background-size: 220% 100%;
+    background-position: 130% 0;
+    /* Set per-row by order-shuffle.js when the draw starts, so rows don't all shimmer/pulse in perfect
+       lockstep. */
+    animation-delay: var(--shuffle-delay, 0ms);
+}
+
+.queue-row.is-scrambling .queue-name {
     color: var(--accent);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-    .queue.shuffling .queue-row {
-        animation: shuffle-pulse 260ms ease-in-out infinite;
+    .queue-row.is-scrambling {
+        animation: shuffle-pulse 260ms ease-in-out infinite, queue-shimmer 1.1s linear infinite;
+        animation-delay: var(--shuffle-delay, 0ms), var(--shuffle-delay, 0ms);
     }
 }
 
@@ -1826,6 +1946,41 @@ button,
     50% { transform: scale(1.012); opacity: 0.85; }
 }
 
+@keyframes queue-shimmer {
+    0% { background-position: 130% 0; }
+    100% { background-position: -30% 0; }
+}
+
 .btn-randomize.is-shuffling {
     cursor: progress;
+}
+
+/* Backdrop flourish for the same window each row's own .is-scrambling covers - order-shuffle.js adds/
+   removes this class on #orderStage itself (not just #queueList) so the whole fullscreen stage feels like
+   it's "drawing", not just the name pills. A rotating conic sweep behind everything (masked to a ring via
+   the radial-gradient in mask-image, so it reads as a moving glow rather than a full-screen wash) plus a
+   faster starfield twinkle. */
+.order-stage.is-presenting.is-drawing::before {
+    content: "";
+    position: absolute;
+    inset: -35%;
+    z-index: -1;
+    pointer-events: none;
+    background: conic-gradient(from 0deg, transparent 0%, var(--stage-accent-dim) 15%, transparent 32%, transparent 68%, var(--stage-accent-dim) 85%, transparent 100%);
+    mask-image: radial-gradient(circle, transparent 30%, black 55%, black 70%, transparent 92%);
+    -webkit-mask-image: radial-gradient(circle, transparent 30%, black 55%, black 70%, transparent 92%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .order-stage.is-presenting.is-drawing::before {
+        animation: stage-sweep 1.4s linear infinite;
+    }
+
+    .order-stage.is-presenting.is-drawing .stage-star {
+        animation-duration: 0.7s;
+    }
+}
+
+@keyframes stage-sweep {
+    to { transform: rotate(360deg); }
 }
