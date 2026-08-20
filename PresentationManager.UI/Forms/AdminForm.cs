@@ -382,20 +382,11 @@ public sealed class AdminForm : Form
                 Activate();
             }
 
-            // No dedicated button for this — the moment DiscussionReady is reached (whether by an early
-            // manual "Keyingi" click or the presentation timer running out on its own) this prompt itself
-            // is what asks the operator's permission, without needing them to find and press anything first.
-            if (status == PresentationStatus.DiscussionReady)
-            {
-                _ = ConfirmAndStartDiscussionAsync();
-            }
-
-            // Mirrors the DiscussionReady prompt above, one phase later — reached only when the discussion
-            // clock ran out on a presentation that actually has extra discussion time configured.
-            if (status == PresentationStatus.ExtraDiscussionReady)
-            {
-                _ = ConfirmAndStartExtraDiscussionAsync();
-            }
+            // Deliberately no auto-triggered prompt here for DiscussionReady/ExtraDiscussionReady: when the
+            // timer runs out on its own, the program must sit and wait — the operator is the only one who
+            // opens the confirmation, by pressing "Keyingi" (see OnAdvanceClick). RefreshCurrentPanel above
+            // already relabels that button ("MUHOKAMAGA O'TISH" / "QO'SHIMCHA VAQTNI BOSHLASH") so it's clear
+            // what pressing it will do next.
         });
     }
 
@@ -1059,17 +1050,16 @@ public sealed class AdminForm : Form
         {
             if (_session.Status == PresentationStatus.DiscussionReady)
             {
-                // Normally already asked and settled automatically the instant DiscussionReady was reached
-                // (see the StatusChanged subscription in WireSessionEvents) — this only re-runs the same
-                // prompt as a fallback if the operator declined it there and is now clicking "Keyingi"
-                // (the only relevant action at this point) to retry.
+                // The timer running out only ever reaches this status on its own — it never pops the
+                // confirmation itself (see WireSessionEvents). The operator's "Keyingi" click here is what
+                // actually opens the prompt.
                 await ConfirmAndStartDiscussionAsync();
                 return;
             }
 
             if (_session.Status == PresentationStatus.ExtraDiscussionReady)
             {
-                // Same fallback role as the DiscussionReady branch above, for the optional extra phase.
+                // Same as the DiscussionReady branch above, for the optional extra phase.
                 await ConfirmAndStartExtraDiscussionAsync();
                 return;
             }
@@ -1120,11 +1110,10 @@ public sealed class AdminForm : Form
         }
     }
 
-    /// <summary>The one required confirmation before the discussion clock actually starts ticking — fired
-    /// automatically as soon as <see cref="PresentationStatus.DiscussionReady"/> is reached (see
-    /// WireSessionEvents), not from a dedicated button. Declining leaves the state parked exactly as it was;
-    /// <see cref="OnAdvanceClick"/>'s DiscussionReady branch calls this same method again if the operator
-    /// then clicks "Keyingi" to retry.</summary>
+    /// <summary>The one required confirmation before the discussion clock actually starts ticking — only
+    /// ever opened by the operator's own "Keyingi" click once <see cref="PresentationStatus.DiscussionReady"/>
+    /// is reached (see <see cref="OnAdvanceClick"/>), never popped on its own. Declining leaves the state
+    /// parked exactly as it was; clicking "Keyingi" again just re-asks.</summary>
     private async Task ConfirmAndStartDiscussionAsync()
     {
         var confirm = MessageBox.Show(this,
@@ -1138,13 +1127,11 @@ public sealed class AdminForm : Form
         await _session.StartDiscussionAsync();
     }
 
-    /// <summary>The optional extra-time counterpart to <see cref="ConfirmAndStartDiscussionAsync"/> — fired
-    /// automatically as soon as <see cref="PresentationStatus.ExtraDiscussionReady"/> is reached (see
-    /// WireSessionEvents), which only happens when the presentation actually has extra discussion time
-    /// configured. Declining used to just leave the state parked with no way forward except clicking
-    /// "Keyingi", which re-asked this exact same question forever (<see cref="OnAdvanceClick"/>'s
-    /// ExtraDiscussionReady branch calls this same method) - declining now immediately offers the other
-    /// realistic action (skip the extra time and move on) instead of stranding the operator on a dead end.</summary>
+    /// <summary>The optional extra-time counterpart to <see cref="ConfirmAndStartDiscussionAsync"/> — only
+    /// ever opened by the operator's own "Keyingi" click once <see cref="PresentationStatus.ExtraDiscussionReady"/>
+    /// is reached (see <see cref="OnAdvanceClick"/>), which only happens when the presentation actually has
+    /// extra discussion time configured. Declining immediately offers the other realistic action (skip the
+    /// extra time and move on) instead of stranding the operator on a dead end.</summary>
     private async Task ConfirmAndStartExtraDiscussionAsync()
     {
         var confirm = MessageBox.Show(this,
