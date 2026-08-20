@@ -183,6 +183,11 @@ DocProject/Help/html
 # Click-Once directory
 publish/
 
+# Project-specific publish/build output (large generated binaries - caused a
+# 100MB+ file to be committed and rejected by GitHub's push size limit)
+publish_api_linux/
+publish-bot/
+
 # Publish Web Output
 *.[Pp]ublish.xml
 *.azurePubxml
