@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PresentationManager.Application.Common;
 using PresentationManager.Application.Interfaces;
@@ -96,6 +96,7 @@ public sealed class PresentationBotHostedService : BackgroundService
     private readonly UserService _userService;
     private readonly AdminLinkService _adminLinkService;
     private readonly PresenterAssignmentService _presenterAssignmentService;
+    private readonly ILogger<PresentationBotHostedService> _logger;
 
     /// <summary>Presenter upload flow state, per chat.</summary>
     private readonly ConcurrentDictionary<long, ChatSession> _sessions = new();
@@ -114,7 +115,8 @@ public sealed class PresentationBotHostedService : BackgroundService
         CriterionService criterionService,
         UserService userService,
         AdminLinkService adminLinkService,
-        PresenterAssignmentService presenterAssignmentService)
+        PresenterAssignmentService presenterAssignmentService,
+        ILogger<PresentationBotHostedService> logger)
     {
         _options = options.Value;
         _projectService = projectService;
@@ -127,6 +129,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         _userService = userService;
         _adminLinkService = adminLinkService;
         _presenterAssignmentService = presenterAssignmentService;
+        _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -136,6 +139,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         // to run the WinForms side of things.
         if (string.IsNullOrWhiteSpace(_options.Token))
         {
+            _logger.LogWarning("Telegram bot ishga tushirilmadi - token sozlanmagan.");
             return;
         }
 
@@ -143,6 +147,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         var receiverOptions = new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery] };
 
         botClient.StartReceiving(HandleUpdateAsync, HandlePollingErrorAsync, receiverOptions, stoppingToken);
+        _logger.LogInformation("Telegram bot xabarlarni qabul qilishni boshladi.");
 
         // StartReceiving itself doesn't block (it dispatches to the thread pool) - keep this hosted service
         // "running" until the app shuts down, at which point stoppingToken cancels this delay.
@@ -172,13 +177,13 @@ public sealed class PresentationBotHostedService : BackgroundService
         catch (Exception ex)
         {
             // A single malformed/unexpected update must never take the whole polling loop down.
-            Debug.WriteLine($"Telegram bot update handling failed: {ex}");
+            _logger.LogError(ex, "Telegram update qayta ishlashda xatolik: update {UpdateId}", update.Id);
         }
     }
 
     private Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken ct)
     {
-        Debug.WriteLine($"Telegram bot polling error: {exception}");
+        _logger.LogError(exception, "Telegram bot polling xatoligi.");
         return Task.CompletedTask;
     }
 
@@ -333,21 +338,24 @@ public sealed class PresentationBotHostedService : BackgroundService
                 if (user is not null)
                 {
                     await botClient.SendMessage(chatId, $"✅ Hisobingiz ({user.FullName}) muvaffaqiyatli ulandi!", cancellationToken: ct);
+                    _logger.LogInformation("Telegram chat admin/operator hisobiga ulandi: chat {ChatId}, user {UserId}", chatId, userId);
                     await RouteLinkedUserAsync(botClient, chatId, user, ct);
                     return;
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Most likely this chat is already linked to a DIFFERENT account (TelegramChatId is unique) -
                 // a fresh token from the account that actually owns this chat is the only fix, so send them
                 // back to the normal flow rather than silently doing nothing.
+                _logger.LogWarning(ex, "Telegram chatni hisobga ulashda xatolik: chat {ChatId}, user {UserId}", chatId, userId);
                 await botClient.SendMessage(chatId, "❌ Bu Telegram hisob allaqachon boshqa akkauntga ulangan.", cancellationToken: ct);
                 await BeginAsync(botClient, chatId, telegramUsername, ct);
                 return;
             }
         }
 
+        _logger.LogWarning("Yaroqsiz yoki muddati o'tgan ulash havolasi ishlatildi: chat {ChatId}", chatId);
         await botClient.SendMessage(chatId, "❌ Ulash havolasi yaroqsiz yoki muddati o'tgan. Admin paneldan qaytadan urinib ko'ring.", cancellationToken: ct);
         await BeginAsync(botClient, chatId, telegramUsername, ct);
     }
@@ -363,6 +371,8 @@ public sealed class PresentationBotHostedService : BackgroundService
             TelegramUsername = telegramUsername
         }, ct);
 
+        _logger.LogInformation("Yangi taqdimotchi ro'yxatdan o'tdi: presenter {PresenterId} - {FullName} (chat {ChatId})",
+            presenter.Id, presenter.FullName, chatId);
         await botClient.SendMessage(chatId, "✅ Ro'yxatdan o'tish yakunlandi!", replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
         await ShowAssignedProjectsOrWaitAsync(botClient, chatId, presenter.Id, presenter.FullName, ct);
     }
@@ -431,12 +441,16 @@ public sealed class PresentationBotHostedService : BackgroundService
         var project = projects.FirstOrDefault(p => p.Id == projectId);
         if (project is null)
         {
+            _logger.LogWarning("Presenter {PresenterId} biriktirilmagan/mavjud bo'lmagan loyihani tanlashga urindi: {ProjectId}",
+                presenterId, projectId);
             await botClient.AnswerCallbackQuery(callbackQuery.Id, "Bu loyiha endi mavjud emas yoki siz unga biriktirilmagansiz.", cancellationToken: ct);
             return;
         }
 
         if (project.SubmissionDeadline is { } deadline && DateTime.UtcNow > deadline)
         {
+            _logger.LogWarning("Presenter {PresenterId} muddati o'tgan loyihaga ({ProjectId}) taqdimot yubormoqchi bo'ldi.",
+                presenterId, projectId);
             await botClient.AnswerCallbackQuery(callbackQuery.Id, "Taqdimot topshirish muddati tugagan.", cancellationToken: ct);
             await botClient.SendMessage(chatId.Value,
                 $"⏰ \"{project.Name}\" loyihasi uchun taqdimot topshirish/yangilash muddati tugagan ({deadline.ToLocalTime():dd.MM.yyyy HH:mm}).",
@@ -533,6 +547,9 @@ public sealed class PresentationBotHostedService : BackgroundService
                 confirmation += $"\n\n{EventReminderFormatter.Format(project)}";
             }
 
+            _logger.LogInformation(
+                "Taqdimot {Action}: chat {ChatId}, loyiha {ProjectId}, sarlavha \"{Title}\", fayl turi {FileType}",
+                isUpdate ? "yangilandi" : "qabul qilindi", chatId, session.ProjectId, session.Title, fileType);
             await botClient.SendMessage(chatId, confirmation, replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
         }
         catch (Exception ex)
@@ -544,6 +561,7 @@ public sealed class PresentationBotHostedService : BackgroundService
             // approved for ("Siz bu loyihaga hali biriktirilmagansiz"), or GetInfoAndDownloadFile/
             // SaveFileAsync failing outright (the Telegram Bot API caps bot file downloads at 20MB, or a
             // local disk I/O error) - either way the presenter now sees exactly why instead of silence.
+            _logger.LogError(ex, "Taqdimot yuborishda xatolik: chat {ChatId}, loyiha {ProjectId}", chatId, session.ProjectId);
             await botClient.SendMessage(chatId, $"❌ Taqdimotni yuborishda xatolik yuz berdi: {ex.Message}", cancellationToken: ct);
         }
         finally
@@ -782,11 +800,14 @@ public sealed class PresentationBotHostedService : BackgroundService
                 session.NewProjectName, session.NewProjectStartDate, session.NewProjectEndDate, null, location,
                 session.UserId, ct: ct);
 
+            _logger.LogInformation("Loyiha bot admin mirror orqali yaratildi: {ProjectId} - {ProjectName} (user {UserId})",
+                project.Id, project.Name, session.UserId);
             await botClient.SendMessage(chatId, $"✅ \"{project.Name}\" loyihasi yaratildi!", cancellationToken: ct);
             await ShowAdminProjectMenuAsync(botClient, chatId, project.Id, project.Name, ct);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Bot orqali loyiha yaratishda xatolik: user {UserId}", session.UserId);
             session.Step = AdminStep.MainMenu;
             await botClient.SendMessage(chatId, $"❌ {ex.Message}", cancellationToken: ct);
         }
@@ -797,10 +818,13 @@ public sealed class PresentationBotHostedService : BackgroundService
         try
         {
             await _criterionService.CreateAsync(session.ProjectId, session.NewCriterionName, maxScore, ct);
+            _logger.LogInformation("Mezon bot admin mirror orqali qo'shildi: loyiha {ProjectId} - {CriterionName}",
+                session.ProjectId, session.NewCriterionName);
             await botClient.SendMessage(chatId, "✅ Mezon qo'shildi.", cancellationToken: ct);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Bot orqali mezon qo'shishda xatolik: loyiha {ProjectId}", session.ProjectId);
             await botClient.SendMessage(chatId, $"❌ {ex.Message}", cancellationToken: ct);
         }
 
@@ -847,10 +871,14 @@ public sealed class PresentationBotHostedService : BackgroundService
         try
         {
             await _judgeService.AssignAsync(session.ProjectId, presenterId, ct);
+            _logger.LogInformation("Hakam bot admin mirror orqali tayinlandi: loyiha {ProjectId}, presenter {PresenterId}",
+                session.ProjectId, presenterId);
             await botClient.SendMessage(chatId, "✅ Hakam tayinlandi.", cancellationToken: ct);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Bot orqali hakam tayinlashda xatolik: loyiha {ProjectId}, presenter {PresenterId}",
+                session.ProjectId, presenterId);
             await botClient.SendMessage(chatId, $"❌ {ex.Message}", cancellationToken: ct);
         }
 

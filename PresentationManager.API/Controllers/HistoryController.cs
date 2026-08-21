@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Dtos;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
@@ -13,10 +14,12 @@ namespace PresentationManager.API.Controllers;
 public sealed class HistoryController : ControllerBase
 {
     private readonly IHistoryRepository _historyRepository;
+    private readonly ILogger<HistoryController> _logger;
 
-    public HistoryController(IHistoryRepository historyRepository)
+    public HistoryController(IHistoryRepository historyRepository, ILogger<HistoryController> logger)
     {
         _historyRepository = historyRepository;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -50,6 +53,7 @@ public sealed class HistoryController : ControllerBase
     public async Task<IActionResult> ClearAll(CancellationToken ct)
     {
         await _historyRepository.ClearAllAsync(ct);
+        _logger.LogWarning("Jurnal (tarix) to'liq tozalandi.");
         return NoContent();
     }
 }

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 
@@ -12,17 +13,20 @@ public sealed class ProjectService
     private readonly IPresentationRepository _presentationRepository;
     private readonly IPresenterRepository _presenterRepository;
     private readonly IFileStorageService _fileStorageService;
+    private readonly ILogger<ProjectService> _logger;
 
     public ProjectService(
         IProjectRepository projectRepository,
         IPresentationRepository presentationRepository,
         IPresenterRepository presenterRepository,
-        IFileStorageService fileStorageService)
+        IFileStorageService fileStorageService,
+        ILogger<ProjectService> logger)
     {
         _projectRepository = projectRepository;
         _presentationRepository = presentationRepository;
         _presenterRepository = presenterRepository;
         _fileStorageService = fileStorageService;
+        _logger = logger;
     }
 
     public Task<List<Project>> GetAllAsync(CancellationToken ct = default) =>
@@ -41,11 +45,15 @@ public sealed class ProjectService
     {
         if (string.IsNullOrWhiteSpace(name))
         {
+            _logger.LogWarning("Loyiha yaratishga urinish bo'sh nom bilan rad etildi.");
             throw new InvalidOperationException("Loyiha nomi bo'sh bo'lishi mumkin emas.");
         }
 
         if (eventEndDate < eventStartDate)
         {
+            _logger.LogWarning(
+                "Loyiha yaratishga urinish noto'g'ri sanalar bilan rad etildi: {Start} - {End}",
+                eventStartDate, eventEndDate);
             throw new InvalidOperationException("Tugash sanasi boshlanish sanasidan oldin bo'lishi mumkin emas.");
         }
 
@@ -59,7 +67,9 @@ public sealed class ProjectService
             CreatedByUserId = createdByUserId,
             SubmissionDeadline = submissionDeadline
         };
-        return await _projectRepository.AddAsync(project, ct);
+        var created = await _projectRepository.AddAsync(project, ct);
+        _logger.LogInformation("Yangi loyiha yaratildi: {ProjectId} - {ProjectName}", created.Id, created.Name);
+        return created;
     }
 
     /// <summary>Admin-facing "Taqdimot topshirish muddati" control - the Telegram bot checks this before
@@ -125,12 +135,23 @@ public sealed class ProjectService
     public async Task DeleteAsync(int projectId, CancellationToken ct = default)
     {
         var presentations = await _presentationRepository.GetByProjectIdAsync(projectId, ct);
-        foreach (var presentation in presentations)
+        try
         {
-            await _fileStorageService.DeleteFileAsync(presentation.FilePath, ct);
+            foreach (var presentation in presentations)
+            {
+                await _fileStorageService.DeleteFileAsync(presentation.FilePath, ct);
+            }
+
+            // The Presentations rows themselves are removed by the DB cascade configured on the ProjectId FK.
+            await _projectRepository.DeleteAsync(projectId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Loyihani o'chirishda xatolik: {ProjectId}", projectId);
+            throw;
         }
 
-        // The Presentations rows themselves are removed by the DB cascade configured on the ProjectId FK.
-        await _projectRepository.DeleteAsync(projectId, ct);
+        _logger.LogInformation("Loyiha o'chirildi: {ProjectId} ({PresentationCount} ta taqdimot bilan birga)",
+            projectId, presentations.Count);
     }
 }

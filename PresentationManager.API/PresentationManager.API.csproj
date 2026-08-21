@@ -44,6 +44,8 @@
     <!-- Same version as PresentationManager.UI's own ExcelExportHelper - server-side final-scores export for
          the web Admin/SuperAdmin panels (FinalScoresExcelExporter). -->
     <PackageReference Include="ClosedXML" Version="0.105.1" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
 
   <ItemGroup>

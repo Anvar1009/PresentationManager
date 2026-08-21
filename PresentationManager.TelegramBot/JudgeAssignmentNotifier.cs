@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
 
@@ -15,11 +15,15 @@ public sealed class JudgeAssignmentNotifier
 {
     private readonly ProjectService _projectService;
     private readonly TelegramNotifier _telegramNotifier;
+    private readonly ILogger<JudgeAssignmentNotifier> _logger;
 
-    public JudgeAssignmentNotifier(JudgeService judgeService, ProjectService projectService, TelegramNotifier telegramNotifier)
+    public JudgeAssignmentNotifier(
+        JudgeService judgeService, ProjectService projectService, TelegramNotifier telegramNotifier,
+        ILogger<JudgeAssignmentNotifier> logger)
     {
         _projectService = projectService;
         _telegramNotifier = telegramNotifier;
+        _logger = logger;
 
         judgeService.JudgeAssigned += judge => _ = OnJudgeAssignedAsync(judge);
     }
@@ -36,15 +40,27 @@ public sealed class JudgeAssignmentNotifier
             var projects = await _projectService.GetAllAsync();
             var projectName = projects.FirstOrDefault(p => p.Id == judge.ProjectId)?.Name ?? "loyiha";
 
-            await _telegramNotifier.TrySendMessageAsync(chatId,
+            var sent = await _telegramNotifier.TrySendMessageAsync(chatId,
                 $"🎉 Tabriklaymiz! Siz \"{projectName}\" loyihasi uchun hakam etib tayinlandingiz.\nPastdagi \"📋 Loyihalar\" tugmasi orqali istalgan vaqt boshlashingiz mumkin.",
                 PresentationBotHostedService.JudgeMainKeyboard);
+
+            if (sent)
+            {
+                _logger.LogInformation("Hakam tayinlanganligi haqida bildirishnoma yuborildi: judge {JudgeId}, chat {ChatId}, loyiha {ProjectId}",
+                    judge.Id, chatId, judge.ProjectId);
+            }
+            else
+            {
+                _logger.LogWarning("Hakam tayinlanganligi haqida bildirishnoma yetkazilmadi: judge {JudgeId}, chat {ChatId}",
+                    judge.Id, chatId);
+            }
         }
         catch (Exception ex)
         {
             // Best-effort push notification - the assignment itself already succeeded regardless of whether
             // this message manages to reach them (e.g. they blocked the bot).
-            Debug.WriteLine($"Failed to notify newly-assigned judge (chat {chatId}): {ex}");
+            _logger.LogError(ex, "Yangi tayinlangan hakamga bildirishnoma yuborishda xatolik: judge {JudgeId}, chat {ChatId}",
+                judge.Id, chatId);
         }
     }
 }

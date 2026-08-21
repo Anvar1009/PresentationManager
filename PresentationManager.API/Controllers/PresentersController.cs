@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Dtos;
 using PresentationManager.Application.Interfaces;
 
@@ -12,10 +13,12 @@ namespace PresentationManager.API.Controllers;
 public sealed class PresentersController : ControllerBase
 {
     private readonly IPresenterRepository _presenterRepository;
+    private readonly ILogger<PresentersController> _logger;
 
-    public PresentersController(IPresenterRepository presenterRepository)
+    public PresentersController(IPresenterRepository presenterRepository, ILogger<PresentersController> logger)
     {
         _presenterRepository = presenterRepository;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -43,6 +46,7 @@ public sealed class PresentersController : ControllerBase
     public async Task<ActionResult<PresenterDto>> Add(PresenterDto request, CancellationToken ct)
     {
         var created = await _presenterRepository.AddAsync(request.ToEntity(), ct);
+        _logger.LogInformation("Taqdimotchi qo'shildi: {PresenterId} - {FullName}", created.Id, created.FullName);
         return Ok(PresenterDto.FromEntity(created));
     }
 }

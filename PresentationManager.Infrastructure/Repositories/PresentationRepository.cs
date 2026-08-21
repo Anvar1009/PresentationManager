@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 using PresentationManager.Infrastructure.Persistence;
@@ -13,10 +14,12 @@ namespace PresentationManager.Infrastructure.Repositories;
 public class PresentationRepository : IPresentationRepository
 {
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly ILogger<PresentationRepository> _logger;
 
-    public PresentationRepository(IDbContextFactory<AppDbContext> dbFactory)
+    public PresentationRepository(IDbContextFactory<AppDbContext> dbFactory, ILogger<PresentationRepository> logger)
     {
         _dbFactory = dbFactory;
+        _logger = logger;
     }
 
     public async Task<List<Presentation>> GetAllAsync(CancellationToken ct = default)
@@ -50,7 +53,17 @@ public class PresentationRepository : IPresentationRepository
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         db.Presentations.Add(presentation);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Taqdimotni saqlashda xatolik: loyiha {ProjectId}", presentation.ProjectId);
+            throw;
+        }
+
+        _logger.LogInformation("Taqdimot bazaga yozildi: {PresentationId} - {Title}", presentation.Id, presentation.Title);
         return presentation;
     }
 
@@ -58,7 +71,15 @@ public class PresentationRepository : IPresentationRepository
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         db.Presentations.Update(presentation);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Taqdimotni yangilashda xatolik: {PresentationId}", presentation.Id);
+            throw;
+        }
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct = default)
@@ -67,11 +88,22 @@ public class PresentationRepository : IPresentationRepository
         var entity = await db.Presentations.FindAsync([id], ct);
         if (entity is null)
         {
+            _logger.LogWarning("O'chirish uchun taqdimot topilmadi: {PresentationId}", id);
             return;
         }
 
         db.Presentations.Remove(entity);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Taqdimotni o'chirishda xatolik: {PresentationId}", id);
+            throw;
+        }
+
+        _logger.LogInformation("Taqdimot bazadan o'chirildi: {PresentationId}", id);
     }
 
     public async Task ReorderAsync(IReadOnlyList<int> orderedPresentationIds, CancellationToken ct = default)
@@ -90,7 +122,15 @@ public class PresentationRepository : IPresentationRepository
             }
         }
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Navbatni qayta tartiblashda xatolik: {Count} ta taqdimot", orderedPresentationIds.Count);
+            throw;
+        }
     }
 
     public async Task<List<Presentation>> SearchByNameAsync(string query, int projectId, CancellationToken ct = default)

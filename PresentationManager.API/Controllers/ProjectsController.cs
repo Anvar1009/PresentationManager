@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Dtos;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
@@ -17,10 +18,12 @@ namespace PresentationManager.API.Controllers;
 public sealed class ProjectsController : ControllerBase
 {
     private readonly IProjectRepository _projectRepository;
+    private readonly ILogger<ProjectsController> _logger;
 
-    public ProjectsController(IProjectRepository projectRepository)
+    public ProjectsController(IProjectRepository projectRepository, ILogger<ProjectsController> logger)
     {
         _projectRepository = projectRepository;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -53,6 +56,7 @@ public sealed class ProjectsController : ControllerBase
             CreatedByUserId = request.CreatedByUserId
         };
         var created = await _projectRepository.AddAsync(project, ct);
+        _logger.LogInformation("Loyiha API orqali yaratildi: {ProjectId} - {ProjectName}", created.Id, created.Name);
         return Ok(ProjectDto.FromEntity(created));
     }
 
@@ -62,6 +66,7 @@ public sealed class ProjectsController : ControllerBase
         var existing = await _projectRepository.GetByIdAsync(id, ct);
         if (existing is null)
         {
+            _logger.LogWarning("Yangilash uchun loyiha topilmadi: {ProjectId}", id);
             return NotFound();
         }
 
@@ -74,6 +79,7 @@ public sealed class ProjectsController : ControllerBase
         existing.UpdatedAt = DateTime.UtcNow;
 
         await _projectRepository.UpdateAsync(existing, ct);
+        _logger.LogInformation("Loyiha API orqali yangilandi: {ProjectId}", id);
         return Ok(ProjectDto.FromEntity(existing));
     }
 
@@ -81,6 +87,7 @@ public sealed class ProjectsController : ControllerBase
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         await _projectRepository.DeleteAsync(id, ct);
+        _logger.LogInformation("Loyiha API orqali o'chirildi: {ProjectId}", id);
         return NoContent();
     }
 }

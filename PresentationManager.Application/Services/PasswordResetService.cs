@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 
 namespace PresentationManager.Application.Services;
 
@@ -13,11 +14,18 @@ public sealed class PasswordResetService
     private static readonly TimeSpan CodeLifetime = TimeSpan.FromMinutes(10);
 
     private readonly ConcurrentDictionary<int, (string Code, DateTime ExpiresAtUtc)> _codes = new();
+    private readonly ILogger<PasswordResetService> _logger;
+
+    public PasswordResetService(ILogger<PasswordResetService> logger)
+    {
+        _logger = logger;
+    }
 
     public string GenerateCode(int userId)
     {
         var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
         _codes[userId] = (code, DateTime.UtcNow.Add(CodeLifetime));
+        _logger.LogInformation("Parolni tiklash kodi so'raldi: foydalanuvchi {UserId}", userId);
         return code;
     }
 
@@ -28,9 +36,11 @@ public sealed class PasswordResetService
         if (_codes.TryGetValue(userId, out var entry) && entry.ExpiresAtUtc > DateTime.UtcNow && entry.Code == code)
         {
             _codes.TryRemove(userId, out _);
+            _logger.LogInformation("Parolni tiklash kodi tasdiqlandi: foydalanuvchi {UserId}", userId);
             return true;
         }
 
+        _logger.LogWarning("Parolni tiklash kodi noto'g'ri yoki muddati o'tgan: foydalanuvchi {UserId}", userId);
         return false;
     }
 }

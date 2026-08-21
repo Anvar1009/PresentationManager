@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Dtos;
 using PresentationManager.Application.Interfaces;
 
@@ -20,10 +21,12 @@ namespace PresentationManager.API.Controllers;
 public sealed class UsersController : ControllerBase
 {
     private readonly IUserRepository _userRepository;
+    private readonly ILogger<UsersController> _logger;
 
-    public UsersController(IUserRepository userRepository)
+    public UsersController(IUserRepository userRepository, ILogger<UsersController> logger)
     {
         _userRepository = userRepository;
+        _logger = logger;
     }
 
     /// <summary>Null only if the JWT is somehow missing its NameIdentifier claim - every token
@@ -76,6 +79,7 @@ public sealed class UsersController : ControllerBase
     public async Task<ActionResult<UserDto>> Add(CreateUserRequest request, CancellationToken ct)
     {
         var created = await _userRepository.AddAsync(request.ToEntity(), ct);
+        _logger.LogInformation("Foydalanuvchi yaratildi: {UserId} - {Username} ({Role})", created.Id, created.Username, created.Role);
         return Ok(UserDto.FromEntity(created));
     }
 
@@ -105,10 +109,12 @@ public sealed class UsersController : ControllerBase
     {
         if (!IsSelfOrSuperAdmin(id))
         {
+            _logger.LogWarning("Ruxsatsiz parol o'zgartirish urinishi: maqsad {UserId}, so'rovchi {CurrentUserId}", id, CurrentUserId);
             return Forbid();
         }
 
         await _userRepository.SetPasswordAsync(id, request.PasswordHash, ct);
+        _logger.LogInformation("Parol o'zgartirildi: {UserId}", id);
         return NoContent();
     }
 
@@ -117,10 +123,12 @@ public sealed class UsersController : ControllerBase
     {
         if (!IsSelfOrSuperAdmin(id))
         {
+            _logger.LogWarning("Ruxsatsiz login o'zgartirish urinishi: maqsad {UserId}, so'rovchi {CurrentUserId}", id, CurrentUserId);
             return Forbid();
         }
 
         await _userRepository.SetUsernameAsync(id, request.Username, ct);
+        _logger.LogInformation("Login o'zgartirildi: {UserId} -> {Username}", id, request.Username);
         return NoContent();
     }
 
@@ -129,6 +137,7 @@ public sealed class UsersController : ControllerBase
     public async Task<IActionResult> SetFullName(int id, SetFullNameRequest request, CancellationToken ct)
     {
         await _userRepository.SetFullNameAsync(id, request.FullName, ct);
+        _logger.LogInformation("Foydalanuvchi to'liq ismi o'zgartirildi: {UserId}", id);
         return NoContent();
     }
 
@@ -137,6 +146,7 @@ public sealed class UsersController : ControllerBase
     public async Task<IActionResult> SetRole(int id, SetRoleRequest request, CancellationToken ct)
     {
         await _userRepository.SetRoleAsync(id, request.Role, ct);
+        _logger.LogInformation("Foydalanuvchi roli o'zgartirildi: {UserId} -> {Role}", id, request.Role);
         return NoContent();
     }
 }

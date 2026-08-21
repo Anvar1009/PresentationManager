@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Models;
 using PresentationManager.API.Services;
 using PresentationManager.Application.Common;
@@ -37,13 +38,14 @@ public sealed class AdminController : Controller
     private readonly IPresentationRepository _presentationRepository;
     private readonly IFileStorageService _fileStorageService;
     private readonly TelegramNotifier _telegramNotifier;
+    private readonly ILogger<AdminController> _logger;
 
     public AdminController(
         ProjectService projectService, PresentationQueueService queueService, CriterionService criterionService,
         JudgeService judgeService, PresenterAssignmentService assignmentService, ScoreService scoreService,
         IPresenterRepository presenterRepository, IProjectRepository projectRepository,
         IPresentationRepository presentationRepository, IFileStorageService fileStorageService,
-        TelegramNotifier telegramNotifier)
+        TelegramNotifier telegramNotifier, ILogger<AdminController> logger)
     {
         _projectService = projectService;
         _queueService = queueService;
@@ -56,6 +58,7 @@ public sealed class AdminController : Controller
         _presentationRepository = presentationRepository;
         _fileStorageService = fileStorageService;
         _telegramNotifier = telegramNotifier;
+        _logger = logger;
     }
 
     private int CurrentUserId => int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
@@ -82,9 +85,11 @@ public sealed class AdminController : Controller
             // SetSubmissionDeadline - converted to UTC before storage.
             var deadlineUtc = submissionDeadline is { } local ? DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime() : (DateTime?)null;
             await _projectService.CreateAsync(name, eventStartDate, eventEndDate, eventTime, location, CurrentUserId, deadlineUtc, ct);
+            _logger.LogInformation("Admin loyiha yaratdi: {ProjectName} (yaratuvchi {UserId})", name, CurrentUserId);
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning("Loyiha yaratish rad etildi: {Reason}", ex.Message);
             TempData["Error"] = ex.Message;
         }
 
@@ -131,6 +136,7 @@ public sealed class AdminController : Controller
 
         var deadlineUtc = deadline is { } local ? DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime() : (DateTime?)null;
         await _projectService.SetSubmissionDeadlineAsync(projectId, deadlineUtc, ct);
+        _logger.LogInformation("Taqdimot topshirish muddati o'zgartirildi: loyiha {ProjectId} -> {DeadlineUtc}", projectId, deadlineUtc);
 
         TempData["Success"] = deadlineUtc is null
             ? "Taqdimot topshirish muddati bekor qilindi."
@@ -179,6 +185,7 @@ public sealed class AdminController : Controller
 
         var seconds = Math.Clamp(extraDiscussionMinutes, 0, 60) * 60;
         await _queueService.SetExtraDiscussionTimeAsync(presentationId, seconds, ct);
+        _logger.LogInformation("Qo'shimcha muhokama vaqti o'zgartirildi: taqdimot {PresentationId} -> {Seconds}s", presentationId, seconds);
 
         TempData["Success"] = "Qo'shimcha muhokama vaqti saqlandi.";
         return RedirectToAction(nameof(Presentations), new { projectId });
@@ -264,9 +271,11 @@ public sealed class AdminController : Controller
         try
         {
             await _criterionService.CreateAsync(projectId, name, maxScore, ct);
+            _logger.LogInformation("Baholash mezoni qo'shildi: loyiha {ProjectId} - {Name}", projectId, name);
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning("Baholash mezonini qo'shish rad etildi: {Reason}", ex.Message);
             TempData["Error"] = ex.Message;
         }
 
@@ -283,6 +292,7 @@ public sealed class AdminController : Controller
         }
 
         await _criterionService.DeleteAsync(id, ct);
+        _logger.LogInformation("Baholash mezoni o'chirildi: {CriterionId} (loyiha {ProjectId})", id, projectId);
         return RedirectToAction(nameof(Criteria), new { projectId });
     }
 
@@ -312,6 +322,7 @@ public sealed class AdminController : Controller
         try
         {
             var judge = await _judgeService.AssignAsync(projectId, presenterId, ct);
+            _logger.LogInformation("Admin hakam tayinladi: loyiha {ProjectId}, taqdimotchi {PresenterId}", projectId, presenterId);
 
             // Same server-side push as JudgesController.Add - the JudgeService.JudgeAssigned C# event has no
             // subscriber in this process (only that JSON API controller currently notifies, by calling the
@@ -327,6 +338,7 @@ public sealed class AdminController : Controller
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning("Hakam tayinlash rad etildi: {Reason}", ex.Message);
             TempData["Error"] = ex.Message;
         }
 
@@ -343,6 +355,7 @@ public sealed class AdminController : Controller
         }
 
         await _judgeService.DeleteAsync(id, ct);
+        _logger.LogInformation("Hakam o'chirildi: {JudgeId} (loyiha {ProjectId})", id, projectId);
         return RedirectToAction(nameof(Judges), new { projectId });
     }
 
@@ -383,6 +396,8 @@ public sealed class AdminController : Controller
         try
         {
             var assignment = await _assignmentService.AssignAsync(projectId, presenterId, ct);
+            _logger.LogInformation("Admin taqdimotchini loyihaga biriktirdi: loyiha {ProjectId}, taqdimotchi {PresenterId}",
+                projectId, presenterId);
 
             // Same server-side push as PresenterAssignmentsController.Add - see AssignJudge's own remark
             // above for why this in-process call needs to send the notification itself. Includes the event
@@ -403,6 +418,7 @@ public sealed class AdminController : Controller
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning("Taqdimotchini loyihaga biriktirish rad etildi: {Reason}", ex.Message);
             TempData["Error"] = ex.Message;
         }
 
@@ -419,6 +435,7 @@ public sealed class AdminController : Controller
         }
 
         await _assignmentService.DeleteAsync(id, ct);
+        _logger.LogInformation("Taqdimotchi biriktiruvi o'chirildi: {AssignmentId} (loyiha {ProjectId})", id, projectId);
         return RedirectToAction(nameof(Presenters), new { projectId });
     }
 
@@ -436,7 +453,14 @@ public sealed class AdminController : Controller
             return null;
         }
 
-        return project.CreatedByUserId is int creatorId && creatorId != CurrentUserId ? null : project;
+        if (project.CreatedByUserId is int creatorId && creatorId != CurrentUserId)
+        {
+            _logger.LogWarning(
+                "Admin boshqa admin loyihasiga kirishga urindi: loyiha {ProjectId}, so'rovchi {UserId}", projectId, CurrentUserId);
+            return null;
+        }
+
+        return project;
     }
 
     private async Task<List<Presenter>> GetJudgeCandidatesAsync(int projectId, CancellationToken ct)

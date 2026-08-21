@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 using PresentationManager.Domain.Enums;
@@ -11,15 +12,18 @@ public sealed class PresentationQueueService
     private readonly IPresentationRepository _presentationRepository;
     private readonly IFileStorageService _fileStorageService;
     private readonly IPresenterProjectAssignmentRepository _assignmentRepository;
+    private readonly ILogger<PresentationQueueService> _logger;
 
     public PresentationQueueService(
         IPresentationRepository presentationRepository,
         IFileStorageService fileStorageService,
-        IPresenterProjectAssignmentRepository assignmentRepository)
+        IPresenterProjectAssignmentRepository assignmentRepository,
+        ILogger<PresentationQueueService> logger)
     {
         _presentationRepository = presentationRepository;
         _fileStorageService = fileStorageService;
         _assignmentRepository = assignmentRepository;
+        _logger = logger;
     }
 
     public Task<List<Presentation>> GetAllAsync(int projectId, CancellationToken ct = default) =>
@@ -71,6 +75,9 @@ public sealed class PresentationQueueService
         // presentations (presenterId null - no bot registration to check against) are unaffected.
         if (presenterId is { } id && !await _assignmentRepository.ExistsAsync(projectId, id, ct))
         {
+            _logger.LogWarning(
+                "Taqdimot qo'shishga urinish rad etildi: presenter {PresenterId} loyihaga {ProjectId} biriktirilmagan.",
+                id, projectId);
             throw new InvalidOperationException("Siz bu loyihaga hali biriktirilmagansiz.");
         }
 
@@ -92,7 +99,10 @@ public sealed class PresentationQueueService
             Status = PresentationStatus.Waiting
         };
 
-        return await _presentationRepository.AddAsync(presentation, ct);
+        var created = await _presentationRepository.AddAsync(presentation, ct);
+        _logger.LogInformation("Navbat o'zgardi - taqdimot qo'shildi: {PresentationId} - {Title} (loyiha {ProjectId})",
+            created.Id, created.Title, projectId);
+        return created;
     }
 
     /// <summary>Edits presenter/timing fields. Pass a new <paramref name="sourceFilePath"/> only when the
@@ -121,6 +131,7 @@ public sealed class PresentationQueueService
         }
 
         await _presentationRepository.UpdateAsync(presentation, ct);
+        _logger.LogInformation("Navbat o'zgardi - taqdimot yangilandi: {PresentationId} - {Title}", id, title);
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct = default)
@@ -128,17 +139,22 @@ public sealed class PresentationQueueService
         var presentation = await _presentationRepository.GetByIdAsync(id, ct);
         if (presentation is null)
         {
+            _logger.LogWarning("O'chirish uchun taqdimot topilmadi: {PresentationId}", id);
             return;
         }
 
         await _presentationRepository.DeleteAsync(id, ct);
         await _fileStorageService.DeleteFileAsync(presentation.FilePath, ct);
+        _logger.LogInformation("Navbat o'zgardi - taqdimot o'chirildi: {PresentationId} - {Title}", id, presentation.Title);
     }
 
     /// <summary>Applies a new drag-and-drop order. <paramref name="orderedIds"/> must contain every
     /// presentation Id currently in the queue, in its new display order.</summary>
-    public Task ReorderAsync(IReadOnlyList<int> orderedIds, CancellationToken ct = default) =>
-        _presentationRepository.ReorderAsync(orderedIds, ct);
+    public async Task ReorderAsync(IReadOnlyList<int> orderedIds, CancellationToken ct = default)
+    {
+        await _presentationRepository.ReorderAsync(orderedIds, ct);
+        _logger.LogInformation("Navbat tartibi qo'lda o'zgartirildi: {Count} ta taqdimot", orderedIds.Count);
+    }
 
     /// <summary>"Tartib operatori" role's one action — shuffles a project's presentation order at random and
     /// persists it via <see cref="ReorderAsync"/>. Fisher-Yates, uniform over all permutations.</summary>
@@ -155,6 +171,8 @@ public sealed class PresentationQueueService
         }
 
         await _presentationRepository.ReorderAsync(ids, ct);
+        _logger.LogInformation("Navbat tartibi tasodifiy aralashtirildi: loyiha {ProjectId}, {Count} ta taqdimot",
+            projectId, ids.Count);
     }
 
     /// <summary>Undoes any number of test draws by restoring the "default" order - alphabetical by full name
@@ -172,5 +190,7 @@ public sealed class PresentationQueueService
             .ToList();
 
         await _presentationRepository.ReorderAsync(ids, ct);
+        _logger.LogInformation("Navbat tartibi standart holatga qaytarildi: loyiha {ProjectId}, {Count} ta taqdimot",
+            projectId, ids.Count);
     }
 }

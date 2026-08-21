@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Dtos;
 using PresentationManager.Application.Interfaces;
 
@@ -18,10 +19,12 @@ namespace PresentationManager.API.Controllers;
 public sealed class FilesController : ControllerBase
 {
     private readonly IFileStorageService _fileStorageService;
+    private readonly ILogger<FilesController> _logger;
 
-    public FilesController(IFileStorageService fileStorageService)
+    public FilesController(IFileStorageService fileStorageService, ILogger<FilesController> logger)
     {
         _fileStorageService = fileStorageService;
+        _logger = logger;
     }
 
     [HttpPost]
@@ -30,6 +33,7 @@ public sealed class FilesController : ControllerBase
     {
         if (file is null || file.Length == 0)
         {
+            _logger.LogWarning("Bo'sh fayl bilan yuklashga urinish.");
             return BadRequest("Fayl bo'sh.");
         }
 
@@ -49,7 +53,13 @@ public sealed class FilesController : ControllerBase
             }
 
             var relativePath = await _fileStorageService.SaveFileAsync(tempPath, ct);
+            _logger.LogInformation("Fayl API orqali yuklandi: {RelativePath} ({Size} bayt)", relativePath, file.Length);
             return Ok(new UploadFileResponse(relativePath));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Faylni yuklashda xatolik: {FileName}", file.FileName);
+            throw;
         }
         finally
         {
@@ -62,12 +72,14 @@ public sealed class FilesController : ControllerBase
     {
         if (!IsSafeRelativePath(relativePath))
         {
+            _logger.LogWarning("Xavfsiz bo'lmagan fayl yo'li bilan yuklab olishga urinish: {RelativePath}", relativePath);
             return BadRequest();
         }
 
         var absolutePath = await _fileStorageService.GetAbsolutePathAsync(relativePath, ct);
         if (!System.IO.File.Exists(absolutePath))
         {
+            _logger.LogWarning("Yuklab olish uchun fayl topilmadi: {RelativePath}", relativePath);
             return NotFound();
         }
 
@@ -79,10 +91,12 @@ public sealed class FilesController : ControllerBase
     {
         if (!IsSafeRelativePath(relativePath))
         {
+            _logger.LogWarning("Xavfsiz bo'lmagan fayl yo'li bilan o'chirishga urinish: {RelativePath}", relativePath);
             return BadRequest();
         }
 
         await _fileStorageService.DeleteFileAsync(relativePath, ct);
+        _logger.LogInformation("Fayl API orqali o'chirildi: {RelativePath}", relativePath);
         return NoContent();
     }
 

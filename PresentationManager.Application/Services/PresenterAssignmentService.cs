@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 
@@ -16,15 +17,18 @@ public sealed class PresenterAssignmentService
     private readonly IPresenterProjectAssignmentRepository _assignmentRepository;
     private readonly IPresenterRepository _presenterRepository;
     private readonly IProjectRepository _projectRepository;
+    private readonly ILogger<PresenterAssignmentService> _logger;
 
     public PresenterAssignmentService(
         IPresenterProjectAssignmentRepository assignmentRepository,
         IPresenterRepository presenterRepository,
-        IProjectRepository projectRepository)
+        IProjectRepository projectRepository,
+        ILogger<PresenterAssignmentService> logger)
     {
         _assignmentRepository = assignmentRepository;
         _presenterRepository = presenterRepository;
         _projectRepository = projectRepository;
+        _logger = logger;
     }
 
     public Task<List<PresenterProjectAssignment>> GetByProjectIdAsync(int projectId, CancellationToken ct = default) =>
@@ -56,20 +60,33 @@ public sealed class PresenterAssignmentService
     /// project — called only from the Admin panel (<c>PresenterAssignmentsController.Add</c>).</summary>
     public async Task<PresenterProjectAssignment> AssignAsync(int projectId, int presenterId, CancellationToken ct = default)
     {
-        _ = await _presenterRepository.GetByIdAsync(presenterId, ct)
-            ?? throw new InvalidOperationException("Bu odam topilmadi - avval botga /start bosib ro'yxatdan o'tishi kerak.");
+        var presenter = await _presenterRepository.GetByIdAsync(presenterId, ct);
+        if (presenter is null)
+        {
+            _logger.LogWarning("Presenterni loyihaga biriktirishga urinish rad etildi: presenter {PresenterId} topilmadi.", presenterId);
+            throw new InvalidOperationException("Bu odam topilmadi - avval botga /start bosib ro'yxatdan o'tishi kerak.");
+        }
 
         if (await _assignmentRepository.ExistsAsync(projectId, presenterId, ct))
         {
+            _logger.LogWarning(
+                "Presenterni loyihaga biriktirishga urinish rad etildi: presenter {PresenterId} loyihaga {ProjectId} allaqachon biriktirilgan.",
+                presenterId, projectId);
             throw new InvalidOperationException("Bu odam allaqachon shu loyihaga biriktirilgan.");
         }
 
-        return await _assignmentRepository.AddAsync(new PresenterProjectAssignment
+        var assignment = await _assignmentRepository.AddAsync(new PresenterProjectAssignment
         {
             ProjectId = projectId,
             PresenterId = presenterId
         }, ct);
+        _logger.LogInformation("Presenter loyihaga biriktirildi: presenter {PresenterId} -> loyiha {ProjectId}", presenterId, projectId);
+        return assignment;
     }
 
-    public Task DeleteAsync(int id, CancellationToken ct = default) => _assignmentRepository.DeleteAsync(id, ct);
+    public async Task DeleteAsync(int id, CancellationToken ct = default)
+    {
+        await _assignmentRepository.DeleteAsync(id, ct);
+        _logger.LogInformation("Presenter biriktiruvi bekor qilindi: {AssignmentId}", id);
+    }
 }

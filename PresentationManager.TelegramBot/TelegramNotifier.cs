@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PresentationManager.Application.Interfaces;
 using Telegram.Bot;
@@ -19,12 +19,14 @@ namespace PresentationManager.TelegramBot;
 public sealed class TelegramNotifier : ITelegramSender
 {
     private readonly ITelegramBotClient? _botClient;
+    private readonly ILogger<TelegramNotifier> _logger;
 
     /// <summary>Null when no token is configured - matches <see cref="PresentationBotHostedService"/>'s own
     /// "stay quietly off" behavior instead of requiring the token just to run the desktop app.</summary>
-    public TelegramNotifier(IOptions<PresentationBotOptions> options)
+    public TelegramNotifier(IOptions<PresentationBotOptions> options, ILogger<TelegramNotifier> logger)
     {
         _botClient = string.IsNullOrWhiteSpace(options.Value.Token) ? null : new TelegramBotClient(options.Value.Token);
+        _logger = logger;
     }
 
     /// <summary>Best-effort: returns false rather than throwing if the bot is off or the send itself fails
@@ -33,17 +35,19 @@ public sealed class TelegramNotifier : ITelegramSender
     {
         if (_botClient is not { } botClient)
         {
+            _logger.LogWarning("Telegram xabar yuborilmadi - bot tokeni sozlanmagan (chat {ChatId}).", chatId);
             return false;
         }
 
         try
         {
             await botClient.SendMessage(chatId, text, replyMarkup: replyMarkup, cancellationToken: ct);
+            _logger.LogInformation("Telegram xabar yuborildi: chat {ChatId}", chatId);
             return true;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to send message to chat {chatId}: {ex}");
+            _logger.LogError(ex, "Telegram xabar yuborishda xatolik: chat {ChatId}", chatId);
             return false;
         }
     }

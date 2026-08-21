@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Dtos;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.TelegramBot;
@@ -22,12 +23,16 @@ public sealed class JudgesController : ControllerBase
     private readonly IJudgeRepository _judgeRepository;
     private readonly IProjectRepository _projectRepository;
     private readonly TelegramNotifier _telegramNotifier;
+    private readonly ILogger<JudgesController> _logger;
 
-    public JudgesController(IJudgeRepository judgeRepository, IProjectRepository projectRepository, TelegramNotifier telegramNotifier)
+    public JudgesController(
+        IJudgeRepository judgeRepository, IProjectRepository projectRepository, TelegramNotifier telegramNotifier,
+        ILogger<JudgesController> logger)
     {
         _judgeRepository = judgeRepository;
         _projectRepository = projectRepository;
         _telegramNotifier = telegramNotifier;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -55,6 +60,7 @@ public sealed class JudgesController : ControllerBase
     public async Task<ActionResult<JudgeDto>> Add(JudgeDto request, CancellationToken ct)
     {
         var created = await _judgeRepository.AddAsync(request.ToEntity(), ct);
+        _logger.LogInformation("Hakam qo'shildi: {JudgeId} (loyiha {ProjectId})", created.Id, created.ProjectId);
 
         if (created.TelegramChatId is { } chatId)
         {
@@ -74,6 +80,7 @@ public sealed class JudgesController : ControllerBase
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         await _judgeRepository.DeleteAsync(id, ct);
+        _logger.LogInformation("Hakam o'chirildi: {JudgeId}", id);
         return NoContent();
     }
 }
