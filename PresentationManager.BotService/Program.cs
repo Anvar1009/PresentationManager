@@ -2,12 +2,26 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
 using PresentationManager.Infrastructure.Persistence;
 using PresentationManager.Infrastructure.Repositories;
 using PresentationManager.Infrastructure.Services;
 using PresentationManager.TelegramBot;
+using Serilog;
+
+// Bootstrap logger: catches anything that fails before the real, config-driven logger below is built (a
+// bad Serilog config section itself, etc). Replaced by the "Serilog" appsettings.json section - see
+// UseSerilog below - once configuration is available.
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
+
+try
+{
+    Log.Information("PresentationManager.BotService ishga tushmoqda...");
 
 var builder = Host.CreateDefaultBuilder(args)
     // No-ops when run interactively (e.g. during local testing) - only takes effect when actually launched
@@ -15,6 +29,10 @@ var builder = Host.CreateDefaultBuilder(args)
     // SIGTERM-triggered shutdown on `systemctl stop`, notifying systemd once startup - including the
     // Migrate() call below - has actually finished).
     .UseSystemd()
+    .UseSerilog((context, services, configuration) => configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext())
     .ConfigureAppConfiguration(config =>
     {
         // Real secrets (DB password, Telegram bot token) never live in the committed appsettings.json -
@@ -43,7 +61,8 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddSingleton<IJudgeRepository, JudgeRepository>();
         services.AddSingleton<IScoreRepository, ScoreRepository>();
         services.AddSingleton<IPresenterProjectAssignmentRepository, PresenterProjectAssignmentRepository>();
-        services.AddSingleton<IFileStorageService>(_ => new FileStorageService(ResolveStorageRoot(context.Configuration)));
+        services.AddSingleton<IFileStorageService>(sp =>
+            new FileStorageService(ResolveStorageRoot(context.Configuration), sp.GetRequiredService<ILogger<FileStorageService>>()));
 
         services.AddSingleton<ProjectService>();
         services.AddSingleton<UserService>();
@@ -77,6 +96,19 @@ using (var db = host.Services.GetRequiredService<IDbContextFactory<AppDbContext>
 host.Services.GetRequiredService<JudgeAssignmentNotifier>();
 
 await host.RunAsync();
+}
+catch (Exception ex)
+{
+    // Mirrors PresentationManager.API/Program.cs's own fatal-startup handling - a bad connection string or
+    // unreachable DB now lands in the log file (see appsettings.json's "Serilog" section) in addition to
+    // failing the systemd unit visibly via `systemctl status`/journald.
+    Log.Fatal(ex, "PresentationManager.BotService ishga tushirishda halokatli xatolik yuz berdi.");
+    throw;
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 
 /// <summary>Same resolution rule as PresentationManager.UI/Program.cs's ResolveStorageRoot - both processes
 /// must be pointed at the same "Storage:RootPath" for a shared deployment to work. No AppData concept exists

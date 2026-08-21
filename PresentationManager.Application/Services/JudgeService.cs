@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 
@@ -14,13 +15,15 @@ public sealed class JudgeService
 {
     private readonly IJudgeRepository _judgeRepository;
     private readonly IPresenterRepository _presenterRepository;
+    private readonly ILogger<JudgeService> _logger;
 
     public event Action<Judge>? JudgeAssigned;
 
-    public JudgeService(IJudgeRepository judgeRepository, IPresenterRepository presenterRepository)
+    public JudgeService(IJudgeRepository judgeRepository, IPresenterRepository presenterRepository, ILogger<JudgeService> logger)
     {
         _judgeRepository = judgeRepository;
         _presenterRepository = presenterRepository;
+        _logger = logger;
     }
 
     public Task<List<Judge>> GetAllAsync(CancellationToken ct = default) => _judgeRepository.GetAllAsync(ct);
@@ -32,17 +35,25 @@ public sealed class JudgeService
     /// <see cref="Presenter"/> row created when they shared their contact) as a judge for a project.</summary>
     public async Task<Judge> AssignAsync(int projectId, int presenterId, CancellationToken ct = default)
     {
-        var presenter = await _presenterRepository.GetByIdAsync(presenterId, ct)
-            ?? throw new InvalidOperationException("Bu odam topilmadi - avval botga /start bosib ro'yxatdan o'tishi kerak.");
+        var presenter = await _presenterRepository.GetByIdAsync(presenterId, ct);
+        if (presenter is null)
+        {
+            _logger.LogWarning("Hakam tayinlashga urinish rad etildi: presenter {PresenterId} topilmadi.", presenterId);
+            throw new InvalidOperationException("Bu odam topilmadi - avval botga /start bosib ro'yxatdan o'tishi kerak.");
+        }
 
         if (string.IsNullOrWhiteSpace(presenter.PhoneNumber))
         {
+            _logger.LogWarning("Hakam tayinlashga urinish rad etildi: presenter {PresenterId} telefon raqami yo'q.", presenterId);
             throw new InvalidOperationException("Bu odamning telefon raqami yo'q.");
         }
 
         var existingForProject = await _judgeRepository.GetByProjectIdAsync(projectId, ct);
         if (existingForProject.Any(j => j.TelegramChatId == presenter.TelegramChatId))
         {
+            _logger.LogWarning(
+                "Hakam tayinlashga urinish rad etildi: presenter {PresenterId} loyihaga {ProjectId} allaqachon hakam.",
+                presenterId, projectId);
             throw new InvalidOperationException("Bu odam allaqachon shu loyihaga hakam etib tayinlangan.");
         }
 
@@ -54,11 +65,17 @@ public sealed class JudgeService
             TelegramChatId = presenter.TelegramChatId
         }, ct);
 
+        _logger.LogInformation("Hakam tayinlandi: {JudgeId} - {FullName} (loyiha {ProjectId})",
+            judge.Id, judge.FullName, projectId);
         JudgeAssigned?.Invoke(judge);
         return judge;
     }
 
-    public Task DeleteAsync(int id, CancellationToken ct = default) => _judgeRepository.DeleteAsync(id, ct);
+    public async Task DeleteAsync(int id, CancellationToken ct = default)
+    {
+        await _judgeRepository.DeleteAsync(id, ct);
+        _logger.LogInformation("Hakam o'chirildi: {JudgeId}", id);
+    }
 
     public Task<List<Judge>> GetLinkedAssignmentsByChatIdAsync(long telegramChatId, CancellationToken ct = default) =>
         _judgeRepository.GetByTelegramChatIdAsync(telegramChatId, ct);

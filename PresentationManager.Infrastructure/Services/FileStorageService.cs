@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 
 namespace PresentationManager.Infrastructure.Services;
@@ -11,13 +12,18 @@ namespace PresentationManager.Infrastructure.Services;
 public class FileStorageService : IFileStorageService
 {
     private readonly string _storageRoot;
+    private readonly ILogger<FileStorageService>? _logger;
 
     /// <param name="storageRoot">Absolute path to the folder files are stored under — the caller decides
     /// where that lives (e.g. per-user AppData, so a published single-file .exe has nothing else to sit
     /// alongside it) rather than this service assuming it's always next to the executable.</param>
-    public FileStorageService(string storageRoot)
+    /// <param name="logger">Optional (not resolved via constructor DI - PresentationManager.API/BotService
+    /// both build this via a factory delegate so they can pass <paramref name="storageRoot"/>, so this is
+    /// passed through explicitly from that same factory instead of relying on activation).</param>
+    public FileStorageService(string storageRoot, ILogger<FileStorageService>? logger = null)
     {
         _storageRoot = storageRoot;
+        _logger = logger;
         Directory.CreateDirectory(_storageRoot);
     }
 
@@ -35,12 +41,21 @@ public class FileStorageService : IFileStorageService
         var relativePath = $"{dayFolderName}/{fileName}";
         var destinationPath = Path.Combine(_storageRoot, dayFolderName, fileName);
 
-        await using (var source = File.OpenRead(sourceFilePath))
-        await using (var destination = File.Create(destinationPath))
+        try
         {
-            await source.CopyToAsync(destination, ct);
+            await using (var source = File.OpenRead(sourceFilePath))
+            await using (var destination = File.Create(destinationPath))
+            {
+                await source.CopyToAsync(destination, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Faylni saqlashda xatolik: {SourcePath} -> {RelativePath}", sourceFilePath, relativePath);
+            throw;
         }
 
+        _logger?.LogInformation("Fayl saqlandi: {RelativePath}", relativePath);
         return relativePath;
     }
 
@@ -50,6 +65,11 @@ public class FileStorageService : IFileStorageService
         if (File.Exists(fullPath))
         {
             File.Delete(fullPath);
+            _logger?.LogInformation("Fayl o'chirildi: {RelativePath}", relativePath);
+        }
+        else
+        {
+            _logger?.LogWarning("O'chirish uchun fayl topilmadi: {RelativePath}", relativePath);
         }
 
         return Task.CompletedTask;

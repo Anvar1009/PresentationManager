@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 
 namespace PresentationManager.Application.Services;
@@ -14,16 +15,19 @@ public sealed class AdminLinkService
     private static readonly TimeSpan TokenLifetime = TimeSpan.FromMinutes(15);
 
     private readonly IUserRepository _userRepository;
+    private readonly ILogger<AdminLinkService> _logger;
 
-    public AdminLinkService(IUserRepository userRepository)
+    public AdminLinkService(IUserRepository userRepository, ILogger<AdminLinkService> logger)
     {
         _userRepository = userRepository;
+        _logger = logger;
     }
 
     public async Task<string> CreateTokenAsync(int userId, CancellationToken ct = default)
     {
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(12));
         await _userRepository.SetTelegramLinkTokenAsync(userId, token, DateTime.UtcNow.Add(TokenLifetime), ct);
+        _logger.LogInformation("Telegram ulash tokeni yaratildi: foydalanuvchi {UserId}", userId);
         return token;
     }
 
@@ -34,10 +38,12 @@ public sealed class AdminLinkService
         var user = await _userRepository.GetByTelegramLinkTokenAsync(token, ct);
         if (user is null || user.TelegramLinkTokenExpiresAtUtc is not { } expiresAtUtc || expiresAtUtc <= DateTime.UtcNow)
         {
+            _logger.LogWarning("Telegram ulash tokeni yaroqsiz yoki muddati o'tgan.");
             return null;
         }
 
         await _userRepository.SetTelegramLinkTokenAsync(user.Id, null, null, ct);
+        _logger.LogInformation("Telegram akkaunt ulandi: foydalanuvchi {UserId}", user.Id);
         return user.Id;
     }
 }

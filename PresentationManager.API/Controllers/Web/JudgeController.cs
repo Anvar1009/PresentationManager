@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Models;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Entities;
@@ -20,16 +21,18 @@ public sealed class JudgeController : Controller
     private readonly PresentationQueueService _queueService;
     private readonly CriterionService _criterionService;
     private readonly ScoreService _scoreService;
+    private readonly ILogger<JudgeController> _logger;
 
     public JudgeController(
         JudgeService judgeService, ProjectService projectService, PresentationQueueService queueService,
-        CriterionService criterionService, ScoreService scoreService)
+        CriterionService criterionService, ScoreService scoreService, ILogger<JudgeController> logger)
     {
         _judgeService = judgeService;
         _projectService = projectService;
         _queueService = queueService;
         _criterionService = criterionService;
         _scoreService = scoreService;
+        _logger = logger;
     }
 
     /// <summary>Null only if this Judge account somehow has no TelegramChatId - see UserRole.Judge's own
@@ -112,9 +115,13 @@ public sealed class JudgeController : Controller
         try
         {
             await _scoreService.UpsertAsync(presentationId, assignment.Id, criterionId, value, ct);
+            _logger.LogInformation(
+                "Hakam bahosi qo'yildi: taqdimot {PresentationId}, hakam {JudgeAssignmentId}, mezon {CriterionId} = {Value}",
+                presentationId, judgeAssignmentId, criterionId, value);
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning("Hakam bahosi rad etildi: {Reason}", ex.Message);
             TempData["Error"] = ex.Message;
         }
 
@@ -131,7 +138,14 @@ public sealed class JudgeController : Controller
     private async Task<Judge?> FindAssignmentAsync(int judgeAssignmentId, CancellationToken ct)
     {
         var assignments = await GetAssignmentsAsync(ct);
-        return assignments.FirstOrDefault(a => a.Id == judgeAssignmentId);
+        var assignment = assignments.FirstOrDefault(a => a.Id == judgeAssignmentId);
+        if (assignment is null)
+        {
+            _logger.LogWarning(
+                "Hakam o'ziga tegishli bo'lmagan biriktiruvga kirishga urindi: {JudgeAssignmentId}", judgeAssignmentId);
+        }
+
+        return assignment;
     }
 
     private async Task<Presentation?> FindPresentationAsync(int projectId, int presentationId, CancellationToken ct)

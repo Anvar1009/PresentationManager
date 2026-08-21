@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 using PresentationManager.Infrastructure.Persistence;
@@ -8,10 +9,12 @@ namespace PresentationManager.Infrastructure.Repositories;
 public class SettingsRepository : ISettingsRepository
 {
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly ILogger<SettingsRepository> _logger;
 
-    public SettingsRepository(IDbContextFactory<AppDbContext> dbFactory)
+    public SettingsRepository(IDbContextFactory<AppDbContext> dbFactory, ILogger<SettingsRepository> logger)
     {
         _dbFactory = dbFactory;
+        _logger = logger;
     }
 
     public async Task<AppSettings> GetAsync(CancellationToken ct = default)
@@ -25,7 +28,17 @@ public class SettingsRepository : ISettingsRepository
 
         settings = new AppSettings { Id = 1 };
         db.Settings.Add(settings);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Sozlamalarni birinchi marta yaratishda xatolik");
+            throw;
+        }
+
+        _logger.LogInformation("Standart sozlamalar yaratildi");
         return settings;
     }
 
@@ -43,6 +56,16 @@ public class SettingsRepository : ISettingsRepository
             db.Settings.Add(settings);
         }
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Sozlamalarni saqlashda xatolik");
+            throw;
+        }
+
+        _logger.LogInformation("Sozlamalar saqlandi");
     }
 }

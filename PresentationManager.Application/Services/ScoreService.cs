@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 
@@ -10,13 +11,16 @@ public sealed class ScoreService
     private readonly IScoreRepository _scoreRepository;
     private readonly ICriterionRepository _criterionRepository;
     private readonly IPresentationRepository _presentationRepository;
+    private readonly ILogger<ScoreService> _logger;
 
     public ScoreService(
-        IScoreRepository scoreRepository, ICriterionRepository criterionRepository, IPresentationRepository presentationRepository)
+        IScoreRepository scoreRepository, ICriterionRepository criterionRepository, IPresentationRepository presentationRepository,
+        ILogger<ScoreService> logger)
     {
         _scoreRepository = scoreRepository;
         _criterionRepository = criterionRepository;
         _presentationRepository = presentationRepository;
+        _logger = logger;
     }
 
     public Task<List<Score>> GetAllAsync(CancellationToken ct = default) => _scoreRepository.GetAllAsync(ct);
@@ -26,15 +30,25 @@ public sealed class ScoreService
     public async Task UpsertAsync(int presentationId, int judgeId, int criterionId, int value, CancellationToken ct = default)
     {
         var criteria = await _criterionRepository.GetAllAsync(ct);
-        var criterion = criteria.FirstOrDefault(c => c.Id == criterionId)
-            ?? throw new InvalidOperationException("Mezon topilmadi.");
+        var criterion = criteria.FirstOrDefault(c => c.Id == criterionId);
+        if (criterion is null)
+        {
+            _logger.LogWarning("Baholashga urinish rad etildi: mezon {CriterionId} topilmadi.", criterionId);
+            throw new InvalidOperationException("Mezon topilmadi.");
+        }
 
         if (value < 0 || value > criterion.MaxScore)
         {
+            _logger.LogWarning(
+                "Baholashga urinish rad etildi: ball {Value} ruxsat etilgan oraliqdan tashqarida (0-{MaxScore}).",
+                value, criterion.MaxScore);
             throw new InvalidOperationException($"Ball 0 dan {criterion.MaxScore} gacha bo'lishi kerak.");
         }
 
         await _scoreRepository.UpsertAsync(presentationId, judgeId, criterionId, value, ct);
+        _logger.LogInformation(
+            "Ball qo'yildi: taqdimot {PresentationId}, hakam {JudgeId}, mezon {CriterionId} = {Value}",
+            presentationId, judgeId, criterionId, value);
     }
 
     /// <summary>This judge's own scores for one presentation, keyed by criterion — used by the bot to show

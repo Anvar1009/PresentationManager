@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 using PresentationManager.Infrastructure.Persistence;
@@ -8,10 +9,12 @@ namespace PresentationManager.Infrastructure.Repositories;
 public class ScoreRepository : IScoreRepository
 {
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly ILogger<ScoreRepository> _logger;
 
-    public ScoreRepository(IDbContextFactory<AppDbContext> dbFactory)
+    public ScoreRepository(IDbContextFactory<AppDbContext> dbFactory, ILogger<ScoreRepository> logger)
     {
         _dbFactory = dbFactory;
+        _logger = logger;
     }
 
     public async Task<List<Score>> GetAllAsync(CancellationToken ct = default)
@@ -58,6 +61,18 @@ public class ScoreRepository : IScoreRepository
             existing.UpdatedAt = DateTime.UtcNow;
         }
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Bahoni saqlashda xatolik: taqdimot {PresentationId}, hakam {JudgeId}, mezon {CriterionId}",
+                presentationId, judgeId, criterionId);
+            throw;
+        }
+
+        _logger.LogInformation("Baho qo'yildi: taqdimot {PresentationId}, hakam {JudgeId}, mezon {CriterionId} = {Value}",
+            presentationId, judgeId, criterionId, value);
     }
 }

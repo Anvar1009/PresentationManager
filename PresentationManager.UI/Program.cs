@@ -12,6 +12,7 @@ using PresentationManager.Domain.Enums;
 using PresentationManager.TelegramBot;
 using PresentationManager.UI.Forms;
 using PresentationManager.UI.Services;
+using Serilog;
 
 namespace PresentationManager.UI;
 
@@ -23,6 +24,22 @@ static class Program
     [STAThread]
     static void Main()
     {
+        // Rolling daily file next to the existing crash.log (%LocalAppData%\PresentationManager\logs) - set
+        // up before anything else runs so a failure anywhere below (including before the host is built) is
+        // on record. Log.Logger is a static ambient logger; RunApplication's host picks this exact instance
+        // up via .UseSerilog() below (see its own remarks) rather than building a second, separate one.
+        var logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PresentationManager", "logs");
+        Directory.CreateDirectory(logDir);
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Information()
+            .Enrich.FromLogContext()
+            .WriteTo.File(
+                Path.Combine(logDir, "ui-.log"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 14,
+                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext}{NewLine}{Message:lj}{NewLine}{Exception}")
+            .CreateLogger();
+
         // Without this, an exception thrown before the WinForms message loop starts pumping (anything here
         // up through host.Build()/the health check) - or on a background thread, or one WinForms' own loop
         // catches internally - has no managed catch site anywhere in this app. .NET 8 WinForms responds to
@@ -37,11 +54,16 @@ static class Program
 
         try
         {
+            Log.Information("PresentationManager.UI ishga tushmoqda...");
             RunApplication();
         }
         catch (Exception ex)
         {
             ReportFatalError(ex);
+        }
+        finally
+        {
+            Log.CloseAndFlush();
         }
     }
 
@@ -75,6 +97,11 @@ static class Program
         EnsureAppDataConfigSeeded(appDataConfigPath);
 
         using var host = Host.CreateDefaultBuilder()
+            // No logger factory delegate passed - this adopts the exact Log.Logger instance Main already
+            // built above (file sink under %LocalAppData%\PresentationManager\logs), so every DI-injected
+            // ILogger<T> (TimerEngine, PresentationSessionController, PresentationQueueService, ...) writes
+            // to the same file as the pre-host startup/crash logging, instead of standing up a second logger.
+            .UseSerilog()
             .ConfigureAppConfiguration(config =>
             {
                 config.AddJsonFile(appDataConfigPath, optional: true, reloadOnChange: false);
@@ -291,6 +318,12 @@ static class Program
         var logPath = "%LocalAppData%\\PresentationManager\\crash.log";
         try
         {
+            // Structured copy in the same rolling Serilog file every other log line goes to (ui-*.log) -
+            // kept alongside, not instead of, the plain-text crash.log below: crash.log is what this app has
+            // always told an end user to go find and send back, and changing that path/format now would
+            // silently break that existing instruction for anyone still following an old screenshot of it.
+            Log.Fatal(ex, "Qayta tiklab bo'lmaydigan xatolik: dastur yopilmoqda.");
+
             var logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PresentationManager");
             Directory.CreateDirectory(logDir);
             logPath = Path.Combine(logDir, "crash.log");

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 using PresentationManager.Infrastructure.Persistence;
@@ -8,10 +9,12 @@ namespace PresentationManager.Infrastructure.Repositories;
 public class PresenterProjectAssignmentRepository : IPresenterProjectAssignmentRepository
 {
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly ILogger<PresenterProjectAssignmentRepository> _logger;
 
-    public PresenterProjectAssignmentRepository(IDbContextFactory<AppDbContext> dbFactory)
+    public PresenterProjectAssignmentRepository(IDbContextFactory<AppDbContext> dbFactory, ILogger<PresenterProjectAssignmentRepository> logger)
     {
         _dbFactory = dbFactory;
+        _logger = logger;
     }
 
     public async Task<List<PresenterProjectAssignment>> GetByProjectIdAsync(int projectId, CancellationToken ct = default)
@@ -37,7 +40,19 @@ public class PresenterProjectAssignmentRepository : IPresenterProjectAssignmentR
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         db.PresenterProjectAssignments.Add(assignment);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Biriktirishni saqlashda xatolik: taqdimotchi {PresenterId}, loyiha {ProjectId}",
+                assignment.PresenterId, assignment.ProjectId);
+            throw;
+        }
+
+        _logger.LogInformation("Taqdimotchi loyihaga biriktirildi: {PresenterId} -> loyiha {ProjectId}",
+            assignment.PresenterId, assignment.ProjectId);
         return assignment;
     }
 
@@ -47,10 +62,21 @@ public class PresenterProjectAssignmentRepository : IPresenterProjectAssignmentR
         var entity = await db.PresenterProjectAssignments.FindAsync([id], ct);
         if (entity is null)
         {
+            _logger.LogWarning("O'chirish uchun biriktirish topilmadi: {AssignmentId}", id);
             return;
         }
 
         db.PresenterProjectAssignments.Remove(entity);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Biriktirishni o'chirishda xatolik: {AssignmentId}", id);
+            throw;
+        }
+
+        _logger.LogInformation("Biriktirish o'chirildi: {AssignmentId}", id);
     }
 }

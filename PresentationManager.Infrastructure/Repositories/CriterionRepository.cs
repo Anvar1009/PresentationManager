@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 using PresentationManager.Infrastructure.Persistence;
@@ -8,10 +9,12 @@ namespace PresentationManager.Infrastructure.Repositories;
 public class CriterionRepository : ICriterionRepository
 {
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly ILogger<CriterionRepository> _logger;
 
-    public CriterionRepository(IDbContextFactory<AppDbContext> dbFactory)
+    public CriterionRepository(IDbContextFactory<AppDbContext> dbFactory, ILogger<CriterionRepository> logger)
     {
         _dbFactory = dbFactory;
+        _logger = logger;
     }
 
     public async Task<List<EvaluationCriterion>> GetAllAsync(CancellationToken ct = default)
@@ -33,7 +36,17 @@ public class CriterionRepository : ICriterionRepository
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         db.EvaluationCriteria.Add(criterion);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Mezonni saqlashda xatolik: loyiha {ProjectId}", criterion.ProjectId);
+            throw;
+        }
+
+        _logger.LogInformation("Mezon bazaga yozildi: {CriterionId} - loyiha {ProjectId}", criterion.Id, criterion.ProjectId);
         return criterion;
     }
 
@@ -43,10 +56,21 @@ public class CriterionRepository : ICriterionRepository
         var entity = await db.EvaluationCriteria.FindAsync([id], ct);
         if (entity is null)
         {
+            _logger.LogWarning("O'chirish uchun mezon topilmadi: {CriterionId}", id);
             return;
         }
 
         db.EvaluationCriteria.Remove(entity);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Mezonni o'chirishda xatolik: {CriterionId}", id);
+            throw;
+        }
+
+        _logger.LogInformation("Mezon bazadan o'chirildi: {CriterionId}", id);
     }
 }

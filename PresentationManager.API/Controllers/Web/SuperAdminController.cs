@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Models;
 using PresentationManager.API.Services;
 using PresentationManager.Application.Common;
@@ -28,13 +29,14 @@ public sealed class SuperAdminController : Controller
     private readonly IPresentationRepository _presentationRepository;
     private readonly IHistoryRepository _historyRepository;
     private readonly IFileStorageService _fileStorageService;
+    private readonly ILogger<SuperAdminController> _logger;
 
     public SuperAdminController(
         ProjectService projectService, PresentationQueueService queueService, UserService userService,
         JudgeService judgeService, CriterionService criterionService, ScoreService scoreService,
         IPresenterRepository presenterRepository, IProjectRepository projectRepository,
         IPresentationRepository presentationRepository, IHistoryRepository historyRepository,
-        IFileStorageService fileStorageService)
+        IFileStorageService fileStorageService, ILogger<SuperAdminController> logger)
     {
         _projectService = projectService;
         _queueService = queueService;
@@ -47,6 +49,7 @@ public sealed class SuperAdminController : Controller
         _presentationRepository = presentationRepository;
         _historyRepository = historyRepository;
         _fileStorageService = fileStorageService;
+        _logger = logger;
     }
 
     public async Task<IActionResult> Dashboard(CancellationToken ct)
@@ -225,9 +228,11 @@ public sealed class SuperAdminController : Controller
         try
         {
             await _userService.CreateAsync(model.Username, model.Password, model.FullName, model.Role, ct);
+            _logger.LogInformation("SuperAdmin foydalanuvchi yaratdi: {Username} ({Role})", model.Username, model.Role);
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning("Foydalanuvchi yaratish rad etildi: {Reason}", ex.Message);
             ModelState.AddModelError(string.Empty, ex.Message);
             return View(model);
         }
@@ -261,9 +266,11 @@ public sealed class SuperAdminController : Controller
         {
             await _userService.EditUserAsync(model.Id, model.Username, model.FullName, model.NewPassword, ct);
             await _userService.ChangeRoleAsync(model.Id, model.Role, ct);
+            _logger.LogInformation("SuperAdmin foydalanuvchini yangiladi: {UserId}", model.Id);
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning("Foydalanuvchini yangilash rad etildi: {UserId}, {Reason}", model.Id, ex.Message);
             ModelState.AddModelError(string.Empty, ex.Message);
             return View(model);
         }
@@ -333,6 +340,7 @@ public sealed class SuperAdminController : Controller
     public async Task<IActionResult> ClearHistory(CancellationToken ct)
     {
         await _historyRepository.ClearAllAsync(ct);
+        _logger.LogWarning("SuperAdmin jurnalni to'liq tozaladi.");
         TempData["Success"] = "Jurnal tozalandi.";
         return RedirectToAction(nameof(Jurnal));
     }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Dtos;
 using PresentationManager.Application.Interfaces;
 
@@ -17,10 +18,12 @@ namespace PresentationManager.API.Controllers;
 public sealed class PresentationsController : ControllerBase
 {
     private readonly IPresentationRepository _presentationRepository;
+    private readonly ILogger<PresentationsController> _logger;
 
-    public PresentationsController(IPresentationRepository presentationRepository)
+    public PresentationsController(IPresentationRepository presentationRepository, ILogger<PresentationsController> logger)
     {
         _presentationRepository = presentationRepository;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -62,6 +65,7 @@ public sealed class PresentationsController : ControllerBase
     public async Task<ActionResult<PresentationDto>> Add(PresentationDto request, CancellationToken ct)
     {
         var created = await _presentationRepository.AddAsync(request.ToEntity(), ct);
+        _logger.LogInformation("Taqdimot API orqali qo'shildi: {PresentationId} - {Title}", created.Id, created.Title);
         return Ok(PresentationDto.FromEntity(created));
     }
 
@@ -71,6 +75,7 @@ public sealed class PresentationsController : ControllerBase
         var entity = request.ToEntity();
         entity.Id = id;
         await _presentationRepository.UpdateAsync(entity, ct);
+        _logger.LogInformation("Taqdimot API orqali yangilandi: {PresentationId}", id);
         return NoContent();
     }
 
@@ -78,6 +83,7 @@ public sealed class PresentationsController : ControllerBase
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         await _presentationRepository.DeleteAsync(id, ct);
+        _logger.LogInformation("Taqdimot API orqali o'chirildi: {PresentationId}", id);
         return NoContent();
     }
 
@@ -85,6 +91,7 @@ public sealed class PresentationsController : ControllerBase
     public async Task<IActionResult> Reorder(ReorderPresentationsRequest request, CancellationToken ct)
     {
         await _presentationRepository.ReorderAsync(request.OrderedPresentationIds, ct);
+        _logger.LogInformation("Navbat tartibi API orqali o'zgartirildi: {Count} ta taqdimot", request.OrderedPresentationIds.Count);
         return NoContent();
     }
 }

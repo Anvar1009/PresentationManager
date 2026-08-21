@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Dtos;
 using PresentationManager.Application.Interfaces;
 
@@ -12,10 +13,12 @@ namespace PresentationManager.API.Controllers;
 public sealed class ScoresController : ControllerBase
 {
     private readonly IScoreRepository _scoreRepository;
+    private readonly ILogger<ScoresController> _logger;
 
-    public ScoresController(IScoreRepository scoreRepository)
+    public ScoresController(IScoreRepository scoreRepository, ILogger<ScoresController> logger)
     {
         _scoreRepository = scoreRepository;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -49,6 +52,9 @@ public sealed class ScoresController : ControllerBase
     public async Task<IActionResult> Upsert(UpsertScoreRequest request, CancellationToken ct)
     {
         await _scoreRepository.UpsertAsync(request.PresentationId, request.JudgeId, request.CriterionId, request.Value, ct);
+        _logger.LogInformation(
+            "Baho qo'yildi: taqdimot {PresentationId}, hakam {JudgeId}, mezon {CriterionId} = {Value}",
+            request.PresentationId, request.JudgeId, request.CriterionId, request.Value);
         return NoContent();
     }
 }

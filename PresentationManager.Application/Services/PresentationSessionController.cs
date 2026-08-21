@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 using PresentationManager.Domain.Enums;
@@ -14,6 +15,7 @@ public sealed class PresentationSessionController
     private readonly IPresentationRepository _presentationRepository;
     private readonly IHistoryRepository _historyRepository;
     private readonly TimerEngine _timer;
+    private readonly ILogger<PresentationSessionController> _logger;
 
     private List<Presentation> _queue = [];
     private int _currentIndex = -1;
@@ -21,11 +23,13 @@ public sealed class PresentationSessionController
     public PresentationSessionController(
         IPresentationRepository presentationRepository,
         IHistoryRepository historyRepository,
-        TimerEngine timer)
+        TimerEngine timer,
+        ILogger<PresentationSessionController> logger)
     {
         _presentationRepository = presentationRepository;
         _historyRepository = historyRepository;
         _timer = timer;
+        _logger = logger;
         _timer.Tick += (remaining) =>
         {
             if (_timer.Mode == TimerMode.Presentation) PresentationRemainingSeconds = remaining;
@@ -303,10 +307,11 @@ public sealed class PresentationSessionController
                     "Qo'shimcha muhokamaga o'tildi (boshlanishi kutilmoqda)", CancellationToken.None);
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Timer callbacks run detached from any caller that could observe a fault; a failed DB write
-            // here must not crash the whole app mid-presentation.
+            // here must not crash the whole app mid-presentation - but it must not vanish silently either.
+            _logger.LogError(ex, "Taymer tugashini qayta ishlashda xatolik: {Mode}", expiredMode);
         }
     }
 
@@ -383,6 +388,12 @@ public sealed class PresentationSessionController
         {
             return;
         }
+
+        // Mirrors this event into the operational Serilog log (see CLAUDE.md's "Logging" requirements -
+        // Presentation/Discussion Started/Finished) in addition to the HistoryEntry persisted below, which
+        // is this app's own user-facing "Tarix" audit trail, not an operator/ops-facing log file.
+        _logger.LogInformation("[{EventType}] Taqdimot {PresentationId} ({Title}): {Message}",
+            eventType, CurrentPresentation.Id, CurrentPresentation.Title, message);
 
         await _historyRepository.AddAsync(new HistoryEntry
         {

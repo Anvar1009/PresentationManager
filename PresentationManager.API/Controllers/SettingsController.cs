@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Dtos;
 using PresentationManager.Application.Interfaces;
 
@@ -12,10 +13,12 @@ namespace PresentationManager.API.Controllers;
 public sealed class SettingsController : ControllerBase
 {
     private readonly ISettingsRepository _settingsRepository;
+    private readonly ILogger<SettingsController> _logger;
 
-    public SettingsController(ISettingsRepository settingsRepository)
+    public SettingsController(ISettingsRepository settingsRepository, ILogger<SettingsController> logger)
     {
         _settingsRepository = settingsRepository;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -26,6 +29,7 @@ public sealed class SettingsController : ControllerBase
     public async Task<IActionResult> Save(SettingsDto request, CancellationToken ct)
     {
         await _settingsRepository.SaveAsync(request.ToEntity(), ct);
+        _logger.LogInformation("Tizim sozlamalari yangilandi.");
         return NoContent();
     }
 }

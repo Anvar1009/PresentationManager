@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Domain.Entities;
 using PresentationManager.Domain.Enums;
@@ -9,10 +10,12 @@ namespace PresentationManager.Infrastructure.Repositories;
 public class UserRepository : IUserRepository
 {
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly ILogger<UserRepository> _logger;
 
-    public UserRepository(IDbContextFactory<AppDbContext> dbFactory)
+    public UserRepository(IDbContextFactory<AppDbContext> dbFactory, ILogger<UserRepository> logger)
     {
         _dbFactory = dbFactory;
+        _logger = logger;
     }
 
     public async Task<List<User>> GetAllAsync(CancellationToken ct = default)
@@ -51,7 +54,17 @@ public class UserRepository : IUserRepository
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         db.Users.Add(user);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Foydalanuvchini saqlashda xatolik: {Username}", user.Username);
+            throw;
+        }
+
+        _logger.LogInformation("Foydalanuvchi yaratildi: {UserId} - {Username} ({Role})", user.Id, user.Username, user.Role);
         return user;
     }
 
@@ -67,12 +80,14 @@ public class UserRepository : IUserRepository
         var user = await db.Users.FindAsync([userId], ct);
         if (user is null)
         {
+            _logger.LogWarning("Telegram bog'lash uchun foydalanuvchi topilmadi: {UserId}", userId);
             return;
         }
 
         user.TelegramChatId = telegramChatId;
         user.TelegramUsername = telegramUsername;
         await db.SaveChangesAsync(ct);
+        _logger.LogInformation("Foydalanuvchi {UserId} Telegramga bog'landi: {TelegramChatId}", userId, telegramChatId);
     }
 
     public async Task SetTelegramLinkTokenAsync(int userId, string? token, DateTime? expiresAtUtc, CancellationToken ct = default)
@@ -81,6 +96,7 @@ public class UserRepository : IUserRepository
         var user = await db.Users.FindAsync([userId], ct);
         if (user is null)
         {
+            _logger.LogWarning("Bog'lash tokenini o'rnatish uchun foydalanuvchi topilmadi: {UserId}", userId);
             return;
         }
 
@@ -101,11 +117,14 @@ public class UserRepository : IUserRepository
         var user = await db.Users.FindAsync([userId], ct);
         if (user is null)
         {
+            _logger.LogWarning("Parol o'rnatish uchun foydalanuvchi topilmadi: {UserId}", userId);
             return;
         }
 
         user.PasswordHash = passwordHash;
         await db.SaveChangesAsync(ct);
+        // Never log the hash/plaintext itself - only that a change happened and for whom.
+        _logger.LogInformation("Foydalanuvchi {UserId} paroli o'zgartirildi", userId);
     }
 
     public async Task SetUsernameAsync(int userId, string username, CancellationToken ct = default)
@@ -114,11 +133,13 @@ public class UserRepository : IUserRepository
         var user = await db.Users.FindAsync([userId], ct);
         if (user is null)
         {
+            _logger.LogWarning("Login o'rnatish uchun foydalanuvchi topilmadi: {UserId}", userId);
             return;
         }
 
         user.Username = username;
         await db.SaveChangesAsync(ct);
+        _logger.LogInformation("Foydalanuvchi {UserId} logini o'zgartirildi: {Username}", userId, username);
     }
 
     public async Task SetFullNameAsync(int userId, string fullName, CancellationToken ct = default)
@@ -127,6 +148,7 @@ public class UserRepository : IUserRepository
         var user = await db.Users.FindAsync([userId], ct);
         if (user is null)
         {
+            _logger.LogWarning("F.I.Sh. o'rnatish uchun foydalanuvchi topilmadi: {UserId}", userId);
             return;
         }
 
@@ -140,10 +162,12 @@ public class UserRepository : IUserRepository
         var user = await db.Users.FindAsync([userId], ct);
         if (user is null)
         {
+            _logger.LogWarning("Rol o'rnatish uchun foydalanuvchi topilmadi: {UserId}", userId);
             return;
         }
 
         user.Role = role;
         await db.SaveChangesAsync(ct);
+        _logger.LogInformation("Foydalanuvchi {UserId} roli o'zgartirildi: {Role}", userId, role);
     }
 }

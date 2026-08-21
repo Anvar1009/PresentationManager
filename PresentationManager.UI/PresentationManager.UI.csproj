@@ -71,6 +71,10 @@
     <!-- System.Media.SoundPlayer (used elsewhere in AlarmSoundService for the operator's own custom .wav)
          only understands .wav - NAudio is what actually decodes/plays the bundled .mp3 countdown bell. -->
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.1" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
 
   <ItemGroup>

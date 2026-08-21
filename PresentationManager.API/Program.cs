@@ -12,12 +12,33 @@ using PresentationManager.Infrastructure.Persistence;
 using PresentationManager.Infrastructure.Repositories;
 using PresentationManager.Infrastructure.Services;
 using PresentationManager.TelegramBot;
+using Serilog;
+
+// Bootstrap logger: catches anything that fails before the real, config-driven logger below is built
+// (e.g. a bad Serilog config section itself) - see the Log.Logger reassignment inside UseSerilog further
+// down, which is what actually serves the app once builder.Build() runs.
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
+
+try
+{
+    Log.Information("PresentationManager.API ishga tushmoqda...");
 
 var builder = WebApplication.CreateBuilder(args);
 
 // No-op when run interactively (e.g. `dotnet run` during local testing) - only takes effect when actually
 // launched by systemd. Same reasoning as PresentationManager.BotService/Program.cs.
 builder.Host.UseSystemd();
+
+// Replaces the bootstrap logger above with the real, appsettings.json-driven one ("Serilog" section - see
+// PresentationManager.API/appsettings.json) once configuration is available. ReadFrom.Services lets any
+// registered Serilog enricher/sink resolve DI services; not used yet but keeps this future-proof.
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext());
 
 // Same appsettings.json -> appsettings.Local.json (gitignored) -> env vars layering as BotService/UI: real
 // secrets (DB password, Jwt:Secret) never live in the committed appsettings.json.
@@ -38,7 +59,8 @@ builder.Services.AddSingleton<ICriterionRepository, CriterionRepository>();
 builder.Services.AddSingleton<IJudgeRepository, JudgeRepository>();
 builder.Services.AddSingleton<IScoreRepository, ScoreRepository>();
 builder.Services.AddSingleton<IPresenterProjectAssignmentRepository, PresenterProjectAssignmentRepository>();
-builder.Services.AddSingleton<IFileStorageService>(_ => new FileStorageService(ResolveStorageRoot(builder.Configuration)));
+builder.Services.AddSingleton<IFileStorageService>(sp =>
+    new FileStorageService(ResolveStorageRoot(builder.Configuration), sp.GetRequiredService<ILogger<FileStorageService>>()));
 
 builder.Services.AddSingleton<ProjectService>();
 builder.Services.AddSingleton<UserService>();
@@ -130,6 +152,28 @@ using (var scope = app.Services.CreateScope())
     await scope.ServiceProvider.GetRequiredService<UserService>().EnsureDefaultSuperAdminAsync();
 }
 
+// Structured request log (method, path, status code, elapsed ms) for every request - the per-controller
+// logging added elsewhere covers *why* an action did what it did, this covers *that it happened at all*,
+// including for endpoints (health check, static files) with no logging of their own.
+app.UseSerilogRequestLogging();
+
+// Last-resort net: logs any exception an action/middleware itself didn't already log, then lets ASP.NET
+// Core's own developer/production error page (or an [ApiController]'s default ProblemDetails response for
+// an unhandled exception) run exactly as before - this never changes the response, only guarantees it's on
+// record. Placed first so it wraps every middleware/endpoint below it.
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Ushlanmagan xatolik: {Method} {Path}", context.Request.Method, context.Request.Path);
+        throw;
+    }
+});
+
 app.UseStaticFiles();
 
 // The MVC web surface's only realistic source of a bare 400 is [ValidateAntiForgeryToken] rejecting a stale
@@ -168,6 +212,20 @@ app.MapHub<PresentationOrderHub>("/hubs/presentation-order");
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
+}
+catch (Exception ex)
+{
+    // Mirrors PresentationManager.BotService/Program.cs and PresentationManager.UI/Program.cs's own
+    // fatal-startup handling - a bad connection string, missing Jwt:Secret, etc. now lands in the log file
+    // (see appsettings.json's "Serilog" section) instead of only ever being visible via `systemctl status`/
+    // journald in the moment it happened.
+    Log.Fatal(ex, "PresentationManager.API ishga tushirishda halokatli xatolik yuz berdi.");
+    throw;
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 
 /// <summary>Resolves where uploaded presentation files are stored - identical convention to
 /// PresentationManager.BotService/Program.cs's ResolveStorageRoot (a configured "Storage:RootPath", or a

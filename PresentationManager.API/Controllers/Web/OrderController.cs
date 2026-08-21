@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Hubs;
 using PresentationManager.API.Models;
 using PresentationManager.Application.Services;
@@ -21,12 +22,16 @@ public sealed class OrderController : Controller
     private readonly ProjectService _projectService;
     private readonly PresentationQueueService _queueService;
     private readonly IHubContext<PresentationOrderHub> _orderHub;
+    private readonly ILogger<OrderController> _logger;
 
-    public OrderController(ProjectService projectService, PresentationQueueService queueService, IHubContext<PresentationOrderHub> orderHub)
+    public OrderController(
+        ProjectService projectService, PresentationQueueService queueService, IHubContext<PresentationOrderHub> orderHub,
+        ILogger<OrderController> logger)
     {
         _projectService = projectService;
         _queueService = queueService;
         _orderHub = orderHub;
+        _logger = logger;
     }
 
     public async Task<IActionResult> Dashboard(CancellationToken ct)
@@ -73,6 +78,7 @@ public sealed class OrderController : Controller
         await _queueService.RandomizeOrderAsync(projectId, ct);
         await _projectService.SetOrderRandomizedAtAsync(projectId, DateTime.UtcNow, ct);
         await _orderHub.Clients.All.SendAsync("OrderRandomized", projectId, ct);
+        _logger.LogInformation("Tartib operatori navbatni tasodifiy tartibladi: loyiha {ProjectId}", projectId);
 
         // The stage view (order-shuffle.js) submits this via fetch instead of a normal form post, so its
         // fullscreen presentation never gets torn down by a full page navigation - see that script for the
@@ -98,6 +104,7 @@ public sealed class OrderController : Controller
         await _queueService.ResetOrderAsync(projectId, ct);
         await _projectService.SetOrderRandomizedAtAsync(projectId, null, ct);
         await _orderHub.Clients.All.SendAsync("OrderRandomized", projectId, ct);
+        _logger.LogInformation("Tartib operatori navbatni asl holatiga qaytardi: loyiha {ProjectId}", projectId);
 
         if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
         {

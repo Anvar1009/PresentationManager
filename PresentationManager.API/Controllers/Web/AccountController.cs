@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Models;
 using PresentationManager.Application.Services;
 using PresentationManager.Domain.Enums;
@@ -21,10 +22,12 @@ public sealed class AccountController : Controller
         [UserRole.Judge, UserRole.OrderOperator, UserRole.Admin, UserRole.SuperAdmin];
 
     private readonly UserService _userService;
+    private readonly ILogger<AccountController> _logger;
 
-    public AccountController(UserService userService)
+    public AccountController(UserService userService, ILogger<AccountController> logger)
     {
         _userService = userService;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -42,9 +45,12 @@ public sealed class AccountController : Controller
         var user = await _userService.ValidateLoginAsync(model.Username, model.Password, ct);
         if (user is null || !WebRoles.Contains(user.Role))
         {
+            _logger.LogWarning("Veb kirish muvaffaqiyatsiz: {Username}", model.Username);
             ModelState.AddModelError(string.Empty, "Login yoki parol noto'g'ri.");
             return View(model);
         }
+
+        _logger.LogInformation("Veb kirish muvaffaqiyatli: {Username} ({Role})", user.Username, user.Role);
 
         var claims = new List<Claim>
         {
@@ -78,6 +84,7 @@ public sealed class AccountController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
     {
+        _logger.LogInformation("Veb chiqish: {Username}", User.Identity?.Name);
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return RedirectToAction("Index", "Home");
     }

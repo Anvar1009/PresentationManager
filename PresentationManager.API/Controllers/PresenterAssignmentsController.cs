@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PresentationManager.API.Dtos;
 using PresentationManager.Application.Interfaces;
 using PresentationManager.Application.Services;
@@ -24,19 +25,22 @@ public sealed class PresenterAssignmentsController : ControllerBase
     private readonly IPresenterRepository _presenterRepository;
     private readonly IProjectRepository _projectRepository;
     private readonly TelegramNotifier _telegramNotifier;
+    private readonly ILogger<PresenterAssignmentsController> _logger;
 
     public PresenterAssignmentsController(
         IPresenterProjectAssignmentRepository assignmentRepository,
         PresenterAssignmentService assignmentService,
         IPresenterRepository presenterRepository,
         IProjectRepository projectRepository,
-        TelegramNotifier telegramNotifier)
+        TelegramNotifier telegramNotifier,
+        ILogger<PresenterAssignmentsController> logger)
     {
         _assignmentRepository = assignmentRepository;
         _assignmentService = assignmentService;
         _presenterRepository = presenterRepository;
         _projectRepository = projectRepository;
         _telegramNotifier = telegramNotifier;
+        _logger = logger;
     }
 
     [HttpGet("project/{projectId:int}")]
@@ -59,6 +63,8 @@ public sealed class PresenterAssignmentsController : ControllerBase
         try
         {
             var created = await _assignmentService.AssignAsync(request.ProjectId, request.PresenterId, ct);
+            _logger.LogInformation("Taqdimotchi loyihaga biriktirildi: presenter {PresenterId} -> loyiha {ProjectId}",
+                request.PresenterId, request.ProjectId);
 
             var presenter = await _presenterRepository.GetByIdAsync(created.PresenterId, ct);
             if (presenter?.TelegramChatId is { } chatId)
@@ -84,6 +90,7 @@ public sealed class PresenterAssignmentsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning("Taqdimotchini loyihaga biriktirish rad etildi: {Reason}", ex.Message);
             return BadRequest(ex.Message);
         }
     }
@@ -92,6 +99,7 @@ public sealed class PresenterAssignmentsController : ControllerBase
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         await _assignmentService.DeleteAsync(id, ct);
+        _logger.LogInformation("Taqdimotchi biriktiruvi o'chirildi: {AssignmentId}", id);
         return NoContent();
     }
 }
