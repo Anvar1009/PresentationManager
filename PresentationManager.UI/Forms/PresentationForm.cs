@@ -222,18 +222,41 @@ public sealed class PresentationForm : Form
         Hide();
     }
 
-    /// <summary>Escape is handled here (Form-level command key) rather than a plain KeyDown handler because
-    /// once the embedded WebView2 control (<see cref="ContentHost"/>) has keyboard focus — which it takes
-    /// for itself on every navigation, see <see cref="PdfSlideDisplayService"/> — a regular KeyDown on the
-    /// Form never fires; the browser process consumes the key first. ProcessCmdKey (with <see cref="Form.KeyPreview"/>
-    /// enabled) intercepts at the Form before that happens, so Escape reliably gets the operator back to
-    /// AdminForm no matter what's currently showing or has focus.</summary>
+    /// <summary>Escape, and - only while a PDF is the active slide - page navigation, are handled here
+    /// (Form-level command key) rather than a plain KeyDown handler because once the embedded WebView2
+    /// control (<see cref="ContentHost"/>) has keyboard focus — which it takes for itself on every
+    /// navigation, see <see cref="PdfSlideDisplayService"/> — a regular KeyDown on the Form never fires; the
+    /// browser process consumes the key first. ProcessCmdKey (with <see cref="Form.KeyPreview"/> enabled)
+    /// intercepts at the Form before that happens, so both reliably work no matter what's currently showing
+    /// or has focus.
+    ///
+    /// The page-navigation keys mirror a physical presentation clicker's own PowerPoint-oriented defaults
+    /// (Right/Down/PageDown/Space to advance, Left/Up/PageUp to go back) - a live PPTX slideshow already
+    /// handles these correctly on its own (real PowerPoint owns keyboard focus for that window directly, so
+    /// this Form's message loop never even sees them), but Chromium's built-in PDF viewer treats the very
+    /// same keys as a partial scroll instead of a discrete next-page jump when left to its own built-in
+    /// handling - intercepting them here and driving <see cref="PdfSlideDisplayService"/> explicitly by page
+    /// number is what makes the clicker jump one whole page at a time for a PDF too.</summary>
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (keyData == Keys.Escape)
         {
             ReturnToAdminRequested?.Invoke();
             return true;
+        }
+
+        if (_activeDisplayService == _pdfDisplayService)
+        {
+            switch (keyData)
+            {
+                case Keys.Right or Keys.Down or Keys.PageDown or Keys.Space:
+                    _ = _pdfDisplayService.NextPageAsync();
+                    return true;
+
+                case Keys.Left or Keys.Up or Keys.PageUp:
+                    _ = _pdfDisplayService.PreviousPageAsync();
+                    return true;
+            }
         }
 
         return base.ProcessCmdKey(ref msg, keyData);

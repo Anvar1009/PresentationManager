@@ -33,6 +33,9 @@ public sealed class PdfSlideDisplayService : ISlideDisplayService
     private readonly Panel _hostPanel;
     private WebView2? _webView;
     private bool _open;
+    private string? _currentFilePath;
+    private int _currentPage = 1;
+    private int _totalPages = 1;
 
     public PdfSlideDisplayService(Panel hostPanel)
     {
@@ -52,6 +55,21 @@ public sealed class PdfSlideDisplayService : ISlideDisplayService
         if (!File.Exists(absoluteFilePath))
         {
             throw new FileNotFoundException("Slayd fayli topilmadi.", absoluteFilePath);
+        }
+
+        _currentFilePath = absoluteFilePath;
+        _currentPage = 1;
+        try
+        {
+            _totalPages = PDFtoImage.Conversion.GetPageCount(await File.ReadAllBytesAsync(absoluteFilePath, ct));
+        }
+        catch
+        {
+            // A page count is only needed to clamp NextPageAsync/PreviousPageAsync - if it can't be read for
+            // some reason, falling back to "effectively unbounded" still lets paging work (Chromium's own
+            // viewer clamps an out-of-range #page= to the last real page on its own), just without a precise
+            // upper bound from this service's own side.
+            _totalPages = int.MaxValue;
         }
 
         var isFirstCreate = _webView is null;
@@ -88,7 +106,7 @@ public sealed class PdfSlideDisplayService : ISlideDisplayService
         // "call it and hope" approach) is what actually catches a failed load instead of silently leaving
         // the operator on a black panel with no error anywhere.
         var completed = await WithTimeoutAsync(
-            NavigateAndWaitAsync(new Uri(absoluteFilePath).AbsoluteUri + "#toolbar=0&navpanes=0&view=FitH"),
+            NavigateAndWaitAsync(BuildPageUrl(absoluteFilePath, _currentPage)),
             "Slaydni ochish vaqti tugadi. Qaytadan urinib ko'ring.");
         if (!completed.IsSuccess)
         {
@@ -139,6 +157,38 @@ public sealed class PdfSlideDisplayService : ISlideDisplayService
         _webView!.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
         _webView.CoreWebView2.Navigate(url);
         return tcs.Task;
+    }
+
+    /// <summary>Adobe's classic "open parameters" fragment (the same subset Chromium's built-in PDF viewer
+    /// partially honors): FitH fits the page to the viewer's width, toolbar=0/navpanes=0 hide the
+    /// print/zoom/sidebar chrome, and page=N jumps straight to that page. Re-navigating with a new page=N on
+    /// every clicker press (see <see cref="NextPageAsync"/>/<see cref="PreviousPageAsync"/>) is what actually
+    /// makes a physical clicker's Page Down/Right Arrow advance one whole slide at a time - left to its own
+    /// built-in keyboard handling, Chromium's viewer treats those same keys as a partial-scroll instead
+    /// (there is no "single page, discrete jump" layout mode reachable through the URL fragment alone).</summary>
+    private static string BuildPageUrl(string absoluteFilePath, int page) =>
+        new Uri(absoluteFilePath).AbsoluteUri + $"#page={page}&toolbar=0&navpanes=0&view=FitH";
+
+    /// <summary>Jumps forward exactly one page - the clicker-driven replacement for relying on Chromium's own
+    /// Page Down handling (see <see cref="BuildPageUrl"/>). No-ops once already on the last known page (or
+    /// silently if nothing is open yet) rather than re-navigating to the same place.</summary>
+    public Task NextPageAsync(CancellationToken ct = default) => GoToPageAsync(_currentPage + 1, ct);
+
+    /// <summary>The Page Up/Left Arrow counterpart to <see cref="NextPageAsync"/>.</summary>
+    public Task PreviousPageAsync(CancellationToken ct = default) => GoToPageAsync(_currentPage - 1, ct);
+
+    private async Task GoToPageAsync(int page, CancellationToken ct)
+    {
+        page = Math.Clamp(page, 1, _totalPages);
+        if (!_open || _webView?.CoreWebView2 is null || _currentFilePath is null || page == _currentPage)
+        {
+            return;
+        }
+
+        _currentPage = page;
+        await WithTimeoutAsync(
+            NavigateAndWaitAsync(BuildPageUrl(_currentFilePath, _currentPage)),
+            "Sahifani o'tkazish vaqti tugadi. Qaytadan urinib ko'ring.");
     }
 
     public Task ShowAsync(CancellationToken ct = default)
