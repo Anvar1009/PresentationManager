@@ -77,14 +77,16 @@ public sealed class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateProject(
         string name, DateOnly eventStartDate, DateOnly eventEndDate, TimeOnly? eventTime, string? location,
-        DateTime? submissionDeadline, CancellationToken ct)
+        DateTime? submissionDeadline, int? extraDiscussionMinutes, CancellationToken ct)
     {
         try
         {
             // Naive local wall-clock value from <input type="datetime-local">, same treatment as
             // SetSubmissionDeadline - converted to UTC before storage.
             var deadlineUtc = submissionDeadline is { } local ? DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime() : (DateTime?)null;
-            await _projectService.CreateAsync(name, eventStartDate, eventEndDate, eventTime, location, CurrentUserId, deadlineUtc, ct);
+            var extraDiscussionTimeSeconds = Math.Max(0, extraDiscussionMinutes ?? 0) * 60;
+            await _projectService.CreateAsync(
+                name, eventStartDate, eventEndDate, eventTime, location, CurrentUserId, deadlineUtc, extraDiscussionTimeSeconds, ct);
             _logger.LogInformation("Admin loyiha yaratdi: {ProjectName} (yaratuvchi {UserId})", name, CurrentUserId);
         }
         catch (InvalidOperationException ex)

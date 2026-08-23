@@ -24,6 +24,16 @@ public class Project
     /// <c>PresentationBotHostedService.HandleDocumentAsync</c>.</summary>
     public DateTime? SubmissionDeadline { get; set; }
 
+    /// <summary>The extra discussion time every presentation in this project gets, in seconds - set once
+    /// here at project creation rather than per presentation, so every presenter's discussion runs on the
+    /// same standard extension instead of whatever value happened to be typed in when their file was added.
+    /// 0 means no extra time (the discussion phase ends exactly as it did before this field existed). Copied
+    /// onto <see cref="Presentation.ExtraDiscussionTimeSeconds"/> at the moment each presentation is created
+    /// (desktop "Yangi taqdimot" and the Telegram Mini App upload both read it from here now - see
+    /// <c>PresentationManager.Application.Services.PresenterUploadService.SubmitAsync</c> - rather than
+    /// asking for it again).</summary>
+    public int ExtraDiscussionTimeSeconds { get; set; } = 0;
+
     /// <summary>The Admin who created this project - null for projects created before this field existed, or
     /// created from the Operator's own "Loyihalar" dialog (<see cref="Enums.UserRole.Operator"/> accounts have
     /// no creator-scoped project list, unlike Admin's). Used to scope each Admin's "Loyihalar" dropdown to

@@ -243,6 +243,16 @@ public sealed class AdminForm : Form
     /// once it closes, mirroring <see cref="OnProjectsClick"/>'s reconciliation.</summary>
     private async void OnPresentationsClick()
     {
+        // Paused for the whole dialog (not just around ShowDialog's return) - a WinForms modal dialog still
+        // pumps this form's own WM_TIMER messages on the same UI thread, so _botPollTimer's every-5-second
+        // tick (OnBotPollTick -> ReloadQueueAsync -> PresentationChanged -> RefreshQueueList/RefreshCurrentPanel,
+        // including a PowerPoint COM thumbnail re-render in UpdatePreviewAsync) kept firing right through
+        // "Yangi taqdimot"/"Tahrirlash"'s own nested modal, repeatedly stealing keyboard focus away from
+        // whatever the operator was mid-sentence typing into (FullName/Title) every time it ticked - see
+        // PresentationEditForm's Ism-familya/Sarlavha fields. Restarted in `finally` so a missed bot
+        // submission during this window still shows up on the very next tick once the dialog closes, exactly
+        // as before.
+        _botPollTimer.Stop();
         try
         {
             using var dialog = new PresentationManagementForm(_queueService, _projectService);
@@ -254,6 +264,10 @@ public sealed class AdminForm : Form
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Taqdimotlarda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _botPollTimer.Start();
         }
     }
 

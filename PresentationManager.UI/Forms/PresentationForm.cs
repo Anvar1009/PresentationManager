@@ -17,16 +17,18 @@ namespace PresentationManager.UI.Forms;
 /// </summary>
 public sealed class PresentationForm : Form
 {
-    /// <summary>Final stretch of either timer (10, 9, 8, ... 1) where every second gets its own short beep
-    /// plus a synchronized gold/red blink — see <see cref="HandleWarningState"/>. The expiry alarm at 0 is
-    /// separate — see <see cref="PlayFinalAlarm"/>.</summary>
+    /// <summary>Final stretch of either timer (10, 9, 8, ... 1) with a synchronized gold/red blink - see
+    /// <see cref="HandleWarningState"/>. The alarm sound itself only covers the shorter
+    /// <see cref="AlarmSoundSeconds"/> window right at the end, not this whole stretch.</summary>
     private const int WarningThresholdSeconds = 10;
 
-    /// <summary>Once remaining time drops to this many seconds, the bundled countdown bell
-    /// (<see cref="IAlarmSoundService.PlayCountdownBell"/>) rings once, on top of the per-second tick
-    /// <see cref="HandleWarningState"/> already plays for the whole <see cref="WarningThresholdSeconds"/>
-    /// window - a clearer, louder "time's almost up" signal for just this final stretch.</summary>
-    private const int CountdownBellSeconds = 7;
+    /// <summary>The alarm sound starts the moment remaining time drops to this many seconds and is force-
+    /// stopped the instant the countdown hits 00:00 (see <see cref="OnTimerExpiredAsync"/>) - regardless of
+    /// how long the operator's configured sound file (or the bundled fallback bell) actually runs, so it
+    /// never keeps ringing past expiry. Previously this only rang a single short bell a few seconds early,
+    /// then played a SEPARATE, potentially much longer alarm at 00:00 with nothing to cut it off - which is
+    /// exactly what made the "end of timer" signal drag on.</summary>
+    private const int AlarmSoundSeconds = 3;
 
     private readonly PresentationSessionController _session;
     private readonly PdfSlideDisplayService _pdfDisplayService;
@@ -57,11 +59,11 @@ public sealed class PresentationForm : Form
 
     private bool _slideOpen;
 
-    /// <summary>Guards <see cref="CountdownBellSeconds"/> so the bell rings exactly once per countdown pass
+    /// <summary>Guards <see cref="AlarmSoundSeconds"/> so the alarm starts exactly once per countdown pass
     /// through that mark, not every second like the regular tick - re-armed in <see cref="HandleWarningState"/>
     /// whenever remaining time is back above <see cref="WarningThresholdSeconds"/> (a fresh timer start, or a
-    /// pause/resume that never actually reached the bell), so the next presentation's/phase's own countdown
-    /// still gets its own ring.</summary>
+    /// pause/resume that never actually reached it), so the next presentation's/phase's own countdown still
+    /// gets its own alarm.</summary>
     private bool _countdownBellArmed = true;
 
     /// <summary>Raised when the operator presses Escape on this screen — the only way back to
@@ -348,7 +350,11 @@ public sealed class PresentationForm : Form
     private async Task OnTimerExpiredAsync(TimerMode mode)
     {
         StartBlink();
-        await PlayFinalAlarm();
+        // Cuts off whatever HandleWarningState started ringing at AlarmSoundSeconds - the whole point of
+        // that early start is so the alarm is already mid-ring right as the countdown hits zero, instead of
+        // a fresh (and potentially much longer) sound only starting here. A no-op if AlarmEnabled was off or
+        // the sound already finished naturally within the 3-second window on its own.
+        _alarmSoundService.Stop();
 
         var settings = await _settingsRepository.GetAsync();
 
@@ -368,17 +374,18 @@ public sealed class PresentationForm : Form
     }
 
     /// <summary>Drives the last <see cref="WarningThresholdSeconds"/> seconds of either timer: a gold/red
-    /// blink, plus the bundled countdown bell once <see cref="CountdownBellSeconds"/> is reached. Kept
-    /// deliberately separate from <see cref="UpdateTimerDisplay"/> (which runs first and sets the milder
-    /// 60s/30s color tiers) so this one urgent-countdown concern doesn't get tangled up with the routine
-    /// "what does the clock say right now" concern. No per-second tick sound here (there used to be one,
-    /// Windows' own system "Asterisk" ding) - the bell is the one and only audible signal for this whole
-    /// window now, not layered on top of an old system sound.</summary>
+    /// blink for the whole stretch, plus starting the alarm sound once <see cref="AlarmSoundSeconds"/> is
+    /// reached (stopped exactly at 00:00 - see <see cref="OnTimerExpiredAsync"/>). Kept deliberately separate
+    /// from <see cref="UpdateTimerDisplay"/> (which runs first and sets the milder 60s/30s color tiers) so
+    /// this one urgent-countdown concern doesn't get tangled up with the routine "what does the clock say
+    /// right now" concern. No per-second tick sound here (there used to be one, Windows' own system
+    /// "Asterisk" ding) - the alarm is the one and only audible signal for this whole window now, not layered
+    /// on top of an old system sound.</summary>
     private void HandleWarningState(int remainingSeconds)
     {
         if (remainingSeconds > WarningThresholdSeconds)
         {
-            // Comfortably outside the warning window - re-arm so the next pass through CountdownBellSeconds
+            // Comfortably outside the warning window - re-arm so the next pass through AlarmSoundSeconds
             // (this timer resuming from a pause, or the next presentation/phase entirely) rings again.
             _countdownBellArmed = true;
             return;
@@ -393,30 +400,19 @@ public sealed class PresentationForm : Form
         _timerLabel.ForeColor = blinkColor;
         _miniTimerLabel.ForeColor = blinkColor;
 
-        if (remainingSeconds <= CountdownBellSeconds && _countdownBellArmed)
+        if (remainingSeconds <= AlarmSoundSeconds && _countdownBellArmed)
         {
             _countdownBellArmed = false;
-            _ = PlayCountdownBellSound();
+            _ = StartAlarmSoundAsync();
         }
     }
 
-    /// <summary>Rings the bundled countdown bell once <see cref="CountdownBellSeconds"/> is reached - see
-    /// <see cref="HandleWarningState"/> for the once-per-countdown guard.</summary>
-    private async Task PlayCountdownBellSound()
-    {
-        var settings = await _settingsRepository.GetAsync();
-        if (settings.AlarmEnabled)
-        {
-            _alarmSoundService.PlayCountdownBell();
-        }
-    }
-
-    /// <summary>Longer, more insistent alarm for the moment the countdown actually reaches 00:00 — fired
-    /// once from <see cref="OnTimerExpiredAsync"/>, distinct from the countdown bell <see cref="HandleWarningState"/>
-    /// already rang on the way here. Plays an operator-configured custom sound if Settings has one, otherwise
-    /// falls back to this same bundled bell rather than an old Windows system beep - see
-    /// <see cref="IAlarmSoundService.Play"/>.</summary>
-    private async Task PlayFinalAlarm()
+    /// <summary>Starts the alarm sound the moment <see cref="AlarmSoundSeconds"/> is reached - plays an
+    /// operator-configured custom sound if Settings has one, otherwise the bundled countdown bell (never an
+    /// old Windows system beep - see <see cref="IAlarmSoundService.Play"/>). Left ringing until
+    /// <see cref="OnTimerExpiredAsync"/> force-stops it exactly at 00:00, however long the sound file itself
+    /// actually runs - see <see cref="HandleWarningState"/> for the once-per-countdown guard.</summary>
+    private async Task StartAlarmSoundAsync()
     {
         var settings = await _settingsRepository.GetAsync();
         if (settings.AlarmEnabled)
@@ -425,18 +421,20 @@ public sealed class PresentationForm : Form
         }
     }
 
-    /// <summary>Bottom-left placement for <see cref="_miniTimerLabel"/> — sized to its own content with no
-    /// backing bar behind it, floating directly over <see cref="ContentHost"/>. <see cref="_miniTimerCaptionLabel"/>
-    /// is centered directly above the mini timer's digits (rather than sharing their left edge) so the badge
-    /// reads as attached to the clock beneath it, whether or not it's actually visible right now.</summary>
+    /// <summary>Top-right placement for <see cref="_miniTimerLabel"/> — sized to its own content with no
+    /// backing bar behind it, floating directly over <see cref="ContentHost"/>. Was bottom-left before, but a
+    /// live PowerPoint slideshow's own on-screen controls/taskbar-adjacent chrome can cover that corner,
+    /// making the countdown unreadable - the top-right corner stays clear of that. <see cref="_miniTimerCaptionLabel"/>
+    /// is centered directly below the mini timer's digits (rather than sharing their left edge) so the badge
+    /// reads as attached to the clock above it, whether or not it's actually visible right now.</summary>
     private void PositionOverlayControls()
     {
         const int margin = 24;
         const int captionGap = 10;
-        _miniTimerLabel.Location = new Point(margin, ClientSize.Height - _miniTimerLabel.Height - margin);
+        _miniTimerLabel.Location = new Point(ClientSize.Width - _miniTimerLabel.Width - margin, margin);
         _miniTimerCaptionLabel.Location = new Point(
             _miniTimerLabel.Left + (_miniTimerLabel.Width - _miniTimerCaptionLabel.Width) / 2,
-            _miniTimerLabel.Top - _miniTimerCaptionLabel.Height - captionGap);
+            _miniTimerLabel.Bottom + captionGap);
     }
 
     private void RunOnUiThread(Action action)

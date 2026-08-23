@@ -344,6 +344,9 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.Property<TimeOnly?>("EventTime")
                         .HasColumnType("time without time zone");
 
+                    b.Property<int>("ExtraDiscussionTimeSeconds")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Location")
                         .HasColumnType("text");
 

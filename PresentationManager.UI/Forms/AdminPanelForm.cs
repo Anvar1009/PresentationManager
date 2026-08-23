@@ -492,7 +492,7 @@ public sealed class AdminPanelForm : Form
         {
             var created = await _projectService.CreateAsync(
                 dialog.ProjectName, dialog.EventStartDate, dialog.EventEndDate, dialog.EventTime, dialog.Location,
-                _currentUserId);
+                _currentUserId, extraDiscussionTimeSeconds: dialog.ExtraDiscussionTimeSeconds);
 
             // LoadProjectsAsync on its own restores whatever was selected *before* this call - with nothing
             // selected yet (very first project) or a different one already active, the newly created project

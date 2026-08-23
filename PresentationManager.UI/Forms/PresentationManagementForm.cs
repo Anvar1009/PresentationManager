@@ -177,9 +177,13 @@ public sealed class PresentationManagementForm : Form
 
         try
         {
+            // Extra discussion time comes from the project itself now (set once at project creation, see
+            // ProjectEditForm), not from this dialog - every presenter in the same project gets the same
+            // standard extension instead of whatever got typed in per submission.
+            var extraDiscussionTimeSeconds = _projects.FirstOrDefault(p => p.Id == dialog.ProjectId)?.ExtraDiscussionTimeSeconds ?? 0;
             await _queueService.AddAsync(
                 dialog.ProjectId!.Value, dialog.FullName, dialog.Title, dialog.SelectedFilePath!, dialog.SelectedFileType!.Value,
-                dialog.PresentationTimeSeconds, dialog.DiscussionTimeSeconds, dialog.ExtraDiscussionTimeSeconds);
+                dialog.PresentationTimeSeconds, dialog.DiscussionTimeSeconds, extraDiscussionTimeSeconds);
             await RefreshAsync();
         }
         catch (Exception ex)
@@ -205,9 +209,12 @@ public sealed class PresentationManagementForm : Form
 
         try
         {
+            // Left exactly as it already was - this dialog no longer asks for it (see PresentationEditForm),
+            // and editing unrelated fields (title, file, ...) must not silently reset a value the project's
+            // own default or a since-made web override already set.
             await _queueService.UpdateAsync(
                 selected.Id, dialog.FullName, dialog.Title, dialog.PresentationTimeSeconds, dialog.DiscussionTimeSeconds,
-                dialog.ExtraDiscussionTimeSeconds, dialog.SelectedFilePath, dialog.SelectedFileType);
+                selected.ExtraDiscussionTimeSeconds, dialog.SelectedFilePath, dialog.SelectedFileType);
             await RefreshAsync();
         }
         catch (Exception ex)

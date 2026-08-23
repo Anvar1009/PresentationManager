@@ -58,6 +58,11 @@ else
             <input type="datetime-local" id="submissionDeadline" name="submissionDeadline" />
             <div class="field-hint">Botda taqdimot yuborish/yangilash shu vaqtdan keyin yopiladi. Keyinroq "Qatnashchilar" sahifasidan ham o'zgartirish mumkin.</div>
         </div>
+        <div class="field">
+            <label for="extraDiscussionMinutes">Qo'shimcha muhokama vaqti, daqiqa (ixtiyoriy)</label>
+            <input type="number" id="extraDiscussionMinutes" name="extraDiscussionMinutes" min="0" max="60" value="0" />
+            <div class="field-hint">Muhokamaning asosiy vaqti tugagach, shu loyihadagi har bir taqdimotchiga taklif etiladigan qo'shimcha vaqt - hammasi uchun bir xil.</div>
+        </div>
         <button type="submit" class="btn">+ Yangi loyiha</button>
     </form>
 </div>

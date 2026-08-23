@@ -128,18 +128,24 @@ public sealed class PresenterUploadService
         var isUpdate = existing is not null;
         if (isUpdate)
         {
+            // Left exactly as it already was, same reasoning as PresentationManagementForm.OnEditClick - a
+            // resubmission replacing the file must not silently reset a value the project's own default (or
+            // a since-made web override) already set.
             await _queueService.UpdateAsync(
                 existing!.Id, record.FullName, title,
-                settings.DefaultPresentationTimeSeconds, settings.DefaultDiscussionTimeSeconds, extraDiscussionTimeSeconds: 0,
-                sourceFilePath, fileType, ct);
+                settings.DefaultPresentationTimeSeconds, settings.DefaultDiscussionTimeSeconds,
+                existing.ExtraDiscussionTimeSeconds, sourceFilePath, fileType, ct);
         }
         else
         {
+            // Every presenter in the same project gets the project's own standard extra discussion time
+            // (set once at project creation - see Project.ExtraDiscussionTimeSeconds) rather than asking for
+            // it on each individual submission.
             await _queueService.AddAsync(
                 projectId, record.FullName, title,
                 sourceFilePath, fileType,
                 settings.DefaultPresentationTimeSeconds, settings.DefaultDiscussionTimeSeconds,
-                extraDiscussionTimeSeconds: 0, presenterId: record.PresenterId, ct: ct);
+                extraDiscussionTimeSeconds: project.ExtraDiscussionTimeSeconds, presenterId: record.PresenterId, ct: ct);
         }
 
         _logger.LogInformation(

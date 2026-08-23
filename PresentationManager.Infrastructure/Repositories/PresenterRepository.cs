@@ -52,4 +52,29 @@ public class PresenterRepository : IPresenterRepository
         _logger.LogInformation("Taqdimotchi bazaga yozildi: {PresenterId} - {FullName}", presenter.Id, presenter.FullName);
         return presenter;
     }
+
+    public async Task DeleteAsync(int id, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var entity = await db.Presenters.FindAsync([id], ct);
+        if (entity is null)
+        {
+            _logger.LogWarning("O'chirish uchun taqdimotchi topilmadi: {PresenterId}", id);
+            return;
+        }
+
+        db.Presenters.Remove(entity);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Taqdimotchini o'chirishda xatolik: {PresenterId}", id);
+            throw;
+        }
+
+        _logger.LogInformation("Taqdimotchi o'chirildi: {PresenterId} - {FullName} (chat {ChatId})",
+            entity.Id, entity.FullName, entity.TelegramChatId);
+    }
 }

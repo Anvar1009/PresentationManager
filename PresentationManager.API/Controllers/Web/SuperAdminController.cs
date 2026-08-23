@@ -178,6 +178,28 @@ public sealed class SuperAdminController : Controller
         return View(new SuperAdminPresentersViewModel(q, presenters));
     }
 
+    /// <summary>Removes this presenter's registration entirely - their next /start in the bot then re-enters
+    /// the one-time registration flow from scratch, same as a brand new chat (see
+    /// <see cref="IPresenterRepository.DeleteAsync"/>'s own doc comment). The one CRUD action on an otherwise
+    /// read-only page (see this controller's own doc comment) - deliberately not a bigger management surface,
+    /// just an escape hatch for "this person registered by mistake / needs to start over".</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeletePresenter(int id, string? q, CancellationToken ct)
+    {
+        var presenter = await _presenterRepository.GetByIdAsync(id, ct);
+        if (presenter is null)
+        {
+            return NotFound();
+        }
+
+        await _presenterRepository.DeleteAsync(id, ct);
+        _logger.LogInformation("SuperAdmin taqdimotchini o'chirdi: {PresenterId} - {FullName}", id, presenter.FullName);
+
+        TempData["Success"] = $"\"{presenter.FullName}\" o'chirildi. Botda qaytadan ro'yxatdan o'tishi kerak bo'ladi.";
+        return RedirectToAction(nameof(Presenters), new { q });
+    }
+
     public async Task<IActionResult> Judges(string? q, CancellationToken ct)
     {
         var judges = await _judgeService.GetAllAsync(ct);

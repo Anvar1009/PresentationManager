@@ -180,7 +180,8 @@ public sealed class ProjectManagementForm : Form
         try
         {
             await _projectService.CreateAsync(
-                dialog.ProjectName, dialog.EventStartDate, dialog.EventEndDate, dialog.EventTime, dialog.Location);
+                dialog.ProjectName, dialog.EventStartDate, dialog.EventEndDate, dialog.EventTime, dialog.Location,
+                extraDiscussionTimeSeconds: dialog.ExtraDiscussionTimeSeconds);
             await LoadProjectsAsync();
         }
         catch (Exception ex)

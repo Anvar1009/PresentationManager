@@ -8,6 +8,7 @@ public enum AdminStep
     CreatingProjectStartDate,
     CreatingProjectEndDate,
     CreatingProjectLocation,
+    CreatingProjectExtraDiscussion,
     AddingCriterionName,
     AddingCriterionMaxScore,
     AssigningJudgePhone
@@ -35,6 +36,8 @@ public sealed class AdminSession
     public DateOnly NewProjectStartDate { get; set; }
 
     public DateOnly NewProjectEndDate { get; set; }
+
+    public string? NewProjectLocation { get; set; }
 
     /// <summary>Scratch field for the "+ Mezon qo'shish" flow - name first, then max score.</summary>
     public string NewCriterionName { get; set; } = string.Empty;

@@ -36,6 +36,12 @@ public sealed class HttpPresenterRepository : IPresenterRepository
         return wire.ToEntity();
     }
 
+    public async Task DeleteAsync(int id, CancellationToken ct = default)
+    {
+        var response = await _http.DeleteAsync($"api/presenters/{id}", ct);
+        response.EnsureSuccessStatusCode();
+    }
+
     private async Task<Presenter?> GetOneAsync(string url, CancellationToken ct)
     {
         var response = await _http.GetAsync(url, ct);

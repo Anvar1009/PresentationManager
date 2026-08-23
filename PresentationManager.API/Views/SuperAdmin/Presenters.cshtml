@@ -13,6 +13,11 @@
     <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("presenters")' />
 }
 
+@if (TempData["Success"] is string success)
+{
+    <div class="notice-success">@success</div>
+}
+
 <div class="toolbar">
     <form method="get" asp-controller="SuperAdmin" asp-action="Presenters">
         <input type="text" name="q" value="@Model.Query" placeholder="Ism yoki telefon bo'yicha qidirish..." />
@@ -33,6 +38,7 @@ else
                     <th>Telefon</th>
                     <th>Telegram</th>
                     <th>Ro'yxatdan o'tgan</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -43,6 +49,14 @@ else
                         <td>@(presenter.PhoneNumber ?? "-")</td>
                         <td>@(presenter.TelegramUsername is { Length: > 0 } username ? $"@{username}" : "-")</td>
                         <td>@presenter.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td>
+                            <form method="post" asp-controller="SuperAdmin" asp-action="DeletePresenter"
+                                  onsubmit="return confirm('&quot;@presenter.FullName&quot; o\'chirilsinmi? Bu shaxs botda qaytadan ro\'yxatdan o\'tishi kerak bo\'ladi.');">
+                                <input type="hidden" name="id" value="@presenter.Id" />
+                                <input type="hidden" name="q" value="@Model.Query" />
+                                <button type="submit" class="btn-sm btn-danger">O'chirish</button>
+                            </form>
+                        </td>
                     </tr>
                 }
             </tbody>

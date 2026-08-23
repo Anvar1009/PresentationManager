@@ -13,12 +13,18 @@ public sealed class ProjectEditForm : Form
     private readonly CheckBox _hasTimeCheck;
     private readonly DateTimePicker _timePicker;
     private readonly TextBox _locationBox;
+    private readonly NumericUpDown _extraDiscussionMinutes;
 
     public string ProjectName => _nameBox.Text.Trim();
     public DateOnly EventStartDate => DateOnly.FromDateTime(_startDatePicker.Value.Date);
     public DateOnly EventEndDate => DateOnly.FromDateTime(_endDatePicker.Value.Date);
     public TimeOnly? EventTime => _hasTimeCheck.Checked ? TimeOnly.FromTimeSpan(_timePicker.Value.TimeOfDay) : null;
     public string? Location => string.IsNullOrWhiteSpace(_locationBox.Text) ? null : _locationBox.Text.Trim();
+
+    /// <summary>The standard extra discussion time every presentation added to this project will get - set
+    /// once here rather than per presentation (see <see cref="PresentationEditForm"/>, which no longer asks
+    /// for it) so every presenter's discussion runs on the same extension.</summary>
+    public int ExtraDiscussionTimeSeconds => (int)_extraDiscussionMinutes.Value * 60;
 
     public ProjectEditForm()
     {
@@ -30,13 +36,13 @@ public sealed class ProjectEditForm : Form
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(460, 340);
+        ClientSize = new Size(460, 376);
 
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 6,
+            RowCount = 7,
             Padding = new Padding(16)
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
@@ -74,11 +80,24 @@ public sealed class ProjectEditForm : Form
 
         _locationBox = DarkTextBox();
 
+        _extraDiscussionMinutes = new NumericUpDown
+        {
+            Dock = DockStyle.Left,
+            Width = 80,
+            Minimum = 0,
+            Maximum = 60,
+            Value = 0,
+            BackColor = LightColors.PanelAlt,
+            ForeColor = LightColors.TextPrimary,
+            BorderStyle = BorderStyle.FixedSingle
+        };
+
         AddRow(layout, 0, "Nomi *", _nameBox);
         AddRow(layout, 1, "Boshlanish sanasi *", _startDatePicker);
         AddRow(layout, 2, "Tugash sanasi *", _endDatePicker);
         AddRow(layout, 3, "Vaqti", timePanel);
         AddRow(layout, 4, "Manzili", _locationBox);
+        AddRow(layout, 5, "Qo'shimcha muhokama (daqiqa)", _extraDiscussionMinutes);
 
         var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Margin = new Padding(0, 12, 0, 0) };
         var cancelButton = new Button
@@ -98,7 +117,7 @@ public sealed class ProjectEditForm : Form
         saveButton.Click += OnSaveClick;
         buttonPanel.Controls.Add(cancelButton);
         buttonPanel.Controls.Add(saveButton);
-        layout.Controls.Add(buttonPanel, 0, 5);
+        layout.Controls.Add(buttonPanel, 0, 6);
         layout.SetColumnSpan(buttonPanel, 2);
 
         Controls.Add(layout);
