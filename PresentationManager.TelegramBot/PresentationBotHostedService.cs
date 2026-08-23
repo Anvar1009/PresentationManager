@@ -609,7 +609,19 @@ public sealed class PresentationBotHostedService : BackgroundService
                 break;
 
             case AdminStep.CreatingProjectLocation when !string.IsNullOrWhiteSpace(text):
-                await CreateProjectFromSessionAsync(botClient, chatId, session, text == "-" ? null : text, ct);
+                session.NewProjectLocation = text == "-" ? null : text;
+                session.Step = AdminStep.CreatingProjectExtraDiscussion;
+                await botClient.SendMessage(chatId,
+                    "Muhokamaning asosiy vaqti tugagach, har bir taqdimotchiga necha daqiqa qo'shimcha vaqt beriladi? " +
+                    "(butun son, kerak bo'lmasa \"0\" yuboring):", cancellationToken: ct);
+                break;
+
+            case AdminStep.CreatingProjectExtraDiscussion when int.TryParse(text, out var extraMinutes) && extraMinutes >= 0:
+                await CreateProjectFromSessionAsync(botClient, chatId, session, extraMinutes * 60, ct);
+                break;
+
+            case AdminStep.CreatingProjectExtraDiscussion:
+                await botClient.SendMessage(chatId, "Iltimos, manfiy bo'lmagan butun son kiriting (masalan 0 yoki 5).", cancellationToken: ct);
                 break;
 
             case AdminStep.AddingCriterionName when !string.IsNullOrWhiteSpace(text):
@@ -636,13 +648,13 @@ public sealed class PresentationBotHostedService : BackgroundService
         }
     }
 
-    private async Task CreateProjectFromSessionAsync(ITelegramBotClient botClient, long chatId, AdminSession session, string? location, CancellationToken ct)
+    private async Task CreateProjectFromSessionAsync(ITelegramBotClient botClient, long chatId, AdminSession session, int extraDiscussionTimeSeconds, CancellationToken ct)
     {
         try
         {
             var project = await _projectService.CreateAsync(
-                session.NewProjectName, session.NewProjectStartDate, session.NewProjectEndDate, null, location,
-                session.UserId, ct: ct);
+                session.NewProjectName, session.NewProjectStartDate, session.NewProjectEndDate, null, session.NewProjectLocation,
+                session.UserId, extraDiscussionTimeSeconds: extraDiscussionTimeSeconds, ct: ct);
 
             _logger.LogInformation("Loyiha bot admin mirror orqali yaratildi: {ProjectId} - {ProjectName} (user {UserId})",
                 project.Id, project.Name, session.UserId);

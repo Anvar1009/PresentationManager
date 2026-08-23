@@ -49,4 +49,12 @@ public sealed class PresentersController : ControllerBase
         _logger.LogInformation("Taqdimotchi qo'shildi: {PresenterId} - {FullName}", created.Id, created.FullName);
         return Ok(PresenterDto.FromEntity(created));
     }
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    {
+        await _presenterRepository.DeleteAsync(id, ct);
+        _logger.LogInformation("Taqdimotchi o'chirildi: {PresenterId}", id);
+        return NoContent();
+    }
 }
