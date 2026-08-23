@@ -1,0 +1,242 @@
+@model PresenterUploadViewModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Taqdimot faylini yuklash</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: var(--tg-theme-bg-color, #14161d);
+            --card: var(--tg-theme-secondary-bg-color, #191c25);
+            --fg: var(--tg-theme-text-color, #f2f2f2);
+            --hint: var(--tg-theme-hint-color, #8a8f9c);
+            --accent: var(--tg-theme-button-color, #e8a33d);
+            --accent-fg: var(--tg-theme-button-text-color, #14161d);
+            --danger: #e5484d;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            padding: 20px 16px 32px;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 20px;
+            max-width: 440px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 1.15rem;
+            margin: 0 0 4px;
+        }
+
+        .hint {
+            color: var(--hint);
+            font-size: 0.9rem;
+            margin: 0 0 18px;
+        }
+
+        .field {
+            margin-bottom: 14px;
+        }
+
+        .field-label {
+            font-size: 0.78rem;
+            color: var(--hint);
+            margin-bottom: 3px;
+        }
+
+        .field-value {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .file-picker {
+            display: block;
+            border: 1.5px dashed var(--hint);
+            border-radius: 12px;
+            padding: 18px;
+            text-align: center;
+            cursor: pointer;
+            margin: 18px 0 6px;
+            font-size: 0.95rem;
+        }
+
+        .file-picker.has-file {
+            border-style: solid;
+            border-color: var(--accent);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .error {
+            background: rgba(229, 72, 77, 0.15);
+            color: var(--danger);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 0.88rem;
+            margin-bottom: 14px;
+        }
+
+        .submit-btn {
+            width: 100%;
+            border: none;
+            border-radius: 12px;
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: 600;
+            background: var(--accent);
+            color: var(--accent-fg);
+            cursor: pointer;
+            margin-top: 8px;
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        .progress-wrap {
+            display: none;
+            margin-top: 14px;
+        }
+
+        .progress-track {
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            height: 8px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--accent);
+            transition: width 0.15s;
+        }
+
+        .progress-label {
+            font-size: 0.8rem;
+            color: var(--hint);
+            margin-top: 6px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Taqdimot faylini yuklash</h1>
+        <p class="hint">Fayl to'g'ridan-to'g'ri serverga yuboriladi - Telegramning 20MB cheklovi bu yerda qo'llanilmaydi.</p>
+
+        @if (Model.Error is { } error)
+        {
+            <div class="error">@error</div>
+        }
+
+        <div class="field">
+            <div class="field-label">Loyiha</div>
+            <div class="field-value">@Model.ProjectName</div>
+        </div>
+        <div class="field">
+            <div class="field-label">Sarlavha</div>
+            <div class="field-value">@Model.Title</div>
+        </div>
+        @if (Model.IsUpdate)
+        {
+            <p class="hint">Bu loyihaga avval yuborgan taqdimotingiz shu fayl bilan almashtiriladi.</p>
+        }
+
+        <form id="uploadForm">
+            <label class="file-picker" id="filePicker" for="fileInput">📎 Faylni tanlash (.ppt, .pptx, .pdf)</label>
+            <input type="file" id="fileInput" name="file" accept=".ppt,.pptx,.pdf" />
+
+            <div class="progress-wrap" id="progressWrap">
+                <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+                <div class="progress-label" id="progressLabel">Yuklanmoqda...</div>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn" disabled>Yuborish</button>
+        </form>
+    </div>
+
+    <script>
+        (function () {
+            var tg = window.Telegram && window.Telegram.WebApp;
+            if (tg) {
+                tg.ready();
+                tg.expand();
+            }
+
+            var fileInput = document.getElementById('fileInput');
+            var filePicker = document.getElementById('filePicker');
+            var submitBtn = document.getElementById('submitBtn');
+            var form = document.getElementById('uploadForm');
+            var progressWrap = document.getElementById('progressWrap');
+            var progressFill = document.getElementById('progressFill');
+            var progressLabel = document.getElementById('progressLabel');
+
+            fileInput.addEventListener('change', function () {
+                if (fileInput.files.length > 0) {
+                    filePicker.textContent = '📎 ' + fileInput.files[0].name;
+                    filePicker.classList.add('has-file');
+                    submitBtn.disabled = false;
+                } else {
+                    submitBtn.disabled = true;
+                }
+            });
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                if (!fileInput.files.length) {
+                    return;
+                }
+
+                var formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                formData.append('token', @Html.Raw(Json.Serialize(Model.Token)));
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Yuklanmoqda...';
+                progressWrap.style.display = 'block';
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', window.location.pathname + window.location.search, true);
+                xhr.upload.onprogress = function (evt) {
+                    if (evt.lengthComputable) {
+                        var pct = Math.round((evt.loaded / evt.total) * 100);
+                        progressFill.style.width = pct + '%';
+                        progressLabel.textContent = pct + '%';
+                    }
+                };
+                xhr.onload = function () {
+                    document.open();
+                    document.write(xhr.responseText);
+                    document.close();
+                };
+                xhr.onerror = function () {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Yuborish';
+                    progressLabel.textContent = 'Tarmoq xatoligi - qaytadan urinib ko\'ring.';
+                };
+                xhr.send(formData);
+            });
+        })();
+    </script>
+</body>
+</html>

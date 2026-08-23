@@ -96,6 +96,7 @@ public sealed class PresentationBotHostedService : BackgroundService
     private readonly UserService _userService;
     private readonly AdminLinkService _adminLinkService;
     private readonly PresenterAssignmentService _presenterAssignmentService;
+    private readonly PresenterUploadService _presenterUploadService;
     private readonly ILogger<PresentationBotHostedService> _logger;
 
     /// <summary>Presenter upload flow state, per chat.</summary>
@@ -116,6 +117,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         UserService userService,
         AdminLinkService adminLinkService,
         PresenterAssignmentService presenterAssignmentService,
+        PresenterUploadService presenterUploadService,
         ILogger<PresentationBotHostedService> logger)
     {
         _options = options.Value;
@@ -129,6 +131,7 @@ public sealed class PresentationBotHostedService : BackgroundService
         _userService = userService;
         _adminLinkService = adminLinkService;
         _presenterAssignmentService = presenterAssignmentService;
+        _presenterUploadService = presenterUploadService;
         _logger = logger;
     }
 
@@ -244,6 +247,7 @@ public sealed class PresentationBotHostedService : BackgroundService
                 session.Title = message.Text.Trim();
                 session.Step = SessionStep.AwaitingFile;
                 await botClient.SendMessage(chatId, "Endi taqdimot faylini yuboring (.ppt, .pptx yoki .pdf):", cancellationToken: ct);
+                await SendUploadWebAppButtonAsync(botClient, chatId, session, ct);
                 break;
 
             case SessionStep.AwaitingFile when message.Document is { } document:
@@ -473,6 +477,30 @@ public sealed class PresentationBotHostedService : BackgroundService
               "Yangi sarlavha kiriting (yuboradigan fayl avvalgisining o'rnini bosadi):"
             : $"Loyiha: {project.Name}\nTaqdimot sarlavhasini kiriting:";
         await botClient.SendMessage(chatId.Value, prompt, cancellationToken: ct);
+    }
+
+    /// <summary>Offers the Telegram Mini App alternative to dropping the file straight into the chat - the
+    /// Bot API itself can only ever download what a chat sends it up to 20MB (see
+    /// <see cref="HandleDocumentAsync"/>'s own doc comment), while a Mini App page uploads over a plain HTTPS
+    /// POST straight to <c>PresentationManager.API</c>, so it isn't subject to that cap at all. Silently
+    /// skipped when no <see cref="PresentationBotOptions.PresenterWebBaseUrl"/> is configured for this
+    /// deployment - the in-chat upload above still works on its own for anyone under 20MB.</summary>
+    private async Task SendUploadWebAppButtonAsync(ITelegramBotClient botClient, long chatId, ChatSession session, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(_options.PresenterWebBaseUrl))
+        {
+            return;
+        }
+
+        var token = await _presenterUploadService.CreateTokenAsync(
+            chatId, session.ProjectId, session.ProjectName, session.PresenterId, session.FullName, session.Title,
+            session.ExistingPresentationId, ct);
+
+        var url = $"{_options.PresenterWebBaseUrl.TrimEnd('/')}/Presenter/Upload?token={token}";
+        var button = InlineKeyboardButton.WithWebApp("📤 Faylni brauzerda yuklash (20MB dan katta bo'lsa)", new WebAppInfo(url));
+        await botClient.SendMessage(chatId,
+            "Fayl 20MB dan katta bo'lsa, Telegram orqali to'g'ridan-to'g'ri yubora olmaysiz - pastdagi tugma orqali brauzerda yuklang:",
+            replyMarkup: new InlineKeyboardMarkup(button), cancellationToken: ct);
     }
 
     private async Task HandleDocumentAsync(ITelegramBotClient botClient, long chatId, ChatSession session, Document document, CancellationToken ct)

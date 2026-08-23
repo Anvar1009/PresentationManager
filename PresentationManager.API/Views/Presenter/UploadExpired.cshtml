@@ -1,0 +1,57 @@
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Havola yaroqsiz</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: var(--tg-theme-bg-color, #14161d);
+            --card: var(--tg-theme-secondary-bg-color, #191c25);
+            --fg: var(--tg-theme-text-color, #f2f2f2);
+            --hint: var(--tg-theme-hint-color, #8a8f9c);
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 28px 20px;
+            max-width: 420px;
+        }
+
+        .icon { font-size: 2.4rem; margin-bottom: 10px; }
+        h1 { font-size: 1.1rem; margin: 0 0 6px; }
+        p { color: var(--hint); font-size: 0.9rem; margin: 0; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">⌛</div>
+        <h1>Havola yaroqsiz yoki muddati o'tgan</h1>
+        <p>Telegram botga qayting va taqdimot yuborish jarayonini qaytadan boshlang.</p>
+    </div>
+    <script>
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg) {
+            tg.ready();
+        }
+    </script>
+</body>
+</html>

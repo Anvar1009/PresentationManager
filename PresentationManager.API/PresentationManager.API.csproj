@@ -44,7 +44,13 @@
     <!-- Same version as PresentationManager.UI's own ExcelExportHelper - server-side final-scores export for
          the web Admin/SuperAdmin panels (FinalScoresExcelExporter). -->
     <PackageReference Include="ClosedXML" Version="0.105.1" />
-    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <!-- Pinned explicitly (not left to Serilog.AspNetCore's own floating ">=8.0.0" transitive
+         dependency) - without this, NuGet resolves it to whatever the newest published version is
+         (10.0.0 at the time of writing), which drags in Microsoft.Extensions.Hosting.Abstractions/
+         DependencyInjection.Abstractions v10 - not part of this app's net8.0 self-contained runtime,
+         so the published app fails to start with a FileNotFoundException. -->
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
 
