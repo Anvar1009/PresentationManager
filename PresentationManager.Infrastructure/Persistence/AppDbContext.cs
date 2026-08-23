@@ -29,6 +29,8 @@ public class AppDbContext : DbContext
 
     public DbSet<PresenterProjectAssignment> PresenterProjectAssignments => Set<PresenterProjectAssignment>();
 
+    public DbSet<PresenterUploadToken> PresenterUploadTokens => Set<PresenterUploadToken>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Project>(b =>
@@ -162,6 +164,17 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(a => a.PresenterId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PresenterUploadToken>(b =>
+        {
+            b.ToTable("PresenterUploadTokens");
+            b.HasKey(t => t.Id);
+            b.Property(t => t.Token).IsRequired();
+            b.Property(t => t.ProjectName).IsRequired();
+            b.Property(t => t.FullName).IsRequired();
+            b.Property(t => t.Title).IsRequired();
+            b.HasIndex(t => t.Token).IsUnique();
         });
     }
 }

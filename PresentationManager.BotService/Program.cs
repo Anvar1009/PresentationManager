@@ -61,6 +61,7 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddSingleton<IJudgeRepository, JudgeRepository>();
         services.AddSingleton<IScoreRepository, ScoreRepository>();
         services.AddSingleton<IPresenterProjectAssignmentRepository, PresenterProjectAssignmentRepository>();
+        services.AddSingleton<IPresenterUploadTokenRepository, PresenterUploadTokenRepository>();
         services.AddSingleton<IFileStorageService>(sp =>
             new FileStorageService(ResolveStorageRoot(context.Configuration), sp.GetRequiredService<ILogger<FileStorageService>>()));
 
@@ -72,6 +73,7 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddSingleton<PresenterAssignmentService>();
         services.AddSingleton<AdminLinkService>();
         services.AddSingleton<PresentationQueueService>();
+        services.AddSingleton<PresenterUploadService>();
 
         services.AddSingleton<TelegramNotifier>();
         services.AddSingleton<JudgeAssignmentNotifier>();

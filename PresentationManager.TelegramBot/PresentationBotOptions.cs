@@ -18,4 +18,14 @@ public sealed class PresentationBotOptions
     /// gracefully (the message just omits the link) since, like <see cref="Token"/>/<see cref="Username"/>,
     /// this is a per-deployment value that isn't checked into source control.</summary>
     public string JudgeWebBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>Base URL of the Telegram Mini App presenter-upload page (PresentationManager.API's
+    /// Controllers.Web.PresenterController) - opened via the "📤 Fayl yuklash (brauzerda)" web_app button
+    /// offered alongside the normal in-chat upload once a title has been entered (see
+    /// <c>PresentationBotHostedService</c>'s AwaitingFile step). Lets a presenter upload a file over 20MB,
+    /// which the Bot API itself can't download (see <c>HandleDocumentAsync</c>'s own doc comment). Empty is
+    /// handled gracefully (the button is simply omitted) since, like <see cref="JudgeWebBaseUrl"/>, this is a
+    /// per-deployment value that isn't checked into source control. Telegram requires this to be a real
+    /// https:// URL with a valid certificate - a self-signed one will not open.</summary>
+    public string PresenterWebBaseUrl { get; set; } = string.Empty;
 }
