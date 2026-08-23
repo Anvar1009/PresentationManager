@@ -7,7 +7,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Taqdimot faylini yuklash</title>
+    <title>Taqdimot yuborish</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -18,9 +18,10 @@
             --accent: var(--tg-theme-button-color, #e8a33d);
             --accent-fg: var(--tg-theme-button-text-color, #14161d);
             --danger: #e5484d;
+            --ok: #3fb950;
         }
 
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         body {
             margin: 0;
@@ -28,61 +29,38 @@
             background: var(--bg);
             color: var(--fg);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            padding: 20px 16px 32px;
+            padding: 18px 14px 40px;
+        }
+
+        .page { max-width: 480px; margin: 0 auto; }
+
+        .hello {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 4px 0 2px;
+        }
+
+        .hint {
+            color: var(--hint);
+            font-size: 0.86rem;
+            margin: 0 0 18px;
+            line-height: 1.4;
+        }
+
+        .step-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin: 0 0 8px;
         }
 
         .card {
             background: var(--card);
             border-radius: 16px;
-            padding: 20px;
-            max-width: 440px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            font-size: 1.15rem;
-            margin: 0 0 4px;
-        }
-
-        .hint {
-            color: var(--hint);
-            font-size: 0.9rem;
-            margin: 0 0 18px;
-        }
-
-        .field {
-            margin-bottom: 14px;
-        }
-
-        .field-label {
-            font-size: 0.78rem;
-            color: var(--hint);
-            margin-bottom: 3px;
-        }
-
-        .field-value {
-            font-size: 1rem;
-            font-weight: 600;
-        }
-
-        .file-picker {
-            display: block;
-            border: 1.5px dashed var(--hint);
-            border-radius: 12px;
-            padding: 18px;
-            text-align: center;
-            cursor: pointer;
-            margin: 18px 0 6px;
-            font-size: 0.95rem;
-        }
-
-        .file-picker.has-file {
-            border-style: solid;
-            border-color: var(--accent);
-        }
-
-        input[type="file"] {
-            display: none;
+            padding: 16px;
+            margin-bottom: 16px;
         }
 
         .error {
@@ -94,28 +72,126 @@
             margin-bottom: 14px;
         }
 
+        .empty-state {
+            text-align: center;
+            padding: 30px 10px;
+            color: var(--hint);
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+
+        /* ---- project picker ---- */
+        .project-option {
+            display: block;
+            border: 1.5px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .project-option:last-child { margin-bottom: 0; }
+
+        .project-option input[type="radio"] { display: none; }
+
+        .project-option.selected {
+            border-color: var(--accent);
+            background: rgba(232, 163, 61, 0.08);
+        }
+
+        .project-option.disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+
+        .project-option-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .project-option-name { font-weight: 600; font-size: 0.96rem; }
+
+        .radio-dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 1.5px solid var(--hint);
+            flex: none;
+            position: relative;
+        }
+
+        .project-option.selected .radio-dot {
+            border-color: var(--accent);
+        }
+
+        .project-option.selected .radio-dot::after {
+            content: "";
+            position: absolute;
+            inset: 3px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+
+        .project-option-meta {
+            margin-top: 4px;
+            font-size: 0.78rem;
+            color: var(--hint);
+        }
+
+        .project-option-meta.deadline-expired { color: var(--danger); }
+        .project-option-meta.existing { color: var(--ok); }
+
+        /* ---- title / file ---- */
+        input[type="text"] {
+            width: 100%;
+            background: var(--bg);
+            border: 1.5px solid rgba(255, 255, 255, 0.12);
+            border-radius: 10px;
+            padding: 12px 13px;
+            color: var(--fg);
+            font-size: 0.95rem;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .file-picker {
+            display: block;
+            border: 1.5px dashed var(--hint);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 0.93rem;
+        }
+
+        .file-picker.has-file {
+            border-style: solid;
+            border-color: var(--accent);
+        }
+
+        input[type="file"] { display: none; }
+
         .submit-btn {
             width: 100%;
             border: none;
             border-radius: 12px;
-            padding: 14px;
+            padding: 15px;
             font-size: 1rem;
             font-weight: 600;
             background: var(--accent);
             color: var(--accent-fg);
             cursor: pointer;
-            margin-top: 8px;
         }
 
-        .submit-btn:disabled {
-            opacity: 0.6;
-            cursor: default;
-        }
+        .submit-btn:disabled { opacity: 0.5; cursor: default; }
 
-        .progress-wrap {
-            display: none;
-            margin-top: 14px;
-        }
+        .progress-wrap { display: none; margin-top: 14px; }
 
         .progress-track {
             background: rgba(255, 255, 255, 0.12);
@@ -140,39 +216,70 @@
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>Taqdimot faylini yuklash</h1>
-        <p class="hint">Fayl to'g'ridan-to'g'ri serverga yuboriladi - Telegramning 20MB cheklovi bu yerda qo'llanilmaydi.</p>
+    <div class="page">
+        <div class="hello">👋 @Model.FullName</div>
+        <p class="hint">To'liq taqdimotni shu yerdan yuboring - loyihani tanlang, sarlavha yozing va faylni yuklang. 20MB cheklovi bu yerda qo'llanilmaydi.</p>
 
         @if (Model.Error is { } error)
         {
             <div class="error">@error</div>
         }
 
-        <div class="field">
-            <div class="field-label">Loyiha</div>
-            <div class="field-value">@Model.ProjectName</div>
-        </div>
-        <div class="field">
-            <div class="field-label">Sarlavha</div>
-            <div class="field-value">@Model.Title</div>
-        </div>
-        @if (Model.IsUpdate)
+        @if (Model.Projects.Count == 0)
         {
-            <p class="hint">Bu loyihaga avval yuborgan taqdimotingiz shu fayl bilan almashtiriladi.</p>
+            <div class="card empty-state">Hozircha sizga biriktirilgan loyiha yo'q. Administrator tasdiqlagach, botga qaytib qaytadan urinib ko'ring.</div>
         }
+        else
+        {
+            <form id="uploadForm">
+                <input type="hidden" name="token" value="@Model.Token" />
 
-        <form id="uploadForm">
-            <label class="file-picker" id="filePicker" for="fileInput">📎 Faylni tanlash (.ppt, .pptx, .pdf)</label>
-            <input type="file" id="fileInput" name="file" accept=".ppt,.pptx,.pdf" />
+                <div class="step-label">1. Loyiha</div>
+                <div class="card" id="projectList">
+                    @foreach (var p in Model.Projects)
+                    {
+                        var isSelected = Model.SelectedProjectId == p.ProjectId;
+                        <label class="project-option @(p.IsExpired ? "disabled" : "") @(isSelected ? "selected" : "")" data-project-id="@p.ProjectId" data-expired="@(p.IsExpired ? "1" : "0")">
+                            <input type="radio" name="projectId" value="@p.ProjectId" @(p.IsExpired ? "disabled" : "") @(isSelected ? "checked" : "") />
+                            <div class="project-option-head">
+                                <span class="project-option-name">@p.ProjectName</span>
+                                <span class="radio-dot"></span>
+                            </div>
+                            @if (p.IsExpired)
+                            {
+                                <div class="project-option-meta deadline-expired">Muddat tugagan (@p.DeadlineText)</div>
+                            }
+                            else if (p.DeadlineText is not null)
+                            {
+                                <div class="project-option-meta">Muddat: @p.DeadlineText</div>
+                            }
+                            @if (p.ExistingTitle is not null)
+                            {
+                                <div class="project-option-meta existing">Allaqachon yuborilgan: "@p.ExistingTitle" - yangi fayl shuni almashtiradi</div>
+                            }
+                        </label>
+                    }
+                </div>
 
-            <div class="progress-wrap" id="progressWrap">
-                <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
-                <div class="progress-label" id="progressLabel">Yuklanmoqda...</div>
-            </div>
+                <div class="step-label">2. Sarlavha</div>
+                <div class="card">
+                    <input type="text" id="titleInput" name="title" placeholder="Taqdimot sarlavhasi" value="@Model.Title" autocomplete="off" />
+                </div>
 
-            <button type="submit" class="submit-btn" id="submitBtn" disabled>Yuborish</button>
-        </form>
+                <div class="step-label">3. Fayl</div>
+                <div class="card">
+                    <label class="file-picker" id="filePicker" for="fileInput">📎 Faylni tanlash (.ppt, .pptx, .pdf)</label>
+                    <input type="file" id="fileInput" name="file" accept=".ppt,.pptx,.pdf" />
+
+                    <div class="progress-wrap" id="progressWrap">
+                        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+                        <div class="progress-label" id="progressLabel">Yuklanmoqda...</div>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn" id="submitBtn" disabled>Yuborish</button>
+            </form>
+        }
     </div>
 
     <script>
@@ -183,33 +290,68 @@
                 tg.expand();
             }
 
+            var form = document.getElementById('uploadForm');
+            if (!form) {
+                return;
+            }
+
+            var projectList = document.getElementById('projectList');
+            var titleInput = document.getElementById('titleInput');
             var fileInput = document.getElementById('fileInput');
             var filePicker = document.getElementById('filePicker');
             var submitBtn = document.getElementById('submitBtn');
-            var form = document.getElementById('uploadForm');
             var progressWrap = document.getElementById('progressWrap');
             var progressFill = document.getElementById('progressFill');
             var progressLabel = document.getElementById('progressLabel');
+
+            function selectedProjectId() {
+                var checked = projectList.querySelector('input[name="projectId"]:checked');
+                return checked ? checked.value : null;
+            }
+
+            function updateSubmitState() {
+                var ok = selectedProjectId() && titleInput.value.trim().length > 0 && fileInput.files.length > 0;
+                submitBtn.disabled = !ok;
+            }
+
+            projectList.querySelectorAll('.project-option').forEach(function (opt) {
+                if (opt.dataset.expired === '1') {
+                    return;
+                }
+                opt.addEventListener('click', function () {
+                    projectList.querySelectorAll('.project-option').forEach(function (o) { o.classList.remove('selected'); });
+                    opt.classList.add('selected');
+                    opt.querySelector('input[type="radio"]').checked = true;
+                    updateSubmitState();
+                });
+            });
+
+            titleInput.addEventListener('input', updateSubmitState);
 
             fileInput.addEventListener('change', function () {
                 if (fileInput.files.length > 0) {
                     filePicker.textContent = '📎 ' + fileInput.files[0].name;
                     filePicker.classList.add('has-file');
-                    submitBtn.disabled = false;
                 } else {
-                    submitBtn.disabled = true;
+                    filePicker.textContent = '📎 Faylni tanlash (.ppt, .pptx, .pdf)';
+                    filePicker.classList.remove('has-file');
                 }
+                updateSubmitState();
             });
+
+            updateSubmitState();
 
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
-                if (!fileInput.files.length) {
+                if (submitBtn.disabled) {
                     return;
                 }
 
                 var formData = new FormData();
-                formData.append('file', fileInput.files[0]);
                 formData.append('token', @Html.Raw(Json.Serialize(Model.Token)));
+                formData.append('projectId', selectedProjectId());
+                formData.append('title', titleInput.value.trim());
+                formData.append('file', fileInput.files[0]);
 
                 submitBtn.disabled = true;
                 submitBtn.textContent = 'Yuklanmoqda...';

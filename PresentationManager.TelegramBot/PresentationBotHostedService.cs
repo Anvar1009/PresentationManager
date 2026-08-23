@@ -17,12 +17,14 @@ using Telegram.Bot.Types.ReplyMarkups;
 namespace PresentationManager.TelegramBot;
 
 /// <summary>Two roles live here, routed purely by who's already known to the system when a chat says
-/// /start: a <b>Presenter</b> uploads presentations into a project's queue (see
-/// <see cref="HandleDocumentAsync"/>), and a linked <b>Admin</b> gets a read/report + basic-management
-/// mirror of the desktop Admin panel (see <see cref="ShowAdminMainMenuAsync"/> onward) — the only one of the
-/// two that isn't Telegram-native: an Admin must first link their desktop account via the "Botga ulash"
-/// one-time code (<see cref="AdminLinkService"/>), whereas Presenter identities live entirely in
-/// Telegram-side tables. A chat already known as a <b>Judge</b> (someone Admin assigned via the Admin
+/// /start: a <b>Presenter</b> submits presentations entirely from the Telegram Mini App page this class
+/// links to (see <see cref="SendUploadWebAppButtonAsync"/> and
+/// PresentationManager.API.Controllers.Web.PresenterController - picking the project, typing the title, and
+/// uploading the file all happen there now, not in this chat), and a linked <b>Admin</b> gets a read/report +
+/// basic-management mirror of the desktop Admin panel (see <see cref="ShowAdminMainMenuAsync"/> onward) — the
+/// only one of the two that isn't Telegram-native: an Admin must first link their desktop account via the
+/// "Botga ulash" one-time code (<see cref="AdminLinkService"/>), whereas Presenter identities live entirely
+/// in Telegram-side tables. A chat already known as a <b>Judge</b> (someone Admin assigned via the Admin
 /// panel's "Hakamlar" dialog, <c>JudgeService.AssignAsync</c>) is instead redirected to the Judge web
 /// platform (see <see cref="ShowJudgeWebRedirectAsync"/>) - in-chat scoring was removed once that platform
 /// shipped (Phase 6 of the modernization concept). This class still subscribes to
@@ -31,12 +33,9 @@ namespace PresentationManager.TelegramBot;
 /// Presenter (see <see cref="BeginAsync"/>) - whichever role this chat has always wins over the others. Runs
 /// as PresentationManager.BotService's one hosted service (its own process/systemd unit, not embedded in the
 /// WinForms admin app), talking to the database directly through the same Infrastructure repositories/
-/// Application services AdminForm uses - a submitted file lands in the database and managed file storage
-/// exactly the same way <c>AdminForm.OnAddClick</c> does.</summary>
+/// Application services AdminForm uses.</summary>
 public sealed class PresentationBotHostedService : BackgroundService
 {
-    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase) { ".ppt", ".pptx", ".pdf" };
-
     private static readonly ReplyKeyboardMarkup ContactRequestKeyboard = new(
         new[] { new KeyboardButton("📱 Kontaktni ulashish") { RequestContact = true } })
     {
@@ -243,21 +242,6 @@ public sealed class PresentationBotHostedService : BackgroundService
                 await botClient.SendMessage(chatId, "Iltimos, pastdagi \"Kontaktni ulashish\" tugmasini bosing.", cancellationToken: ct);
                 break;
 
-            case SessionStep.AwaitingTitle when !string.IsNullOrWhiteSpace(message.Text):
-                session.Title = message.Text.Trim();
-                session.Step = SessionStep.AwaitingFile;
-                await botClient.SendMessage(chatId, "Endi taqdimot faylini yuboring (.ppt, .pptx yoki .pdf):", cancellationToken: ct);
-                await SendUploadWebAppButtonAsync(botClient, chatId, session, ct);
-                break;
-
-            case SessionStep.AwaitingFile when message.Document is { } document:
-                await HandleDocumentAsync(botClient, chatId, session, document, ct);
-                break;
-
-            case SessionStep.AwaitingFile:
-                await botClient.SendMessage(chatId, "Iltimos, .ppt, .pptx yoki .pdf formatidagi faylni yuboring.", cancellationToken: ct);
-                break;
-
             default:
                 await botClient.SendMessage(chatId, "Iltimos, kerakli ma'lumotni kiriting yoki /start bosing.", cancellationToken: ct);
                 break;
@@ -383,13 +367,13 @@ public sealed class PresentationBotHostedService : BackgroundService
 
     // ---------- Presenter upload flow ----------
 
-    /// <summary>Only projects Admin has explicitly approved this presenter for (<see cref="PresenterAssignmentService.GetAssignedProjectsAsync"/>)
-    /// are offered here - a completed bot registration alone isn't enough, matching
-    /// <see cref="PresentationQueueService.AddAsync"/>'s own server-side requirement that the upload's
-    /// <c>presenterId</c> actually be assigned to the chosen project. Showing every project here regardless
-    /// (as this used to) meant a presenter could pick and upload to a project they weren't approved for, only
-    /// to have that same check reject it - see <see cref="HandleDocumentAsync"/>'s own error handling for what
-    /// they now see when that happens instead of the request silently going nowhere.</summary>
+    /// <summary>Only presenters Admin has explicitly approved for at least one project (<see cref="PresenterAssignmentService.GetAssignedProjectsAsync"/>)
+    /// get the Mini App link - a completed bot registration alone isn't enough, matching
+    /// <see cref="PresentationQueueService.AddAsync"/>'s own server-side requirement that an upload's
+    /// <c>presenterId</c> actually be assigned to the chosen project. Anyone else sees only the "wait for
+    /// Admin" message below, with no button at all - the Mini App page itself re-checks the assignment list
+    /// again per-project (Admin could revoke one between now and the page loading), so this is just the first
+    /// gate, not the only one.</summary>
     private async Task ShowAssignedProjectsOrWaitAsync(ITelegramBotClient botClient, long chatId, int presenterId, string fullName, CancellationToken ct)
     {
         var projects = await _presenterAssignmentService.GetAssignedProjectsAsync(presenterId, ct);
@@ -401,202 +385,34 @@ public sealed class PresentationBotHostedService : BackgroundService
             return;
         }
 
-        await ShowProjectListAsync(botClient, chatId, presenterId, fullName, projects, ct);
+        await SendUploadWebAppButtonAsync(botClient, chatId, presenterId, fullName, ct);
     }
 
-    private async Task ShowProjectListAsync(ITelegramBotClient botClient, long chatId, int presenterId, string fullName, List<Project> projects, CancellationToken ct)
+    /// <summary>Sends the one and only way a presenter now submits a presentation - a Telegram Mini App
+    /// button opening PresentationManager.API's upload page, where picking the project, typing the title, and
+    /// uploading the file all happen (see PresentationManager.API.Controllers.Web.PresenterController). A
+    /// plain HTTPS POST to that page isn't subject to the Bot API's own 20MB file-download cap the old
+    /// in-chat upload used to hit. Falls back to a plain-text notice (no button - Telegram Mini Apps require a
+    /// real https:// URL) when no <see cref="PresentationBotOptions.PresenterWebBaseUrl"/> is configured for
+    /// this deployment, same as <see cref="ShowJudgeWebRedirectAsync"/>'s own fallback.</summary>
+    private async Task SendUploadWebAppButtonAsync(ITelegramBotClient botClient, long chatId, int presenterId, string fullName, CancellationToken ct)
     {
-        _sessions[chatId] = new ChatSession { Step = SessionStep.AwaitingProject, PresenterId = presenterId, FullName = fullName };
-
-        var buttons = projects
-            .Select(p => new[] { InlineKeyboardButton.WithCallbackData(p.Name, $"project:{p.Id}") })
-            .ToArray();
-
-        // Sent as two messages, not one: Telegram can't attach both a persistent ReplyKeyboardMarkup (bottom
-        // panel) and an InlineKeyboardMarkup (this message's own buttons) to the same SendMessage call - the
-        // first re-docks PresenterMainKeyboard (harmless if it's already showing), the second carries the
-        // actual project picker.
         await botClient.SendMessage(chatId, $"👋 {fullName}, xush kelibsiz!", replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
-        await botClient.SendMessage(chatId, "Taqdimot yuborish uchun loyihani tanlang:",
-            replyMarkup: new InlineKeyboardMarkup(buttons), cancellationToken: ct);
-    }
 
-    private async Task HandleProjectSelectionCallbackAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, string data, CancellationToken ct)
-    {
-        var chatId = callbackQuery.Message?.Chat.Id;
-        if (chatId is null || !int.TryParse(data["project:".Length..], out var projectId))
+        if (string.IsNullOrEmpty(_options.PresenterWebBaseUrl))
         {
-            return;
-        }
-
-        if (!_sessions.TryGetValue(chatId.Value, out var session) || session.PresenterId is not { } presenterId)
-        {
-            // Stale callback (e.g. app restarted since the button was shown, wiping in-memory sessions) -
-            // ask the presenter to start over rather than proceeding with no known identity.
-            await botClient.AnswerCallbackQuery(callbackQuery.Id, "Sessiya eskirgan, /start bosing.", cancellationToken: ct);
-            return;
-        }
-
-        // Re-validated against the assigned list (not just "does this project exist") - the button itself
-        // only ever came from that same filtered list in ShowProjectListAsync, but a stale callback (an old
-        // message re-tapped after Admin revoked the approval in between) must not let the upload through on
-        // the strength of a button alone.
-        var projects = await _presenterAssignmentService.GetAssignedProjectsAsync(presenterId, ct);
-        var project = projects.FirstOrDefault(p => p.Id == projectId);
-        if (project is null)
-        {
-            _logger.LogWarning("Presenter {PresenterId} biriktirilmagan/mavjud bo'lmagan loyihani tanlashga urindi: {ProjectId}",
-                presenterId, projectId);
-            await botClient.AnswerCallbackQuery(callbackQuery.Id, "Bu loyiha endi mavjud emas yoki siz unga biriktirilmagansiz.", cancellationToken: ct);
-            return;
-        }
-
-        if (project.SubmissionDeadline is { } deadline && DateTime.UtcNow > deadline)
-        {
-            _logger.LogWarning("Presenter {PresenterId} muddati o'tgan loyihaga ({ProjectId}) taqdimot yubormoqchi bo'ldi.",
-                presenterId, projectId);
-            await botClient.AnswerCallbackQuery(callbackQuery.Id, "Taqdimot topshirish muddati tugagan.", cancellationToken: ct);
-            await botClient.SendMessage(chatId.Value,
-                $"⏰ \"{project.Name}\" loyihasi uchun taqdimot topshirish/yangilash muddati tugagan ({deadline.ToLocalTime():dd.MM.yyyy HH:mm}).",
+            await botClient.SendMessage(chatId,
+                "Taqdimot yuborish veb-sahifasi hali sozlanmagan. Administratorga murojaat qiling.",
                 cancellationToken: ct);
             return;
         }
 
-        // Already has a submission here? The upload that follows updates it (see HandleDocumentAsync)
-        // instead of creating a second, duplicate queue entry for the same presenter+project.
-        var existing = await _queueService.GetByPresenterAndProjectAsync(project.Id, presenterId, ct);
-
-        session.Step = SessionStep.AwaitingTitle;
-        session.ProjectId = project.Id;
-        session.ProjectName = project.Name;
-        session.ExistingPresentationId = existing?.Id;
-
-        await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: ct);
-        var prompt = existing is not null
-            ? $"Loyiha: {project.Name}\nSiz bu loyihaga allaqachon taqdimot yuborgansiz: \"{existing.Title}\".\n" +
-              "Yangi sarlavha kiriting (yuboradigan fayl avvalgisining o'rnini bosadi):"
-            : $"Loyiha: {project.Name}\nTaqdimot sarlavhasini kiriting:";
-        await botClient.SendMessage(chatId.Value, prompt, cancellationToken: ct);
-    }
-
-    /// <summary>Offers the Telegram Mini App alternative to dropping the file straight into the chat - the
-    /// Bot API itself can only ever download what a chat sends it up to 20MB (see
-    /// <see cref="HandleDocumentAsync"/>'s own doc comment), while a Mini App page uploads over a plain HTTPS
-    /// POST straight to <c>PresentationManager.API</c>, so it isn't subject to that cap at all. Silently
-    /// skipped when no <see cref="PresentationBotOptions.PresenterWebBaseUrl"/> is configured for this
-    /// deployment - the in-chat upload above still works on its own for anyone under 20MB.</summary>
-    private async Task SendUploadWebAppButtonAsync(ITelegramBotClient botClient, long chatId, ChatSession session, CancellationToken ct)
-    {
-        if (string.IsNullOrEmpty(_options.PresenterWebBaseUrl))
-        {
-            return;
-        }
-
-        var token = await _presenterUploadService.CreateTokenAsync(
-            chatId, session.ProjectId, session.ProjectName, session.PresenterId, session.FullName, session.Title,
-            session.ExistingPresentationId, ct);
-
+        var token = await _presenterUploadService.CreateTokenAsync(chatId, presenterId, fullName, ct);
         var url = $"{_options.PresenterWebBaseUrl.TrimEnd('/')}/Presenter/Upload?token={token}";
-        var button = InlineKeyboardButton.WithWebApp("📤 Faylni brauzerda yuklash (20MB dan katta bo'lsa)", new WebAppInfo(url));
+        var button = InlineKeyboardButton.WithWebApp("📤 Taqdimot yuborish", new WebAppInfo(url));
         await botClient.SendMessage(chatId,
-            "Fayl 20MB dan katta bo'lsa, Telegram orqali to'g'ridan-to'g'ri yubora olmaysiz - pastdagi tugma orqali brauzerda yuklang:",
+            "Loyihani tanlash, sarlavha kiritish va faylni yuklash uchun pastdagi tugmani bosing:",
             replyMarkup: new InlineKeyboardMarkup(button), cancellationToken: ct);
-    }
-
-    private async Task HandleDocumentAsync(ITelegramBotClient botClient, long chatId, ChatSession session, Document document, CancellationToken ct)
-    {
-        var extension = Path.GetExtension(document.FileName ?? string.Empty);
-        if (!AllowedExtensions.Contains(extension))
-        {
-            await botClient.SendMessage(chatId, "Fayl formati noto'g'ri. Faqat .ppt, .pptx yoki .pdf qabul qilinadi.", cancellationToken: ct);
-            return;
-        }
-
-        var fileType = extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase) ? PresentationFileType.Pdf : PresentationFileType.Pptx;
-        var tempFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}{extension}");
-
-        try
-        {
-            // Re-checked here too (not just when the project was picked, in HandleProjectSelectionCallbackAsync)
-            // - the presenter could easily spend longer than that typing the title/finding the file on their
-            // phone than the gap between a deadline and "now", so the check right before it actually lands is
-            // the one that matters. The reminder text below reuses this same lookup rather than fetching twice.
-            var projects = await _projectService.GetAllAsync(ct);
-            var project = projects.FirstOrDefault(p => p.Id == session.ProjectId);
-            if (project?.SubmissionDeadline is { } deadline && DateTime.UtcNow > deadline)
-            {
-                await botClient.SendMessage(chatId,
-                    $"⏰ Taqdimot topshirish/yangilash muddati tugagan ({deadline.ToLocalTime():dd.MM.yyyy HH:mm}). Fayl qabul qilinmadi.",
-                    replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
-                return;
-            }
-
-            await using (var fileStream = File.Create(tempFilePath))
-            {
-                await botClient.GetInfoAndDownloadFile(document.FileId, fileStream, ct);
-            }
-
-            var settings = await _settingsRepository.GetAsync(ct);
-            var isUpdate = session.ExistingPresentationId is not null;
-            if (isUpdate)
-            {
-                // Replaces the existing entry's title/file in place - same queue position, no duplicate row.
-                await _queueService.UpdateAsync(
-                    session.ExistingPresentationId!.Value, session.FullName, session.Title,
-                    settings.DefaultPresentationTimeSeconds, settings.DefaultDiscussionTimeSeconds, extraDiscussionTimeSeconds: 0,
-                    tempFilePath, fileType, ct: ct);
-            }
-            else
-            {
-                await _queueService.AddAsync(
-                    session.ProjectId, session.FullName, session.Title,
-                    tempFilePath, fileType,
-                    settings.DefaultPresentationTimeSeconds, settings.DefaultDiscussionTimeSeconds,
-                    extraDiscussionTimeSeconds: 0,
-                    presenterId: session.PresenterId, ct: ct);
-            }
-
-            // Explicitly restates what was actually captured (project/title/file type) rather than just a
-            // generic "qabul qilindi" - so the presenter can immediately catch a wrong title or a misread
-            // file type instead of only finding out when Admin reviews the queue.
-            var fileTypeLabel = fileType == PresentationFileType.Pdf ? "PDF" : "PowerPoint";
-            var confirmation =
-                (isUpdate ? "✅ Taqdimotingiz yangilandi!\n\n" : "✅ Taqdimotingiz qabul qilindi!\n\n") +
-                $"🏛 Loyiha: {session.ProjectName}\n" +
-                $"📌 Nomi: {session.Title}\n" +
-                $"📄 Fayl turi: {fileTypeLabel}\n\n" +
-                "Yana yuborish uchun pastdagi \"📤 Taqdimot jo'natish\" tugmasini bosing.";
-
-            // Best-effort - the project could in principle have been deleted in the moment between picking it
-            // and finishing the upload; the upload itself already succeeded above regardless, so a missing
-            // project here just means no reminder gets appended, not a failure.
-            if (project is not null)
-            {
-                confirmation += $"\n\n{EventReminderFormatter.Format(project)}";
-            }
-
-            _logger.LogInformation(
-                "Taqdimot {Action}: chat {ChatId}, loyiha {ProjectId}, sarlavha \"{Title}\", fayl turi {FileType}",
-                isUpdate ? "yangilandi" : "qabul qilindi", chatId, session.ProjectId, session.Title, fileType);
-            await botClient.SendMessage(chatId, confirmation, replyMarkup: PresenterMainKeyboard, cancellationToken: ct);
-        }
-        catch (Exception ex)
-        {
-            // Previously uncaught here - it propagated up to HandleUpdateAsync's own catch-all, which only
-            // Debug.WriteLine's it (invisible outside an attached debugger), leaving the presenter with no
-            // response at all after sending their file. The two realistic causes: AddAsync rejecting an
-            // upload to a project this presenter isn't (or no longer is - Admin can revoke mid-upload)
-            // approved for ("Siz bu loyihaga hali biriktirilmagansiz"), or GetInfoAndDownloadFile/
-            // SaveFileAsync failing outright (the Telegram Bot API caps bot file downloads at 20MB, or a
-            // local disk I/O error) - either way the presenter now sees exactly why instead of silence.
-            _logger.LogError(ex, "Taqdimot yuborishda xatolik: chat {ChatId}, loyiha {ProjectId}", chatId, session.ProjectId);
-            await botClient.SendMessage(chatId, $"❌ Taqdimotni yuborishda xatolik yuz berdi: {ex.Message}", cancellationToken: ct);
-        }
-        finally
-        {
-            File.Delete(tempFilePath);
-            _sessions.TryRemove(chatId, out _);
-        }
     }
 
     // ---------- Judge web platform redirect ----------
@@ -1089,11 +905,7 @@ public sealed class PresentationBotHostedService : BackgroundService
             return;
         }
 
-        if (data.StartsWith("project:", StringComparison.Ordinal))
-        {
-            await HandleProjectSelectionCallbackAsync(botClient, callbackQuery, data, ct);
-        }
-        else if (data == "amain")
+        if (data == "amain")
         {
             await HandleAdminMainCallbackAsync(botClient, callbackQuery, ct);
         }
