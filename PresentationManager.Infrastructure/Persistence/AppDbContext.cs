@@ -171,9 +171,7 @@ public class AppDbContext : DbContext
             b.ToTable("PresenterUploadTokens");
             b.HasKey(t => t.Id);
             b.Property(t => t.Token).IsRequired();
-            b.Property(t => t.ProjectName).IsRequired();
             b.Property(t => t.FullName).IsRequired();
-            b.Property(t => t.Title).IsRequired();
             b.HasIndex(t => t.Token).IsUnique();
         });
     }

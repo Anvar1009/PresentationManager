@@ -7,6 +7,4 @@ public interface IPresenterUploadTokenRepository
     Task<PresenterUploadToken> AddAsync(PresenterUploadToken token, CancellationToken ct = default);
 
     Task<PresenterUploadToken?> GetByTokenAsync(string token, CancellationToken ct = default);
-
-    Task MarkUsedAsync(int id, CancellationToken ct = default);
 }
