@@ -1,0 +1,61 @@
+@model ManagerEditUserViewModel
+@{
+    ViewData["Title"] = "Login/parolni tiklash";
+    ViewData["Brand"] = "Menejer paneli";
+
+    static string Initials(string fullName)
+    {
+        var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            >= 2 => $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant(),
+            1 => parts[0][0].ToString().ToUpperInvariant(),
+            _ => "?"
+        };
+    }
+}
+
+@section Sidebar {
+    <partial name="_ManagerTabs" model='new ManagerTabsViewModel("users")' />
+}
+
+<span class="eyebrow">Login/parolni tiklash</span>
+<h1 class="page-title">@Model.FullName</h1>
+<p class="page-subtitle">Parolni bo'sh qoldirsangiz, joriy parol o'zgarmaydi.</p>
+
+<div class="card" style="max-width: 460px;">
+    <div class="profile-header">
+        <span class="profile-avatar">@Initials(Model.FullName)</span>
+        <div class="profile-header-text">
+            <div class="profile-header-name">@Model.FullName</div>
+            <div class="profile-header-meta">@@@Model.Username · @Model.Role</div>
+        </div>
+    </div>
+
+    <div asp-validation-summary="All" class="validation-summary"></div>
+
+    <form asp-controller="Manager" asp-action="EditUser" method="post">
+        <input type="hidden" asp-for="Id" />
+        <div class="field">
+            <label asp-for="Username"></label>
+            <input asp-for="Username" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+            <label asp-for="FullName"></label>
+            <input asp-for="FullName" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+            <label asp-for="NewPassword"></label>
+            <input asp-for="NewPassword" type="text" autocomplete="off" />
+            <div class="field-hint">Bo'sh qoldirsangiz, joriy parol saqlanadi.</div>
+        </div>
+        <div class="field">
+            <label asp-for="Role"></label>
+            <select asp-for="Role">
+                <option value="@UserRole.Operator">Operator</option>
+                <option value="@UserRole.Admin">Admin</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-block">Saqlash</button>
+    </form>
+</div>

@@ -34,6 +34,11 @@ public sealed class PresenterAssignmentService
     public Task<List<PresenterProjectAssignment>> GetByProjectIdAsync(int projectId, CancellationToken ct = default) =>
         _assignmentRepository.GetByProjectIdAsync(projectId, ct);
 
+    /// <summary>Every assignment for one organization's projects - a Manager's "Taqdimotchilar" page derives
+    /// its distinct presenter list from this. See <see cref="Domain.Entities.Project.OrganizationId"/>.</summary>
+    public Task<List<PresenterProjectAssignment>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default) =>
+        _assignmentRepository.GetByOrganizationAsync(organizationId, ct);
+
     /// <summary>Every project this presenter has been approved for — the Telegram bot's upload flow filters
     /// its project picker down to exactly this list (see <c>PresentationBotHostedService.ShowProjectListAsync</c>).
     /// A project deleted after the assignment was made is silently skipped rather than surfaced as an error.</summary>

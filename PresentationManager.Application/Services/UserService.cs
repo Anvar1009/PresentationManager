@@ -22,6 +22,10 @@ public sealed class UserService
 
     public Task<List<User>> GetAllAsync(CancellationToken ct = default) => _userRepository.GetAllAsync(ct);
 
+    /// <summary>A Manager's own tenant's accounts - see <see cref="User.OrganizationId"/>.</summary>
+    public Task<List<User>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default) =>
+        _userRepository.GetByOrganizationAsync(organizationId, ct);
+
     public Task<User?> GetByIdAsync(int id, CancellationToken ct = default) => _userRepository.GetByIdAsync(id, ct);
 
     /// <summary>Looks up which Admin/Operator (if any) a Telegram chat is linked to - see
@@ -64,7 +68,8 @@ public sealed class UserService
         return user;
     }
 
-    public async Task<User> CreateAsync(string username, string password, string fullName, UserRole role, CancellationToken ct = default)
+    public async Task<User> CreateAsync(
+        string username, string password, string fullName, UserRole role, int? organizationId = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(fullName))
         {
@@ -84,7 +89,8 @@ public sealed class UserService
             Username = username.Trim(),
             PasswordHash = PasswordHasher.Hash(password),
             FullName = fullName.Trim(),
-            Role = role
+            Role = role,
+            OrganizationId = organizationId
         };
         var created = await _userRepository.AddAsync(user, ct);
         _logger.LogInformation("Yangi foydalanuvchi yaratildi: {UserId} - {Username} ({Role})", created.Id, created.Username, created.Role);
@@ -154,6 +160,14 @@ public sealed class UserService
     {
         await _userRepository.SetRoleAsync(userId, newRole, ct);
         _logger.LogInformation("Foydalanuvchi roli o'zgartirildi: {UserId} -> {Role}", userId, newRole);
+    }
+
+    /// <summary>SuperAdmin panel's Tashkilot dropdown on an existing account - moves it to a different tenant
+    /// (or, passed null, makes it organization-less again).</summary>
+    public async Task ChangeOrganizationAsync(int userId, int? organizationId, CancellationToken ct = default)
+    {
+        await _userRepository.SetOrganizationAsync(userId, organizationId, ct);
+        _logger.LogInformation("Foydalanuvchi tashkiloti o'zgartirildi: {UserId} -> {OrganizationId}", userId, organizationId);
     }
 
     /// <summary>SuperAdmin panel's "Login/parolni tiklash" action on an existing account — the recovery path
@@ -249,6 +263,6 @@ public sealed class UserService
         }
 
         _logger.LogWarning("Baza bo'sh - standart SuperAdmin hisobi ('superadmin') yaratilmoqda.");
-        await CreateAsync("superadmin", "admin123", "Super Administrator", UserRole.SuperAdmin, ct);
+        await CreateAsync("superadmin", "admin123", "Super Administrator", UserRole.SuperAdmin, organizationId: null, ct);
     }
 }

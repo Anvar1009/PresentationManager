@@ -25,6 +25,12 @@ public sealed class HttpUserRepository : IUserRepository
     public Task<User?> GetByIdAsync(int id, CancellationToken ct = default) =>
         GetOneAsync($"api/users/{id}", ct);
 
+    public async Task<List<User>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default)
+    {
+        var wires = await _http.GetFromJsonAsync<List<UserWire>>($"api/users/organization/{organizationId}", ApiJsonOptions.Default, ct) ?? [];
+        return wires.Select(w => w.ToEntity()).ToList();
+    }
+
     public Task<User?> GetByUsernameAsync(string username, CancellationToken ct = default) =>
         GetOneAsync($"api/users/by-username/{Uri.EscapeDataString(username)}", ct);
 
@@ -113,6 +119,12 @@ public sealed class HttpUserRepository : IUserRepository
     public async Task SetRoleAsync(int userId, UserRole role, CancellationToken ct = default)
     {
         var response = await _http.PutAsJsonAsync($"api/users/{userId}/role", new { Role = role }, ApiJsonOptions.Default, ct);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task SetOrganizationAsync(int userId, int? organizationId, CancellationToken ct = default)
+    {
+        var response = await _http.PutAsJsonAsync($"api/users/{userId}/organization", new { OrganizationId = organizationId }, ApiJsonOptions.Default, ct);
         response.EnsureSuccessStatusCode();
     }
 

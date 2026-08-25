@@ -23,6 +23,9 @@ public sealed class HttpJudgeRepository : IJudgeRepository
     public async Task<List<Judge>> GetByTelegramChatIdAsync(long telegramChatId, CancellationToken ct = default) =>
         await GetListAsync($"api/judges/by-telegram/{telegramChatId}", ct);
 
+    public async Task<List<Judge>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default) =>
+        await GetListAsync($"api/judges/organization/{organizationId}", ct);
+
     public async Task<Judge> AddAsync(Judge judge, CancellationToken ct = default)
     {
         var response = await _http.PostAsJsonAsync("api/judges", JudgeWire.FromEntity(judge), ApiJsonOptions.Default, ct);

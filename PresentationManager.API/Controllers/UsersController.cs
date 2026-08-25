@@ -71,6 +71,13 @@ public sealed class UsersController : ControllerBase
         return user is null ? NotFound() : Ok(UserDto.FromEntity(user));
     }
 
+    [HttpGet("organization/{organizationId:int}")]
+    public async Task<ActionResult<List<UserDto>>> GetByOrganization(int organizationId, CancellationToken ct)
+    {
+        var users = await _userRepository.GetByOrganizationAsync(organizationId, ct);
+        return Ok(users.Select(UserDto.FromEntity).ToList());
+    }
+
     [HttpGet("count")]
     public async Task<ActionResult<int>> Count(CancellationToken ct) => Ok(await _userRepository.CountAsync(ct));
 
@@ -147,6 +154,15 @@ public sealed class UsersController : ControllerBase
     {
         await _userRepository.SetRoleAsync(id, request.Role, ct);
         _logger.LogInformation("Foydalanuvchi roli o'zgartirildi: {UserId} -> {Role}", id, request.Role);
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/organization")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<IActionResult> SetOrganization(int id, SetOrganizationRequest request, CancellationToken ct)
+    {
+        await _userRepository.SetOrganizationAsync(id, request.OrganizationId, ct);
+        _logger.LogInformation("Foydalanuvchi tashkiloti o'zgartirildi: {UserId} -> {OrganizationId}", id, request.OrganizationId);
         return NoContent();
     }
 }

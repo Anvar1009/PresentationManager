@@ -1,0 +1,25 @@
+@model CreateOrganizationViewModel
+@{
+    ViewData["Title"] = "Tashkilot qo'shish";
+    ViewData["Brand"] = "SuperAdmin paneli";
+}
+
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("organizations")' />
+}
+
+<span class="eyebrow">+ Tashkilot qo'shish</span>
+<h1 class="page-title">Yangi tashkilot</h1>
+<p class="page-subtitle">Tashkilot yaratilgach, unga Menejer tayinlashingiz mumkin bo'ladi.</p>
+
+<div class="card" style="max-width: 460px;">
+    <div asp-validation-summary="All" class="validation-summary"></div>
+
+    <form asp-controller="SuperAdmin" asp-action="CreateOrganization" method="post">
+        <div class="field">
+            <label asp-for="Name"></label>
+            <input asp-for="Name" type="text" autocomplete="off" />
+        </div>
+        <button type="submit" class="btn btn-block">+ Tashkilot qo'shish</button>
+    </form>
+</div>

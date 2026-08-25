@@ -8,6 +8,12 @@ public interface IPresentationRepository
     /// not by the queue/session flow (which is always scoped to a single active project).</summary>
     Task<List<Presentation>> GetAllAsync(CancellationToken ct = default);
 
+    /// <summary>Every presentation whose project belongs to <paramref name="organizationId"/>, plus any
+    /// presentation whose project has no recorded organization (legacy rows) - used by a Manager's dashboard
+    /// and an Operator's desktop queue instead of the unscoped <see cref="GetAllAsync"/>. See
+    /// <see cref="Domain.Entities.Project.OrganizationId"/>.</summary>
+    Task<List<Presentation>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default);
+
     Task<List<Presentation>> GetAllOrderedAsync(int projectId, CancellationToken ct = default);
 
     Task<Presentation?> GetByIdAsync(int id, CancellationToken ct = default);

@@ -1,0 +1,40 @@
+@model ManagerCreateUserViewModel
+@{
+    ViewData["Title"] = "Foydalanuvchi qo'shish";
+    ViewData["Brand"] = "Menejer paneli";
+}
+
+@section Sidebar {
+    <partial name="_ManagerTabs" model='new ManagerTabsViewModel("users")' />
+}
+
+<span class="eyebrow">+ Foydalanuvchi qo'shish</span>
+<h1 class="page-title">Yangi foydalanuvchi</h1>
+<p class="page-subtitle">Login va parolni foydalanuvchiga alohida yetkazing. Hisob avtomatik tashkilotingizga biriktiriladi.</p>
+
+<div class="card" style="max-width: 460px;">
+    <div asp-validation-summary="All" class="validation-summary"></div>
+
+    <form asp-controller="Manager" asp-action="CreateUser" method="post">
+        <div class="field">
+            <label asp-for="Username"></label>
+            <input asp-for="Username" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+            <label asp-for="Password"></label>
+            <input asp-for="Password" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+            <label asp-for="FullName"></label>
+            <input asp-for="FullName" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+            <label asp-for="Role"></label>
+            <select asp-for="Role">
+                <option value="@UserRole.Operator">Operator</option>
+                <option value="@UserRole.Admin">Admin</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-block">+ Foydalanuvchi qo'shish</button>
+    </form>
+</div>

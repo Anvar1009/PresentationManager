@@ -4,8 +4,8 @@ using PresentationManager.TelegramBot;
 
 namespace PresentationManager.UI.Forms;
 
-/// <summary>Shared "Botga ulash" flow used by both <see cref="AdminPanelForm"/> and <see cref="SettingsForm"/>
-/// (Operator's own copy of the same button, reached via Sozlamalar) - generates a one-time deep-link token
+/// <summary>Shared "Botga ulash" flow used by <see cref="SettingsForm"/> (Operator's own copy of this
+/// button, reached via Sozlamalar) - generates a one-time deep-link token
 /// (<see cref="AdminLinkService"/>), copies the resulting link to the clipboard, and shows it in a message box
 /// so the account can be opened and linked from Telegram.</summary>
 internal static class BotLinkHelper

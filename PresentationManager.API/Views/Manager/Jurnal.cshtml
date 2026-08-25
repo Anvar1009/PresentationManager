@@ -1,0 +1,47 @@
+@model SuperAdminJurnalViewModel
+@{
+    ViewData["Title"] = "Jurnal";
+    ViewData["Brand"] = "Menejer paneli";
+    ViewData["Wide"] = "container-wide";
+}
+
+<span class="eyebrow">Jurnal</span>
+<h1 class="page-title">Jurnal</h1>
+<p class="page-subtitle">Tashkilotingizga tegishli so'nggi 200 ta hodisa.</p>
+
+@section Sidebar {
+    <partial name="_ManagerTabs" model='new ManagerTabsViewModel("jurnal")' />
+}
+
+<div class="toolbar">
+    <form method="get" asp-controller="Manager" asp-action="Jurnal">
+        <input type="text" name="q" value="@Model.Query" placeholder="Xabar bo'yicha qidirish..." />
+    </form>
+</div>
+
+@if (Model.Entries.Count == 0)
+{
+    <div class="card empty-state">Hech narsa topilmadi.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Vaqt</th>
+                    <th>Xabar</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in Model.Entries)
+                {
+                    <tr>
+                        <td>@entry.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</td>
+                        <td class="wrap">@entry.Message</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

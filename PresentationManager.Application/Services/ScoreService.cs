@@ -25,6 +25,10 @@ public sealed class ScoreService
 
     public Task<List<Score>> GetAllAsync(CancellationToken ct = default) => _scoreRepository.GetAllAsync(ct);
 
+    /// <summary>Org-scoped counterpart to <see cref="GetAllAsync"/> - a Manager's dashboard.</summary>
+    public Task<List<Score>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default) =>
+        _scoreRepository.GetByOrganizationAsync(organizationId, ct);
+
     /// <summary>A judge revising their own earlier score for the same presentation/criterion is expected
     /// (upsert), not an error — see <see cref="IScoreRepository.UpsertAsync"/>.</summary>
     public async Task UpsertAsync(int presentationId, int judgeId, int criterionId, int value, CancellationToken ct = default)

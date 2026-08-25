@@ -31,6 +31,10 @@ public sealed class JudgeService
     public Task<List<Judge>> GetByProjectIdAsync(int projectId, CancellationToken ct = default) =>
         _judgeRepository.GetByProjectIdAsync(projectId, ct);
 
+    /// <summary>Org-scoped counterpart to <see cref="GetAllAsync"/> - a Manager's dashboard.</summary>
+    public Task<List<Judge>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default) =>
+        _judgeRepository.GetByOrganizationAsync(organizationId, ct);
+
     /// <summary>Assigns an already bot-registered person (<paramref name="presenterId"/> - the
     /// <see cref="Presenter"/> row created when they shared their contact) as a judge for a project.</summary>
     public async Task<Judge> AssignAsync(int projectId, int presenterId, CancellationToken ct = default)

@@ -12,12 +12,13 @@ public sealed record ProjectDto(
     int? CreatedByUserId,
     DateTime? SubmissionDeadline,
     DateTime CreatedAt,
-    DateTime UpdatedAt)
+    DateTime UpdatedAt,
+    int? OrganizationId)
 {
     public static ProjectDto FromEntity(Project project) => new(
         project.Id, project.Name, project.EventStartDate, project.EventEndDate,
         project.EventTime, project.Location, project.CreatedByUserId, project.SubmissionDeadline,
-        project.CreatedAt, project.UpdatedAt);
+        project.CreatedAt, project.UpdatedAt, project.OrganizationId);
 }
 
 public sealed record CreateProjectRequest(
@@ -26,7 +27,8 @@ public sealed record CreateProjectRequest(
     DateOnly EventEndDate,
     TimeOnly? EventTime,
     string? Location,
-    int? CreatedByUserId);
+    int? CreatedByUserId,
+    int? OrganizationId);
 
 /// <summary>Full-entity replace, mirroring <see cref="Application.Interfaces.IProjectRepository.UpdateAsync"/> -
 /// <see cref="CreatedByUserId"/>/<see cref="CreatedAt"/> aren't included since nothing should ever change

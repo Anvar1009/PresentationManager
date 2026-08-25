@@ -16,7 +16,8 @@ public sealed record CreateUserRequest(
     UserRole Role,
     bool IsActive,
     long? TelegramChatId,
-    string? TelegramUsername)
+    string? TelegramUsername,
+    int? OrganizationId)
 {
     public User ToEntity() => new()
     {
@@ -26,7 +27,8 @@ public sealed record CreateUserRequest(
         Role = Role,
         IsActive = IsActive,
         TelegramChatId = TelegramChatId,
-        TelegramUsername = TelegramUsername
+        TelegramUsername = TelegramUsername,
+        OrganizationId = OrganizationId
     };
 }
 
@@ -45,3 +47,5 @@ public sealed record SetUsernameRequest(string Username);
 public sealed record SetFullNameRequest(string FullName);
 
 public sealed record SetRoleRequest(UserRole Role);
+
+public sealed record SetOrganizationRequest(int? OrganizationId);

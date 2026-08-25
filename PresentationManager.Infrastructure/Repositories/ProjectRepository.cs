@@ -32,6 +32,15 @@ public class ProjectRepository : IProjectRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<Project>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Projects.AsNoTracking()
+            .Where(p => p.OrganizationId == organizationId || p.OrganizationId == null)
+            .OrderBy(p => p.Name)
+            .ToListAsync(ct);
+    }
+
     public async Task<Project?> GetByIdAsync(int id, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

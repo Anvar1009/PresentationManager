@@ -1,0 +1,49 @@
+@model SuperAdminJudgesViewModel
+@{
+    ViewData["Title"] = "Hakamlar";
+    ViewData["Brand"] = "Menejer paneli";
+    ViewData["Wide"] = "container-wide";
+}
+
+<span class="eyebrow">Hakamlar</span>
+<h1 class="page-title">Hakamlar</h1>
+<p class="page-subtitle">Tashkilotingiz loyihalari bo'yicha tayinlangan hakamlar (faqat ko'rish rejimi).</p>
+
+@section Sidebar {
+    <partial name="_ManagerTabs" model='new ManagerTabsViewModel("judges")' />
+}
+
+<div class="toolbar">
+    <form method="get" asp-controller="Manager" asp-action="Judges">
+        <input type="text" name="q" value="@Model.Query" placeholder="Loyiha, ism yoki telefon bo'yicha qidirish..." />
+    </form>
+</div>
+
+@if (Model.Judges.Count == 0)
+{
+    <div class="card empty-state">Hech narsa topilmadi.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Loyiha</th>
+                    <th>Ism</th>
+                    <th>Telefon</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var judge in Model.Judges)
+                {
+                    <tr>
+                        <td>@judge.ProjectName</td>
+                        <td>@judge.FullName</td>
+                        <td>@judge.PhoneNumber</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

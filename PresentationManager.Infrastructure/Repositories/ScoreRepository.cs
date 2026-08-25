@@ -23,6 +23,16 @@ public class ScoreRepository : IScoreRepository
         return await db.Scores.AsNoTracking().ToListAsync(ct);
     }
 
+    public async Task<List<Score>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Scores.AsNoTracking()
+            .Where(s => db.Presentations.Any(p => p.Id == s.PresentationId
+                && db.Projects.Any(proj => proj.Id == p.ProjectId
+                    && (proj.OrganizationId == organizationId || proj.OrganizationId == null))))
+            .ToListAsync(ct);
+    }
+
     public async Task<List<Score>> GetByPresentationAndJudgeAsync(int presentationId, int judgeId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

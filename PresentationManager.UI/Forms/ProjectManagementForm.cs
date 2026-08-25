@@ -13,6 +13,7 @@ namespace PresentationManager.UI.Forms;
 public sealed class ProjectManagementForm : Form
 {
     private readonly ProjectService _projectService;
+    private readonly int? _organizationId;
     private readonly ListBox _listBox;
     private readonly TextBox _searchBox;
 
@@ -27,9 +28,10 @@ public sealed class ProjectManagementForm : Form
     /// deletes the one that was active (in which case it becomes null).</summary>
     public int? SelectedActiveProjectId { get; private set; }
 
-    public ProjectManagementForm(ProjectService projectService, int? currentActiveProjectId)
+    public ProjectManagementForm(ProjectService projectService, int? currentActiveProjectId, int? organizationId = null)
     {
         _projectService = projectService;
+        _organizationId = organizationId;
         SelectedActiveProjectId = currentActiveProjectId;
 
         Text = "Loyihalar";
@@ -142,7 +144,9 @@ public sealed class ProjectManagementForm : Form
 
     private async Task LoadProjectsAsync()
     {
-        _allProjects = await _projectService.GetAllAsync();
+        _allProjects = _organizationId is int organizationId
+            ? await _projectService.GetByOrganizationAsync(organizationId)
+            : await _projectService.GetAllAsync();
         ApplyFilter();
     }
 
@@ -181,7 +185,7 @@ public sealed class ProjectManagementForm : Form
         {
             await _projectService.CreateAsync(
                 dialog.ProjectName, dialog.EventStartDate, dialog.EventEndDate, dialog.EventTime, dialog.Location,
-                extraDiscussionTimeSeconds: dialog.ExtraDiscussionTimeSeconds);
+                extraDiscussionTimeSeconds: dialog.ExtraDiscussionTimeSeconds, organizationId: _organizationId);
             await LoadProjectsAsync();
         }
         catch (Exception ex)

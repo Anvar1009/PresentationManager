@@ -17,6 +17,9 @@ public sealed class HttpScoreRepository : IScoreRepository
     public async Task<List<Score>> GetAllAsync(CancellationToken ct = default) =>
         await GetListAsync("api/scores", ct);
 
+    public async Task<List<Score>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default) =>
+        await GetListAsync($"api/scores/organization/{organizationId}", ct);
+
     public async Task<List<Score>> GetByPresentationAndJudgeAsync(int presentationId, int judgeId, CancellationToken ct = default) =>
         await GetListAsync($"api/scores/presentation/{presentationId}/judge/{judgeId}", ct);
 

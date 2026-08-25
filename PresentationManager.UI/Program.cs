@@ -180,8 +180,6 @@ static class Program
 
                 services.AddSingleton<PresentationForm>();
                 services.AddSingleton<AdminForm>();
-                services.AddSingleton<AdminPanelForm>();
-                services.AddSingleton<SuperAdminPanelForm>();
             })
             .Build();
 
@@ -236,13 +234,13 @@ static class Program
             host.Services.GetRequiredService<ITelegramSender>());
         if (loginForm.ShowDialog() == DialogResult.OK && loginForm.AuthenticatedUser is { } user)
         {
-            // Judge and OrderOperator are both web-only (see UserRole.Judge's doc comment - OrderOperator
-            // moved there too, so its "Tartib operatori" dashboard is PresentationManager.API's
-            // OrderController, not a desktop form anymore) - the desktop LoginForm has no way to know that
-            // ahead of a successful password check, so this is caught here instead of inside the switch
-            // below, with a friendly explanation rather than the "Unknown role" exception every other
-            // truly-unexpected value still falls into.
-            if (user.Role is UserRole.Judge or UserRole.OrderOperator)
+            // Every role except Operator is web-only now (see UserRole.Manager's doc comment - Admin/
+            // SuperAdmin moved there too, alongside the already-web-only Judge/OrderOperator, so their
+            // dashboards are all PresentationManager.API MVC controllers, not desktop forms anymore) - the
+            // desktop LoginForm has no way to know that ahead of a successful password check, so this is
+            // caught here instead of inside a role switch, with a friendly explanation rather than an
+            // "Unknown role" exception.
+            if (user.Role != UserRole.Operator)
             {
                 MessageBox.Show(
                     "Bu hisob faqat veb-sahifa orqali kiradi, desktop dasturga emas.",
@@ -253,50 +251,26 @@ static class Program
                 return;
             }
 
-            Form mainForm = user.Role switch
-            {
-                // All three role forms are DI singletons built before login happens, so none of them has a
-                // way to receive the logged-in user through its constructor - SetCurrentUser wires it in
-                // here instead, before the form ever runs (AdminForm needs it for its own "Botga ulash" in
-                // Sozlamalar; AdminPanelForm needs it to scope "Loyihalar" to whichever Admin this is; all
-                // three need it for the profile-info/Chiqish menu built by UserMenuHelper).
-                UserRole.Operator => WithCurrentOperatorUser(host.Services.GetRequiredService<AdminForm>(), user),
-                UserRole.Admin => WithCurrentAdminUser(host.Services.GetRequiredService<AdminPanelForm>(), user),
-                UserRole.SuperAdmin => WithCurrentSuperAdminUser(host.Services.GetRequiredService<SuperAdminPanelForm>(), user),
-                _ => throw new InvalidOperationException($"Unknown role: {user.Role}")
-            };
+            // AdminForm is a DI singleton built before login happens, so it has no way to receive the
+            // logged-in user through its constructor - SetCurrentUser wires it in here instead, before the
+            // form ever runs (needed for its own "Botga ulash" in Sozlamalar and the profile-info/Chiqish
+            // menu built by UserMenuHelper).
+            var mainForm = WithCurrentOperatorUser(host.Services.GetRequiredService<AdminForm>(), user);
 
-            // PresentationForm (Operator only) owns a WebView2 control once the operator has actually opened
-            // a slide - WebView2 can only tear itself down while the WinForms message loop is still pumping,
-            // but PresentationForm is a DI singleton, so without this it would only get Disposed later via
+            // PresentationForm owns a WebView2 control once the operator has actually opened a slide -
+            // WebView2 can only tear itself down while the WinForms message loop is still pumping, but
+            // PresentationForm is a DI singleton, so without this it would only get Disposed later via
             // `host.Dispose()` below, AFTER WinFormsApp.Run has already returned and the loop has stopped -
             // throwing "CoreWebView2 can only be accessed from the UI thread." right as the operator closes
             // the app. Closing it here, from mainForm's own FormClosed (which fires while the loop is still
             // running, just before WinFormsApp.Run returns), disposes it at the one point that's still safe.
-            if (mainForm is AdminForm)
-            {
-                var presentationForm = host.Services.GetRequiredService<PresentationForm>();
-                mainForm.FormClosed += (_, _) => presentationForm.Close();
-            }
+            var presentationForm = host.Services.GetRequiredService<PresentationForm>();
+            mainForm.FormClosed += (_, _) => presentationForm.Close();
 
             WinFormsApp.Run(mainForm);
         }
 
-        // Local functions can't be overloaded by parameter type the way regular methods can - hence the
-        // distinct names, even though all three bodies are identical modulo the form type.
         static AdminForm WithCurrentOperatorUser(AdminForm form, User user)
-        {
-            form.SetCurrentUser(user);
-            return form;
-        }
-
-        static AdminPanelForm WithCurrentAdminUser(AdminPanelForm form, User user)
-        {
-            form.SetCurrentUser(user);
-            return form;
-        }
-
-        static SuperAdminPanelForm WithCurrentSuperAdminUser(SuperAdminPanelForm form, User user)
         {
             form.SetCurrentUser(user);
             return form;

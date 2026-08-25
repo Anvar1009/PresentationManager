@@ -33,6 +33,13 @@ public sealed class PresentationsController : ControllerBase
         return Ok(presentations.Select(PresentationDto.FromEntity).ToList());
     }
 
+    [HttpGet("organization/{organizationId:int}")]
+    public async Task<ActionResult<List<PresentationDto>>> GetByOrganization(int organizationId, CancellationToken ct)
+    {
+        var presentations = await _presentationRepository.GetByOrganizationAsync(organizationId, ct);
+        return Ok(presentations.Select(PresentationDto.FromEntity).ToList());
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<PresentationDto>> GetById(int id, CancellationToken ct)
     {

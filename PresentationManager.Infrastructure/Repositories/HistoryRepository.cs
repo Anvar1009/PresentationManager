@@ -41,6 +41,18 @@ public class HistoryRepository : IHistoryRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<HistoryEntry>> GetRecentByOrganizationAsync(int organizationId, int count = 200, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.HistoryEntries.AsNoTracking()
+            .Where(h => db.Presentations.Any(p => p.Id == h.PresentationId
+                && db.Projects.Any(proj => proj.Id == p.ProjectId
+                    && (proj.OrganizationId == organizationId || proj.OrganizationId == null))))
+            .OrderByDescending(h => h.Timestamp)
+            .Take(count)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<HistoryEntry>> GetForPresentationAsync(int presentationId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

@@ -4,9 +4,9 @@ using PresentationManager.UI.Theme;
 namespace PresentationManager.UI.Forms;
 
 /// <summary>Self-service "change my login/password" dialog, opened from the account menu
-/// (<see cref="UserMenuHelper"/>) by any logged-in role. Unlike <see cref="EditUserForm"/> (SuperAdmin's
-/// dialog for editing any account's name/login/role), this only ever targets the caller's own account and
-/// exposes just Login/Yangi parol - no FullName, no Rol.</summary>
+/// (<see cref="UserMenuHelper"/>) by any logged-in role. Unlike SuperAdmin/Manager's own web "Login/parolni
+/// tiklash" form (which can edit any account's name/login/role), this only ever targets the caller's own
+/// account and exposes just Login/Yangi parol - no FullName, no Rol.</summary>
 public sealed class EditOwnProfileForm : Form
 {
     private readonly TextBox _usernameBox;
@@ -14,7 +14,8 @@ public sealed class EditOwnProfileForm : Form
 
     public string Username => _usernameBox.Text.Trim();
 
-    /// <summary>Empty means "keep the current password" - same convention as <see cref="EditUserForm.NewPassword"/>.</summary>
+    /// <summary>Empty means "keep the current password" - same convention as the web panels' own
+    /// "Login/parolni tiklash" form.</summary>
     public string NewPassword => _passwordBox.Text;
 
     public EditOwnProfileForm(User user)

@@ -60,6 +60,7 @@ builder.Services.AddSingleton<IJudgeRepository, JudgeRepository>();
 builder.Services.AddSingleton<IScoreRepository, ScoreRepository>();
 builder.Services.AddSingleton<IPresenterProjectAssignmentRepository, PresenterProjectAssignmentRepository>();
 builder.Services.AddSingleton<IPresenterUploadTokenRepository, PresenterUploadTokenRepository>();
+builder.Services.AddSingleton<IOrganizationRepository, OrganizationRepository>();
 builder.Services.AddSingleton<IFileStorageService>(sp =>
     new FileStorageService(ResolveStorageRoot(builder.Configuration), sp.GetRequiredService<ILogger<FileStorageService>>()));
 
@@ -72,6 +73,7 @@ builder.Services.AddSingleton<AdminLinkService>();
 builder.Services.AddSingleton<PresentationQueueService>();
 builder.Services.AddSingleton<PresenterAssignmentService>();
 builder.Services.AddSingleton<PresenterUploadService>();
+builder.Services.AddSingleton<OrganizationService>();
 
 // The bot token itself lives only here (and in PresentationManager.BotService) now - PresentationManager.UI
 // no longer constructs a TelegramNotifier at all, it only ever calls the text-only ITelegramSender contract

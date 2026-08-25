@@ -31,8 +31,17 @@ public class AppDbContext : DbContext
 
     public DbSet<PresenterUploadToken> PresenterUploadTokens => Set<PresenterUploadToken>();
 
+    public DbSet<Organization> Organizations => Set<Organization>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Organization>(b =>
+        {
+            b.ToTable("Organizations");
+            b.HasKey(o => o.Id);
+            b.Property(o => o.Name).IsRequired();
+        });
+
         modelBuilder.Entity<Project>(b =>
         {
             b.ToTable("Projects");
@@ -49,6 +58,13 @@ public class AppDbContext : DbContext
             b.HasOne<User>()
                 .WithMany()
                 .HasForeignKey(p => p.CreatedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            b.HasIndex(p => p.OrganizationId);
+            // Same SetNull reasoning as CreatedByUserId above - deleting an Organization shouldn't cascade
+            // into deleting every project it ever owned.
+            b.HasOne<Organization>()
+                .WithMany()
+                .HasForeignKey(p => p.OrganizationId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -104,6 +120,13 @@ public class AppDbContext : DbContext
             b.HasIndex(u => u.Username).IsUnique();
             b.HasIndex(u => u.TelegramChatId).IsUnique();
             b.HasIndex(u => u.TelegramLinkToken);
+            b.HasIndex(u => u.OrganizationId);
+            // SetNull: deleting an Organization demotes its former members to organization-less accounts
+            // rather than deleting the accounts themselves.
+            b.HasOne<Organization>()
+                .WithMany()
+                .HasForeignKey(u => u.OrganizationId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<EvaluationCriterion>(b =>
