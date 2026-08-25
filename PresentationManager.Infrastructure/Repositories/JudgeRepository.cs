@@ -29,6 +29,16 @@ public class JudgeRepository : IJudgeRepository
         return await db.Judges.AsNoTracking().Where(j => j.ProjectId == projectId).ToListAsync(ct);
     }
 
+    public async Task<List<Judge>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Judges.AsNoTracking()
+            .Where(j => db.Projects.Any(proj => proj.Id == j.ProjectId
+                && (proj.OrganizationId == organizationId || proj.OrganizationId == null)))
+            .OrderBy(j => j.ProjectId)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<Judge>> GetByTelegramChatIdAsync(long telegramChatId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

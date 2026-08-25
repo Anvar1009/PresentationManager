@@ -39,10 +39,15 @@ public sealed class ProjectService
     public Task<List<Project>> GetByCreatorAsync(int createdByUserId, CancellationToken ct = default) =>
         _projectRepository.GetByCreatorAsync(createdByUserId, ct);
 
+    /// <summary>Scoped project list for a Manager's dashboard and an Operator's desktop queue - see
+    /// <see cref="Project.OrganizationId"/>.</summary>
+    public Task<List<Project>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default) =>
+        _projectRepository.GetByOrganizationAsync(organizationId, ct);
+
     public async Task<Project> CreateAsync(
         string name, DateOnly eventStartDate, DateOnly eventEndDate, TimeOnly? eventTime, string? location,
         int? createdByUserId = null, DateTime? submissionDeadline = null, int extraDiscussionTimeSeconds = 0,
-        CancellationToken ct = default)
+        int? organizationId = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -67,7 +72,8 @@ public sealed class ProjectService
             Location = string.IsNullOrWhiteSpace(location) ? null : location.Trim(),
             CreatedByUserId = createdByUserId,
             SubmissionDeadline = submissionDeadline,
-            ExtraDiscussionTimeSeconds = extraDiscussionTimeSeconds
+            ExtraDiscussionTimeSeconds = extraDiscussionTimeSeconds,
+            OrganizationId = organizationId
         };
         var created = await _projectRepository.AddAsync(project, ct);
         _logger.LogInformation("Yangi loyiha yaratildi: {ProjectId} - {ProjectName}", created.Id, created.Name);

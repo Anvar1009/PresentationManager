@@ -7,6 +7,11 @@ public interface IUserRepository
 {
     Task<List<User>> GetAllAsync(CancellationToken ct = default);
 
+    /// <summary>Every account belonging to <paramref name="organizationId"/> - a Manager's "Foydalanuvchilar"
+    /// page (the caller filters this down to Admin/Operator, since Manager/SuperAdmin accounts are never
+    /// shown there). See <see cref="User.OrganizationId"/>.</summary>
+    Task<List<User>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default);
+
     Task<User?> GetByIdAsync(int id, CancellationToken ct = default);
 
     Task<User?> GetByUsernameAsync(string username, CancellationToken ct = default);
@@ -43,4 +48,9 @@ public interface IUserRepository
 
     /// <summary>SuperAdmin-driven role change — see <see cref="PresentationManager.Application.Services.UserService.ChangeRoleAsync"/>.</summary>
     Task SetRoleAsync(int userId, UserRole role, CancellationToken ct = default);
+
+    /// <summary>SuperAdmin-driven tenant reassignment — see
+    /// <see cref="PresentationManager.Application.Services.UserService.ChangeOrganizationAsync"/>. Pass null
+    /// to make an account organization-less again.</summary>
+    Task SetOrganizationAsync(int userId, int? organizationId, CancellationToken ct = default);
 }

@@ -49,10 +49,50 @@ public sealed record SuperAdminJudgeRow(int Id, string ProjectName, string FullN
 public sealed record SuperAdminJudgesViewModel(string? Query, IReadOnlyList<SuperAdminJudgeRow> Judges);
 
 /// <summary>Reuses <see cref="User"/> as-is - the one section with real CRUD (create/edit/reset-password/
-/// change-role), all handled by dedicated actions/forms rather than reshaping the list row itself.</summary>
-public sealed record SuperAdminUsersViewModel(string? Query, IReadOnlyList<User> Users);
+/// change-role), all handled by dedicated actions/forms rather than reshaping the list row itself.
+/// <see cref="OrganizationNamesById"/> resolves each row's <see cref="User.OrganizationId"/> to a display
+/// name (a row with no entry, or a null OrganizationId, renders as organization-less).</summary>
+public sealed record SuperAdminUsersViewModel(
+    string? Query, IReadOnlyList<User> Users, IReadOnlyDictionary<int, string> OrganizationNamesById);
 
-/// <summary>SuperAdmin panel's "+ Foydalanuvchi qo'shish" form - mirrors <c>AddUserForm</c>.</summary>
+/// <summary>One row of the "Tashkilotlar" list - counts give SuperAdmin a sense of how populated/active each
+/// tenant is without opening it.</summary>
+public sealed record OrganizationRow(int Id, string Name, int UserCount, int ProjectCount, string CreatedAt);
+
+public sealed record SuperAdminOrganizationsViewModel(string? Query, IReadOnlyList<OrganizationRow> Organizations);
+
+public sealed class CreateOrganizationViewModel
+{
+    [Required(ErrorMessage = "Tashkilot nomi kiritilishi shart.")]
+    [Display(Name = "Tashkilot nomi")]
+    public string Name { get; set; } = string.Empty;
+}
+
+/// <summary>SuperAdmin's "Tashkilotlar" page's "+ Menejer tayinlash" form - identical shape to
+/// <see cref="CreateUserViewModel"/> minus the role picker (always <see cref="UserRole.Manager"/>) and with
+/// <see cref="OrganizationId"/> fixed to whichever tenant this form was opened from.</summary>
+public sealed class CreateManagerViewModel
+{
+    public int OrganizationId { get; set; }
+
+    public string OrganizationName { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Login kiritilishi shart.")]
+    [Display(Name = "Login")]
+    public string Username { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Parol kiritilishi shart.")]
+    [Display(Name = "Parol")]
+    public string Password { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Ism-familiya kiritilishi shart.")]
+    [Display(Name = "Ism-familiya")]
+    public string FullName { get; set; } = string.Empty;
+}
+
+/// <summary>SuperAdmin panel's "+ Foydalanuvchi qo'shish" form - mirrors <c>AddUserForm</c>.
+/// <see cref="OrganizationId"/> is optional here (SuperAdmin may leave any role organization-less) - unlike
+/// Manager's own user-creation form, which always stamps its own organization automatically.</summary>
 public sealed class CreateUserViewModel
 {
     [Required(ErrorMessage = "Login kiritilishi shart.")]
@@ -69,6 +109,9 @@ public sealed class CreateUserViewModel
 
     [Display(Name = "Rol")]
     public UserRole Role { get; set; } = UserRole.Operator;
+
+    [Display(Name = "Tashkilot")]
+    public int? OrganizationId { get; set; }
 }
 
 /// <summary>SuperAdmin panel's "Login/parolni tiklash" form - mirrors <c>EditUserForm</c>.
@@ -90,6 +133,9 @@ public sealed class EditUserViewModel
 
     [Display(Name = "Rol")]
     public UserRole Role { get; set; }
+
+    [Display(Name = "Tashkilot")]
+    public int? OrganizationId { get; set; }
 }
 
 public sealed record SuperAdminScoreRow(string PresentationTitle, string JudgePhone, string CriterionName, int Value, string UpdatedAt);

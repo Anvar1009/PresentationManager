@@ -26,6 +26,13 @@ public sealed class HttpHistoryRepository : IHistoryRepository
         return wires.Select(w => w.ToEntity()).ToList();
     }
 
+    public async Task<List<HistoryEntry>> GetRecentByOrganizationAsync(int organizationId, int count = 200, CancellationToken ct = default)
+    {
+        var wires = await _http.GetFromJsonAsync<List<HistoryEntryWire>>(
+            $"api/history/organization/{organizationId}?count={count}", ApiJsonOptions.Default, ct) ?? [];
+        return wires.Select(w => w.ToEntity()).ToList();
+    }
+
     public async Task<List<HistoryEntry>> GetForPresentationAsync(int presentationId, CancellationToken ct = default)
     {
         var wires = await _http.GetFromJsonAsync<List<HistoryEntryWire>>($"api/history/presentation/{presentationId}", ApiJsonOptions.Default, ct) ?? [];

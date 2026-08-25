@@ -20,6 +20,9 @@ public sealed class HttpPresenterProjectAssignmentRepository : IPresenterProject
     public async Task<List<PresenterProjectAssignment>> GetByPresenterIdAsync(int presenterId, CancellationToken ct = default) =>
         await GetListAsync($"api/presenter-assignments/presenter/{presenterId}", ct);
 
+    public async Task<List<PresenterProjectAssignment>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default) =>
+        await GetListAsync($"api/presenter-assignments/organization/{organizationId}", ct);
+
     public async Task<bool> ExistsAsync(int projectId, int presenterId, CancellationToken ct = default)
     {
         var assignments = await GetByProjectIdAsync(projectId, ct);

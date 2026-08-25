@@ -29,6 +29,15 @@ public class PresenterProjectAssignmentRepository : IPresenterProjectAssignmentR
         return await db.PresenterProjectAssignments.AsNoTracking().Where(a => a.PresenterId == presenterId).ToListAsync(ct);
     }
 
+    public async Task<List<PresenterProjectAssignment>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.PresenterProjectAssignments.AsNoTracking()
+            .Where(a => db.Projects.Any(proj => proj.Id == a.ProjectId
+                && (proj.OrganizationId == organizationId || proj.OrganizationId == null)))
+            .ToListAsync(ct);
+    }
+
     public async Task<bool> ExistsAsync(int projectId, int presenterId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

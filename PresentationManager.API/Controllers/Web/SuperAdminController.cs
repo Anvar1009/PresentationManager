@@ -29,6 +29,7 @@ public sealed class SuperAdminController : Controller
     private readonly IPresentationRepository _presentationRepository;
     private readonly IHistoryRepository _historyRepository;
     private readonly IFileStorageService _fileStorageService;
+    private readonly OrganizationService _organizationService;
     private readonly ILogger<SuperAdminController> _logger;
 
     public SuperAdminController(
@@ -36,7 +37,7 @@ public sealed class SuperAdminController : Controller
         JudgeService judgeService, CriterionService criterionService, ScoreService scoreService,
         IPresenterRepository presenterRepository, IProjectRepository projectRepository,
         IPresentationRepository presentationRepository, IHistoryRepository historyRepository,
-        IFileStorageService fileStorageService, ILogger<SuperAdminController> logger)
+        IFileStorageService fileStorageService, OrganizationService organizationService, ILogger<SuperAdminController> logger)
     {
         _projectService = projectService;
         _queueService = queueService;
@@ -49,6 +50,7 @@ public sealed class SuperAdminController : Controller
         _presentationRepository = presentationRepository;
         _historyRepository = historyRepository;
         _fileStorageService = fileStorageService;
+        _organizationService = organizationService;
         _logger = logger;
     }
 
@@ -232,11 +234,16 @@ public sealed class SuperAdminController : Controller
                 .ToList();
         }
 
-        return View(new SuperAdminUsersViewModel(q, users));
+        var organizationNamesById = (await _organizationService.GetAllAsync(ct)).ToDictionary(o => o.Id, o => o.Name);
+        return View(new SuperAdminUsersViewModel(q, users, organizationNamesById));
     }
 
     [HttpGet]
-    public IActionResult CreateUser() => View(new CreateUserViewModel());
+    public async Task<IActionResult> CreateUser(CancellationToken ct)
+    {
+        ViewBag.Organizations = await _organizationService.GetAllAsync(ct);
+        return View(new CreateUserViewModel());
+    }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -244,18 +251,20 @@ public sealed class SuperAdminController : Controller
     {
         if (!ModelState.IsValid)
         {
+            ViewBag.Organizations = await _organizationService.GetAllAsync(ct);
             return View(model);
         }
 
         try
         {
-            await _userService.CreateAsync(model.Username, model.Password, model.FullName, model.Role, ct);
+            await _userService.CreateAsync(model.Username, model.Password, model.FullName, model.Role, model.OrganizationId, ct);
             _logger.LogInformation("SuperAdmin foydalanuvchi yaratdi: {Username} ({Role})", model.Username, model.Role);
         }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning("Foydalanuvchi yaratish rad etildi: {Reason}", ex.Message);
             ModelState.AddModelError(string.Empty, ex.Message);
+            ViewBag.Organizations = await _organizationService.GetAllAsync(ct);
             return View(model);
         }
 
@@ -272,7 +281,11 @@ public sealed class SuperAdminController : Controller
             return NotFound();
         }
 
-        return View(new EditUserViewModel { Id = user.Id, Username = user.Username, FullName = user.FullName, Role = user.Role });
+        ViewBag.Organizations = await _organizationService.GetAllAsync(ct);
+        return View(new EditUserViewModel
+        {
+            Id = user.Id, Username = user.Username, FullName = user.FullName, Role = user.Role, OrganizationId = user.OrganizationId
+        });
     }
 
     [HttpPost]
@@ -281,6 +294,7 @@ public sealed class SuperAdminController : Controller
     {
         if (!ModelState.IsValid)
         {
+            ViewBag.Organizations = await _organizationService.GetAllAsync(ct);
             return View(model);
         }
 
@@ -288,17 +302,110 @@ public sealed class SuperAdminController : Controller
         {
             await _userService.EditUserAsync(model.Id, model.Username, model.FullName, model.NewPassword, ct);
             await _userService.ChangeRoleAsync(model.Id, model.Role, ct);
+            await _userService.ChangeOrganizationAsync(model.Id, model.OrganizationId, ct);
             _logger.LogInformation("SuperAdmin foydalanuvchini yangiladi: {UserId}", model.Id);
         }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning("Foydalanuvchini yangilash rad etildi: {UserId}, {Reason}", model.Id, ex.Message);
             ModelState.AddModelError(string.Empty, ex.Message);
+            ViewBag.Organizations = await _organizationService.GetAllAsync(ct);
             return View(model);
         }
 
         TempData["Success"] = "Foydalanuvchi yangilandi.";
         return RedirectToAction(nameof(Users));
+    }
+
+    public async Task<IActionResult> Organizations(string? q, CancellationToken ct)
+    {
+        var organizations = await _organizationService.GetAllAsync(ct);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            organizations = organizations.Where(o => o.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        var users = await _userService.GetAllAsync(ct);
+        var projects = await _projectService.GetAllAsync(ct);
+
+        var rows = organizations
+            .Select(o => new OrganizationRow(
+                o.Id, o.Name,
+                users.Count(u => u.OrganizationId == o.Id),
+                projects.Count(p => p.OrganizationId == o.Id),
+                o.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")))
+            .ToList();
+
+        return View(new SuperAdminOrganizationsViewModel(q, rows));
+    }
+
+    [HttpGet]
+    public IActionResult CreateOrganization() => View(new CreateOrganizationViewModel());
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateOrganization(CreateOrganizationViewModel model, CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        try
+        {
+            var organization = await _organizationService.CreateAsync(model.Name, ct);
+            _logger.LogInformation("SuperAdmin tashkilot yaratdi: {OrganizationId} - {Name}", organization.Id, organization.Name);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Tashkilot yaratish rad etildi: {Reason}", ex.Message);
+            ModelState.AddModelError(string.Empty, ex.Message);
+            return View(model);
+        }
+
+        TempData["Success"] = "Tashkilot qo'shildi.";
+        return RedirectToAction(nameof(Organizations));
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> CreateManager(int organizationId, CancellationToken ct)
+    {
+        var organization = await _organizationService.GetByIdAsync(organizationId, ct);
+        if (organization is null)
+        {
+            return NotFound();
+        }
+
+        return View(new CreateManagerViewModel { OrganizationId = organization.Id, OrganizationName = organization.Name });
+    }
+
+    /// <summary>Same shape as <see cref="CreateUser(CreateUserViewModel, CancellationToken)"/> but the role is
+    /// always <see cref="UserRole.Manager"/> and the organization is fixed to whichever tenant this form was
+    /// opened from (<see cref="CreateManagerViewModel.OrganizationId"/> is a hidden field, not user-editable).</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateManager(CreateManagerViewModel model, CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        try
+        {
+            await _userService.CreateAsync(model.Username, model.Password, model.FullName, UserRole.Manager, model.OrganizationId, ct);
+            _logger.LogInformation("SuperAdmin menejer tayinladi: {Username} (tashkilot {OrganizationId})",
+                model.Username, model.OrganizationId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Menejer tayinlash rad etildi: {Reason}", ex.Message);
+            ModelState.AddModelError(string.Empty, ex.Message);
+            return View(model);
+        }
+
+        TempData["Success"] = "Menejer tayinlandi.";
+        return RedirectToAction(nameof(Organizations));
     }
 
     public async Task<IActionResult> Scores(string? q, CancellationToken ct)

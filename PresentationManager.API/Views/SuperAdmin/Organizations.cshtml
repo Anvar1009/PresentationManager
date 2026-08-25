@@ -1,0 +1,61 @@
+@model SuperAdminOrganizationsViewModel
+@{
+    ViewData["Title"] = "Tashkilotlar";
+    ViewData["Brand"] = "SuperAdmin paneli";
+    ViewData["Wide"] = "container-wide";
+}
+
+<span class="eyebrow">Tashkilotlar</span>
+<h1 class="page-title">Tashkilotlar</h1>
+<p class="page-subtitle">Har bir tashkilot o'z Menejeri, Adminlari, Operatorlari va loyihalari bilan mustaqil ishlaydi.</p>
+
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("organizations")' />
+}
+
+@if (TempData["Success"] is string success)
+{
+    <div class="notice-success">@success</div>
+}
+
+<div class="toolbar">
+    <form method="get" asp-controller="SuperAdmin" asp-action="Organizations">
+        <input type="text" name="q" value="@Model.Query" placeholder="Nomi bo'yicha qidirish..." />
+    </form>
+    <div class="toolbar-actions">
+        <a class="btn" asp-controller="SuperAdmin" asp-action="CreateOrganization">+ Tashkilot qo'shish</a>
+    </div>
+</div>
+
+@if (Model.Organizations.Count == 0)
+{
+    <div class="card empty-state">Hech narsa topilmadi.</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Nomi</th>
+                    <th>Foydalanuvchilar</th>
+                    <th>Loyihalar</th>
+                    <th>Yaratilgan vaqt</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var organization in Model.Organizations)
+                {
+                    <tr>
+                        <td>@organization.Name</td>
+                        <td>@organization.UserCount</td>
+                        <td>@organization.ProjectCount</td>
+                        <td>@organization.CreatedAt</td>
+                        <td><a asp-controller="SuperAdmin" asp-action="CreateManager" asp-route-organizationId="@organization.Id">+ Menejer tayinlash</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

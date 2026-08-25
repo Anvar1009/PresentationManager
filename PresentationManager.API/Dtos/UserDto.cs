@@ -12,8 +12,10 @@ public sealed record UserDto(
     UserRole Role,
     bool IsActive,
     long? TelegramChatId,
-    string? TelegramUsername)
+    string? TelegramUsername,
+    int? OrganizationId)
 {
     public static UserDto FromEntity(User user) => new(
-        user.Id, user.Username, user.FullName, user.Role, user.IsActive, user.TelegramChatId, user.TelegramUsername);
+        user.Id, user.Username, user.FullName, user.Role, user.IsActive, user.TelegramChatId, user.TelegramUsername,
+        user.OrganizationId);
 }

@@ -28,6 +28,16 @@ public class PresentationRepository : IPresentationRepository
         return await db.Presentations.AsNoTracking().OrderByDescending(p => p.CreatedAt).ToListAsync(ct);
     }
 
+    public async Task<List<Presentation>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Presentations.AsNoTracking()
+            .Where(p => db.Projects.Any(proj => proj.Id == p.ProjectId
+                && (proj.OrganizationId == organizationId || proj.OrganizationId == null)))
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<Presentation>> GetAllOrderedAsync(int projectId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

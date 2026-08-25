@@ -50,6 +50,13 @@ public sealed class PresenterAssignmentsController : ControllerBase
         return Ok(assignments.Select(PresenterProjectAssignmentDto.FromEntity).ToList());
     }
 
+    [HttpGet("organization/{organizationId:int}")]
+    public async Task<ActionResult<List<PresenterProjectAssignmentDto>>> GetByOrganization(int organizationId, CancellationToken ct)
+    {
+        var assignments = await _assignmentRepository.GetByOrganizationAsync(organizationId, ct);
+        return Ok(assignments.Select(PresenterProjectAssignmentDto.FromEntity).ToList());
+    }
+
     [HttpGet("presenter/{presenterId:int}")]
     public async Task<ActionResult<List<PresenterProjectAssignmentDto>>> GetByPresenter(int presenterId, CancellationToken ct)
     {

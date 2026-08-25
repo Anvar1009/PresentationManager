@@ -6,6 +6,11 @@ public interface IScoreRepository
 {
     Task<List<Score>> GetAllAsync(CancellationToken ct = default);
 
+    /// <summary>Every score whose presentation's project belongs to <paramref name="organizationId"/>, plus
+    /// any whose project has no recorded organization (legacy rows) - a Manager's dashboard's org-scoped
+    /// counterpart to <see cref="GetAllAsync"/>. See <see cref="Domain.Entities.Project.OrganizationId"/>.</summary>
+    Task<List<Score>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default);
+
     Task<List<Score>> GetByPresentationAndJudgeAsync(int presentationId, int judgeId, CancellationToken ct = default);
 
     /// <summary>Every score for every presentation in <paramref name="presentationIds"/> — used to compute a

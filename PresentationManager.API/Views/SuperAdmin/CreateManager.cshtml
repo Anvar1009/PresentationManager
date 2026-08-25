@@ -1,0 +1,35 @@
+@model CreateManagerViewModel
+@{
+    ViewData["Title"] = "Menejer tayinlash";
+    ViewData["Brand"] = "SuperAdmin paneli";
+}
+
+@section Sidebar {
+    <partial name="_SuperAdminTabs" model='new SuperAdminTabsViewModel("organizations")' />
+}
+
+<span class="eyebrow">+ Menejer tayinlash</span>
+<h1 class="page-title">@Model.OrganizationName</h1>
+<p class="page-subtitle">Bu hisob shu tashkilot doirasida SuperAdminga o'xshash huquqlarga ega bo'ladi - Admin/Operator yarata oladi va statistikani ko'ra oladi.</p>
+
+<div class="card" style="max-width: 460px;">
+    <div asp-validation-summary="All" class="validation-summary"></div>
+
+    <form asp-controller="SuperAdmin" asp-action="CreateManager" method="post">
+        <input type="hidden" asp-for="OrganizationId" />
+        <input type="hidden" asp-for="OrganizationName" />
+        <div class="field">
+            <label asp-for="Username"></label>
+            <input asp-for="Username" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+            <label asp-for="Password"></label>
+            <input asp-for="Password" type="text" autocomplete="off" />
+        </div>
+        <div class="field">
+            <label asp-for="FullName"></label>
+            <input asp-for="FullName" type="text" autocomplete="off" />
+        </div>
+        <button type="submit" class="btn btn-block">+ Menejer tayinlash</button>
+    </form>
+</div>

@@ -27,11 +27,14 @@ public sealed class ProjectsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<ProjectDto>>> GetAll([FromQuery] int? createdBy, CancellationToken ct)
+    public async Task<ActionResult<List<ProjectDto>>> GetAll(
+        [FromQuery] int? createdBy, [FromQuery] int? organizationId, CancellationToken ct)
     {
-        var projects = createdBy is int userId
-            ? await _projectRepository.GetByCreatorAsync(userId, ct)
-            : await _projectRepository.GetAllAsync(ct);
+        var projects = organizationId is int orgId
+            ? await _projectRepository.GetByOrganizationAsync(orgId, ct)
+            : createdBy is int userId
+                ? await _projectRepository.GetByCreatorAsync(userId, ct)
+                : await _projectRepository.GetAllAsync(ct);
 
         return Ok(projects.Select(ProjectDto.FromEntity).ToList());
     }
@@ -53,7 +56,8 @@ public sealed class ProjectsController : ControllerBase
             EventEndDate = request.EventEndDate,
             EventTime = request.EventTime,
             Location = request.Location,
-            CreatedByUserId = request.CreatedByUserId
+            CreatedByUserId = request.CreatedByUserId,
+            OrganizationId = request.OrganizationId
         };
         var created = await _projectRepository.AddAsync(project, ct);
         _logger.LogInformation("Loyiha API orqali yaratildi: {ProjectId} - {ProjectName}", created.Id, created.Name);

@@ -8,7 +8,7 @@ namespace PresentationManager.ApiClient.Wire;
 /// HttpAuthService for why nothing on this side needs either).</summary>
 internal sealed record UserWire(
     int Id, string Username, string FullName, UserRole Role, bool IsActive,
-    long? TelegramChatId, string? TelegramUsername)
+    long? TelegramChatId, string? TelegramUsername, int? OrganizationId)
 {
     public User ToEntity() => new()
     {
@@ -19,7 +19,8 @@ internal sealed record UserWire(
         Role = Role,
         IsActive = IsActive,
         TelegramChatId = TelegramChatId,
-        TelegramUsername = TelegramUsername
+        TelegramUsername = TelegramUsername,
+        OrganizationId = OrganizationId
     };
 }
 
@@ -28,8 +29,8 @@ internal sealed record UserWire(
 /// IUserRepository.AddAsync.</summary>
 internal sealed record CreateUserWireRequest(
     string Username, string PasswordHash, string FullName, UserRole Role, bool IsActive,
-    long? TelegramChatId, string? TelegramUsername)
+    long? TelegramChatId, string? TelegramUsername, int? OrganizationId)
 {
     public static CreateUserWireRequest FromEntity(User u) => new(
-        u.Username, u.PasswordHash, u.FullName, u.Role, u.IsActive, u.TelegramChatId, u.TelegramUsername);
+        u.Username, u.PasswordHash, u.FullName, u.Role, u.IsActive, u.TelegramChatId, u.TelegramUsername, u.OrganizationId);
 }

@@ -18,6 +18,9 @@ public sealed class HttpPresentationRepository : IPresentationRepository
     public async Task<List<Presentation>> GetAllAsync(CancellationToken ct = default) =>
         await GetListAsync("api/presentations", ct);
 
+    public async Task<List<Presentation>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default) =>
+        await GetListAsync($"api/presentations/organization/{organizationId}", ct);
+
     public async Task<List<Presentation>> GetAllOrderedAsync(int projectId, CancellationToken ct = default) =>
         await GetListAsync($"api/presentations/project/{projectId}/ordered", ct);
 

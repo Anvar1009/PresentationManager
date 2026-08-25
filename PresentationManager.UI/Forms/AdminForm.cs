@@ -41,6 +41,13 @@ public sealed class AdminForm : Form
     /// <c>SettingsForm</c>'s "Botga ulash" button.</summary>
     private int? _currentUserId;
 
+    /// <summary>Set alongside <see cref="_currentUserId"/> in <see cref="SetCurrentUser"/> - scopes the
+    /// "Loyihalar"/"Taqdimotlar" dialogs and this form's own project picker to this Operator's own
+    /// organization instead of every project in the system. Null for an Operator account created before
+    /// organizations existed, in which case every project/presentation list falls back to unscoped (matching
+    /// this app's behavior before organizations existed at all).</summary>
+    private int? _currentOrganizationId;
+
     /// <summary>Same instance handed to <see cref="SetCurrentUser"/> - kept around (and mutated in place by
     /// <see cref="UserMenuHelper"/> on a successful self-service login change) so <see cref="RefreshUserMenu"/>
     /// can rebuild the popup without re-fetching from the API.</summary>
@@ -125,6 +132,7 @@ public sealed class AdminForm : Form
     public void SetCurrentUser(User user)
     {
         _currentUserId = user.Id;
+        _currentOrganizationId = user.OrganizationId;
         _currentUser = user;
         _userMenuButton.Text = $"👤 {user.Role}";
         RefreshUserMenu();
@@ -227,7 +235,7 @@ public sealed class AdminForm : Form
     {
         try
         {
-            using var dialog = new ProjectManagementForm(_projectService, _session.CurrentProjectId);
+            using var dialog = new ProjectManagementForm(_projectService, _session.CurrentProjectId, _currentOrganizationId);
             dialog.ShowDialog(this);
             await ApplyActiveProjectAsync(dialog.SelectedActiveProjectId);
         }
@@ -255,7 +263,7 @@ public sealed class AdminForm : Form
         _botPollTimer.Stop();
         try
         {
-            using var dialog = new PresentationManagementForm(_queueService, _projectService);
+            using var dialog = new PresentationManagementForm(_queueService, _projectService, _currentOrganizationId);
             dialog.ShowDialog(this);
             await _session.ReloadQueueAsync();
             RefreshQueueList();
@@ -298,7 +306,9 @@ public sealed class AdminForm : Form
             return;
         }
 
-        var projects = await _projectService.GetAllAsync();
+        var projects = _currentOrganizationId is int scopedOrgId
+            ? await _projectService.GetByOrganizationAsync(scopedOrgId)
+            : await _projectService.GetAllAsync();
         var project = projects.FirstOrDefault(p => p.Id == projectId);
         _projectLabel.Text = project is null ? "Loyiha tanlanmagan" : $"Loyiha: {project.Name}";
     }
@@ -308,7 +318,9 @@ public sealed class AdminForm : Form
         var primary = Screen.PrimaryScreen ?? Screen.AllScreens[0];
         Bounds = primary.WorkingArea;
 
-        var projects = await _projectService.GetAllAsync();
+        var projects = _currentOrganizationId is int startupOrgId
+            ? await _projectService.GetByOrganizationAsync(startupOrgId)
+            : await _projectService.GetAllAsync();
         var settings = await _settingsRepository.GetAsync();
         var startupProjectId = projects.Any(p => p.Id == settings.LastActiveProjectId)
             ? settings.LastActiveProjectId

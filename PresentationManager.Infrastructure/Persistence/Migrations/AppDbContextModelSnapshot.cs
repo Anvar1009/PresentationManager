@@ -158,6 +158,26 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.ToTable("Judges", (string)null);
                 });
 
+            modelBuilder.Entity("PresentationManager.Domain.Entities.Organization", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Organizations", (string)null);
+                });
+
             modelBuilder.Entity("PresentationManager.Domain.Entities.Presentation", b =>
                 {
                     b.Property<int>("Id")
@@ -357,6 +377,9 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("OrderRandomizedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("OrganizationId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("SubmissionDeadline")
                         .HasColumnType("timestamp with time zone");
 
@@ -368,6 +391,8 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("Name");
+
+                    b.HasIndex("OrganizationId");
 
                     b.ToTable("Projects", (string)null);
                 });
@@ -428,6 +453,9 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("OrganizationId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("text");
@@ -452,6 +480,8 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId");
 
                     b.HasIndex("TelegramChatId")
                         .IsUnique();
@@ -517,6 +547,11 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("CreatedByUserId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PresentationManager.Domain.Entities.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("PresentationManager.Domain.Entities.Score", b =>
@@ -538,6 +573,14 @@ namespace PresentationManager.Infrastructure.Persistence.Migrations
                         .HasForeignKey("PresentationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("PresentationManager.Domain.Entities.User", b =>
+                {
+                    b.HasOne("PresentationManager.Domain.Entities.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 #pragma warning restore 612, 618
         }

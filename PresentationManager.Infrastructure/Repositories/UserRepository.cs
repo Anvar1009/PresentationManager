@@ -24,6 +24,15 @@ public class UserRepository : IUserRepository
         return await db.Users.AsNoTracking().OrderBy(u => u.Username).ToListAsync(ct);
     }
 
+    public async Task<List<User>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Users.AsNoTracking()
+            .Where(u => u.OrganizationId == organizationId)
+            .OrderBy(u => u.Username)
+            .ToListAsync(ct);
+    }
+
     public async Task<User?> GetByIdAsync(int id, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
@@ -169,5 +178,20 @@ public class UserRepository : IUserRepository
         user.Role = role;
         await db.SaveChangesAsync(ct);
         _logger.LogInformation("Foydalanuvchi {UserId} roli o'zgartirildi: {Role}", userId, role);
+    }
+
+    public async Task SetOrganizationAsync(int userId, int? organizationId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var user = await db.Users.FindAsync([userId], ct);
+        if (user is null)
+        {
+            _logger.LogWarning("Tashkilot o'rnatish uchun foydalanuvchi topilmadi: {UserId}", userId);
+            return;
+        }
+
+        user.OrganizationId = organizationId;
+        await db.SaveChangesAsync(ct);
+        _logger.LogInformation("Foydalanuvchi {UserId} tashkiloti o'zgartirildi: {OrganizationId}", userId, organizationId);
     }
 }

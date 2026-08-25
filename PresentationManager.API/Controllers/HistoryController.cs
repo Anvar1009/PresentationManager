@@ -29,6 +29,14 @@ public sealed class HistoryController : ControllerBase
         return Ok(entries.Select(HistoryEntryDto.FromEntity).ToList());
     }
 
+    [HttpGet("organization/{organizationId:int}")]
+    public async Task<ActionResult<List<HistoryEntryDto>>> GetRecentByOrganization(
+        int organizationId, [FromQuery] int count, CancellationToken ct)
+    {
+        var entries = await _historyRepository.GetRecentByOrganizationAsync(organizationId, count is > 0 ? count : 200, ct);
+        return Ok(entries.Select(HistoryEntryDto.FromEntity).ToList());
+    }
+
     [HttpGet("presentation/{presentationId:int}")]
     public async Task<ActionResult<List<HistoryEntryDto>>> GetForPresentation(int presentationId, CancellationToken ct)
     {

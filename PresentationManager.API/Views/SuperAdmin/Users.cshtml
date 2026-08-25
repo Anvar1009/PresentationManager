@@ -49,6 +49,7 @@ else
                     <th>Login</th>
                     <th>Ism</th>
                     <th>Rol</th>
+                    <th>Tashkilot</th>
                     <th>Faol</th>
                     <th>Yaratilgan vaqt</th>
                     <th></th>
@@ -61,6 +62,7 @@ else
                         <td>@user.Username</td>
                         <td>@user.FullName</td>
                         <td><span class="badge @BadgeClass(user.Role)">@user.Role</span></td>
+                        <td>@(user.OrganizationId is int orgId && Model.OrganizationNamesById.TryGetValue(orgId, out var orgName) ? orgName : "—")</td>
                         <td>@(user.IsActive ? "Ha" : "Yo'q")</td>
                         <td>@user.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
                         <td><a asp-controller="SuperAdmin" asp-action="EditUser" asp-route-id="@user.Id">Login/parolni tiklash</a></td>

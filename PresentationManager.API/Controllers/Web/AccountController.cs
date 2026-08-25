@@ -10,16 +10,17 @@ using PresentationManager.Domain.Enums;
 namespace PresentationManager.API.Controllers.Web;
 
 /// <summary>Cookie-based login shared by every role with a web surface (<see cref="UserRole.Judge"/>,
-/// <see cref="UserRole.OrderOperator"/>, <see cref="UserRole.Admin"/>, <see cref="UserRole.SuperAdmin"/>) -
-/// separate from <see cref="Controllers.AuthController"/>'s JWT login (used by the WinForms desktop app), but
-/// backed by the exact same <see cref="UserService.ValidateLoginAsync"/> and the same Users table.
-/// <see cref="UserRole.Operator"/> gets the same generic "login yoki parol noto'g'ri" as a wrong password
-/// (desktop-only, no web screens exist for it), so this page never reveals which usernames exist or what
-/// role they hold.</summary>
+/// <see cref="UserRole.OrderOperator"/>, <see cref="UserRole.Admin"/>, <see cref="UserRole.SuperAdmin"/>,
+/// <see cref="UserRole.Manager"/>) - separate from <see cref="Controllers.AuthController"/>'s JWT login (used
+/// by the WinForms desktop app, which now only ever authenticates <see cref="UserRole.Operator"/>), but backed
+/// by the exact same <see cref="UserService.ValidateLoginAsync"/> and the same Users table.
+/// <see cref="UserRole.Operator"/> gets the same generic "login yoki parol noto'g'ri" as a wrong password (web
+/// has no screens for it - the desktop app is its only surface), so this page never reveals which usernames
+/// exist or what role they hold.</summary>
 public sealed class AccountController : Controller
 {
     private static readonly HashSet<UserRole> WebRoles =
-        [UserRole.Judge, UserRole.OrderOperator, UserRole.Admin, UserRole.SuperAdmin];
+        [UserRole.Judge, UserRole.OrderOperator, UserRole.Admin, UserRole.SuperAdmin, UserRole.Manager];
 
     private readonly UserService _userService;
     private readonly ILogger<AccountController> _logger;
@@ -67,6 +68,15 @@ public sealed class AccountController : Controller
             claims.Add(new Claim("TelegramChatId", chatId.ToString()));
         }
 
+        // Lets Admin/Manager controllers read the caller's own tenant without a per-request User lookup - see
+        // AdminController.CurrentOrganizationId/ManagerController.CurrentOrganizationId. Absent entirely for
+        // SuperAdmin (never tied to one organization - see User.OrganizationId's own doc comment) and for any
+        // account created before this field existed.
+        if (user.OrganizationId is { } organizationId)
+        {
+            claims.Add(new Claim("OrganizationId", organizationId.ToString()));
+        }
+
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
 
@@ -76,6 +86,7 @@ public sealed class AccountController : Controller
             UserRole.OrderOperator => RedirectToAction("Dashboard", "Order"),
             UserRole.Admin => RedirectToAction("Dashboard", "Admin"),
             UserRole.SuperAdmin => RedirectToAction("Dashboard", "SuperAdmin"),
+            UserRole.Manager => RedirectToAction("Dashboard", "Manager"),
             _ => throw new InvalidOperationException($"'{user.Role}' roli uchun veb sahifa mavjud emas.")
         };
     }

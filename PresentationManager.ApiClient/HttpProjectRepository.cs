@@ -27,6 +27,12 @@ public sealed class HttpProjectRepository : IProjectRepository
         return wires.Select(w => w.ToEntity()).ToList();
     }
 
+    public async Task<List<Project>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default)
+    {
+        var wires = await _http.GetFromJsonAsync<List<ProjectWire>>($"api/projects?organizationId={organizationId}", ApiJsonOptions.Default, ct) ?? [];
+        return wires.Select(w => w.ToEntity()).ToList();
+    }
+
     public async Task<Project?> GetByIdAsync(int id, CancellationToken ct = default)
     {
         var response = await _http.GetAsync($"api/projects/{id}", ct);

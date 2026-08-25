@@ -31,5 +31,16 @@ public enum UserRole
     /// is assigned to: it matches <see cref="PresentationManager.Domain.Entities.Judge.TelegramChatId"/> via
     /// the existing <see cref="PresentationManager.Application.Services.JudgeService.GetLinkedAssignmentsByChatIdAsync"/>
     /// - the very same lookup the Telegram bot's (now removed) in-chat scoring flow used to use.</summary>
-    Judge
+    Judge,
+
+    /// <summary>Web-only "Tashkilot menejeri" role - created only by SuperAdmin (PresentationManager.API's
+    /// SuperAdminController "Tashkilotlar" section), always tied to exactly one
+    /// <see cref="PresentationManager.Domain.Entities.Organization"/> via
+    /// <see cref="PresentationManager.Domain.Entities.User.OrganizationId"/>. Has the same monitoring/
+    /// statistics reach as <see cref="SuperAdmin"/> (PresentationManager.API's ManagerController mirrors
+    /// SuperAdminController) but scoped to that one organization, and can create <see cref="Admin"/>/
+    /// <see cref="Operator"/> accounts (also stamped with its own OrganizationId) - never another
+    /// <see cref="Manager"/> or a <see cref="SuperAdmin"/>. Appended at the end so every already-persisted
+    /// int value for the roles above stays unchanged.</summary>
+    Manager
 }

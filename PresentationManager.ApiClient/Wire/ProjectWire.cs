@@ -5,7 +5,8 @@ namespace PresentationManager.ApiClient.Wire;
 /// <summary>Mirrors PresentationManager.API.Dtos.ProjectDto.</summary>
 internal sealed record ProjectWire(
     int Id, string Name, DateOnly EventStartDate, DateOnly EventEndDate, TimeOnly? EventTime,
-    string? Location, int? CreatedByUserId, DateTime? SubmissionDeadline, DateTime CreatedAt, DateTime UpdatedAt)
+    string? Location, int? CreatedByUserId, DateTime? SubmissionDeadline, DateTime CreatedAt, DateTime UpdatedAt,
+    int? OrganizationId)
 {
     public Project ToEntity() => new()
     {
@@ -18,17 +19,18 @@ internal sealed record ProjectWire(
         CreatedByUserId = CreatedByUserId,
         SubmissionDeadline = SubmissionDeadline,
         CreatedAt = CreatedAt,
-        UpdatedAt = UpdatedAt
+        UpdatedAt = UpdatedAt,
+        OrganizationId = OrganizationId
     };
 }
 
 /// <summary>Mirrors PresentationManager.API.Dtos.CreateProjectRequest.</summary>
 internal sealed record CreateProjectWireRequest(
     string Name, DateOnly EventStartDate, DateOnly EventEndDate, TimeOnly? EventTime,
-    string? Location, int? CreatedByUserId)
+    string? Location, int? CreatedByUserId, int? OrganizationId)
 {
     public static CreateProjectWireRequest FromEntity(Project p) => new(
-        p.Name, p.EventStartDate, p.EventEndDate, p.EventTime, p.Location, p.CreatedByUserId);
+        p.Name, p.EventStartDate, p.EventEndDate, p.EventTime, p.Location, p.CreatedByUserId, p.OrganizationId);
 }
 
 /// <summary>Mirrors PresentationManager.API.Dtos.UpdateProjectRequest.</summary>

@@ -33,6 +33,12 @@ public sealed class PresentationQueueService
     public Task<List<Presentation>> GetAllAsync(CancellationToken ct = default) =>
         _presentationRepository.GetAllAsync(ct);
 
+    /// <summary>Every presentation belonging to one organization — for a Manager's dashboard and an
+    /// Operator's desktop queue, which are scoped to their own organization instead of seeing every project
+    /// like <see cref="GetAllAsync()"/> does. See <see cref="Domain.Entities.Project.OrganizationId"/>.</summary>
+    public Task<List<Presentation>> GetByOrganizationAsync(int organizationId, CancellationToken ct = default) =>
+        _presentationRepository.GetByOrganizationAsync(organizationId, ct);
+
     public Task<List<Presentation>> SearchAsync(string query, int projectId, CancellationToken ct = default) =>
         string.IsNullOrWhiteSpace(query)
             ? _presentationRepository.GetAllOrderedAsync(projectId, ct)

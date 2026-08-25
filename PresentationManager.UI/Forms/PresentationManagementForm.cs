@@ -13,6 +13,7 @@ public sealed class PresentationManagementForm : Form
 {
     private readonly PresentationQueueService _queueService;
     private readonly ProjectService _projectService;
+    private readonly int? _organizationId;
 
     private readonly DataGridView _grid;
     private readonly TextBox _searchBox;
@@ -24,10 +25,11 @@ public sealed class PresentationManagementForm : Form
     private List<Presentation> _allPresentations = [];
     private List<Project> _projects = [];
 
-    public PresentationManagementForm(PresentationQueueService queueService, ProjectService projectService)
+    public PresentationManagementForm(PresentationQueueService queueService, ProjectService projectService, int? organizationId = null)
     {
         _queueService = queueService;
         _projectService = projectService;
+        _organizationId = organizationId;
 
         Text = "Taqdimotlar";
         BackColor = LightColors.Background;
@@ -126,8 +128,17 @@ public sealed class PresentationManagementForm : Form
 
     private async Task RefreshAsync()
     {
-        _projects = await _projectService.GetAllAsync();
-        _allPresentations = await _queueService.GetAllAsync();
+        if (_organizationId is int organizationId)
+        {
+            _projects = await _projectService.GetByOrganizationAsync(organizationId);
+            _allPresentations = await _queueService.GetByOrganizationAsync(organizationId);
+        }
+        else
+        {
+            _projects = await _projectService.GetAllAsync();
+            _allPresentations = await _queueService.GetAllAsync();
+        }
+
         ApplyFilter();
     }
 

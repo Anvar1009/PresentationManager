@@ -40,6 +40,15 @@ public class Project
     /// only the projects they created - see <c>IProjectRepository.GetByCreatorAsync</c>.</summary>
     public int? CreatedByUserId { get; set; }
 
+    /// <summary>The tenant this project belongs to - copied from its creator's own
+    /// <see cref="User.OrganizationId"/> at creation time (see
+    /// <see cref="PresentationManager.Application.Services.ProjectService.CreateAsync"/>), never chosen
+    /// directly. Null for legacy rows created before this field existed, or a project created by an account
+    /// with no organization of its own. Scopes what a <see cref="Enums.UserRole.Manager"/> and (on the
+    /// desktop app) an <see cref="Enums.UserRole.Operator"/> can see - the same "own creations, plus legacy
+    /// rows with nothing recorded" allowance <see cref="CreatedByUserId"/> already gives Admin.</summary>
+    public int? OrganizationId { get; set; }
+
     /// <summary>When the OrderOperator's "Ro'yxatni shakllantirish" last actually ran for this project - null
     /// means it never has (or "Jadvalni tozalash" undid it back to a rehearsal state). Purely a status flag
     /// for the Order dashboard's "Tartiblangan" badge (see OrderController.Dashboard) - the real order itself

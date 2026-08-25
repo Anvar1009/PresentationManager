@@ -63,6 +63,11 @@ public sealed class AdminController : Controller
 
     private int CurrentUserId => int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
 
+    /// <summary>Null for an Admin account created before organizations existed - such an account's own
+    /// projects stay organization-less too (<see cref="ProjectService.CreateAsync"/>'s OrganizationId is
+    /// simply null), exactly like a pre-existing <see cref="Project.CreatedByUserId"/> already tolerates.</summary>
+    private int? CurrentOrganizationId => User.FindFirst("OrganizationId") is { } claim ? int.Parse(claim.Value) : null;
+
     public async Task<IActionResult> Dashboard(CancellationToken ct)
     {
         var projects = await _projectService.GetByCreatorAsync(CurrentUserId, ct);
@@ -86,7 +91,8 @@ public sealed class AdminController : Controller
             var deadlineUtc = submissionDeadline is { } local ? DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime() : (DateTime?)null;
             var extraDiscussionTimeSeconds = Math.Max(0, extraDiscussionMinutes ?? 0) * 60;
             await _projectService.CreateAsync(
-                name, eventStartDate, eventEndDate, eventTime, location, CurrentUserId, deadlineUtc, extraDiscussionTimeSeconds, ct);
+                name, eventStartDate, eventEndDate, eventTime, location, CurrentUserId, deadlineUtc, extraDiscussionTimeSeconds,
+                CurrentOrganizationId, ct);
             _logger.LogInformation("Admin loyiha yaratdi: {ProjectName} (yaratuvchi {UserId})", name, CurrentUserId);
         }
         catch (InvalidOperationException ex)

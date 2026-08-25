@@ -28,6 +28,13 @@ public sealed class ScoresController : ControllerBase
         return Ok(scores.Select(ScoreDto.FromEntity).ToList());
     }
 
+    [HttpGet("organization/{organizationId:int}")]
+    public async Task<ActionResult<List<ScoreDto>>> GetByOrganization(int organizationId, CancellationToken ct)
+    {
+        var scores = await _scoreRepository.GetByOrganizationAsync(organizationId, ct);
+        return Ok(scores.Select(ScoreDto.FromEntity).ToList());
+    }
+
     [HttpGet("presentation/{presentationId:int}/judge/{judgeId:int}")]
     public async Task<ActionResult<List<ScoreDto>>> GetByPresentationAndJudge(int presentationId, int judgeId, CancellationToken ct)
     {

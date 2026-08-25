@@ -49,6 +49,13 @@ public sealed class JudgesController : ControllerBase
         return Ok(judges.Select(JudgeDto.FromEntity).ToList());
     }
 
+    [HttpGet("organization/{organizationId:int}")]
+    public async Task<ActionResult<List<JudgeDto>>> GetByOrganization(int organizationId, CancellationToken ct)
+    {
+        var judges = await _judgeRepository.GetByOrganizationAsync(organizationId, ct);
+        return Ok(judges.Select(JudgeDto.FromEntity).ToList());
+    }
+
     [HttpGet("by-telegram/{chatId:long}")]
     public async Task<ActionResult<List<JudgeDto>>> GetByTelegramChatId(long chatId, CancellationToken ct)
     {
