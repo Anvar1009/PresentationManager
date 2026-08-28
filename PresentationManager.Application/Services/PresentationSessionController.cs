@@ -330,7 +330,8 @@ public sealed class PresentationSessionController
 
         ResetTimersForCurrent();
 
-        if (CurrentPresentation is null)
+        var startedPresentation = CurrentPresentation;
+        if (startedPresentation is null)
         {
             Status = PresentationStatus.Waiting;
         }
@@ -342,17 +343,32 @@ public sealed class PresentationSessionController
             // where Start (once, from AdminForm) and Next are the operator's only two actions.
             _timer.Start(PresentationRemainingSeconds, TimerMode.Presentation);
             Status = PresentationStatus.Running;
-            CurrentPresentation.Status = PresentationStatus.Running;
-            await _presentationRepository.UpdateAsync(CurrentPresentation, ct);
-            await LogAsync(HistoryEventType.Started, $"Taqdimot boshlandi: {CurrentPresentation.Title}", ct);
+            startedPresentation.Status = PresentationStatus.Running;
+        }
+
+        // Notified the instant the timer is actually running/Status is set in memory, BEFORE the awaited
+        // persistence below - this is what makes Namoyish Ekrani open the next slide (HandleSlideVisibilityAsync
+        // reacts to StatusChanged) in lockstep with the timer starting, not after an unbounded DB round-trip.
+        // Previously the persistence call sat between the timer starting and this notification: a slow API
+        // response delayed the slide behind an already-ticking timer, and a transient failure (thrown from
+        // UpdateAsync) skipped this notification entirely - Status/timer had already moved on in memory, but
+        // the projector screen never learned about it and just kept showing whatever was on screen before,
+        // exactly the "domino queue advances but the background slide doesn't" symptom. Persistence/logging
+        // are now genuinely best-effort from here on: a failure still surfaces (it propagates to whichever
+        // caller invoked NextPresenterAsync, same as before), but only after the operator-visible state has
+        // already updated correctly.
+        StatusChanged?.Invoke(Status);
+        PresentationChanged?.Invoke();
+
+        if (startedPresentation is not null)
+        {
+            await _presentationRepository.UpdateAsync(startedPresentation, ct);
+            await LogAsync(HistoryEventType.Started, $"Taqdimot boshlandi: {startedPresentation.Title}", ct);
         }
 
         await LogAsync(HistoryEventType.NextPresenter, previousPresentationId == CurrentPresentation?.Id
             ? "Navbatda harakat (o'zgarish yo'q)"
             : $"O'tildi: {CurrentPresentation?.Title ?? "(navbat tugadi)"}", ct);
-
-        StatusChanged?.Invoke(Status);
-        PresentationChanged?.Invoke();
     }
 
     private void ResetTimersForCurrent()
@@ -365,9 +381,11 @@ public sealed class PresentationSessionController
     private async Task SetStatusAsync(PresentationStatus status, HistoryEventType logEvent, string message, CancellationToken ct)
     {
         Status = status;
+        // Notify before the awaited persistence below - see the matching comment in AdvanceAsync for why:
+        // subscribers must not wait on (or be skipped by a failure of) a best-effort DB/log write.
+        StatusChanged?.Invoke(status);
         await PersistStatusAsync(status, ct);
         await LogAsync(logEvent, message, ct);
-        StatusChanged?.Invoke(status);
     }
 
     private async Task PersistStatusAsync(PresentationStatus status, CancellationToken ct)

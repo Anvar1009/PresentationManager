@@ -220,11 +220,14 @@ public sealed class AdminForm : Form
     {
         var current = await _settingsRepository.GetAsync();
         using var dialog = new SettingsForm(current, _adminLinkService, _botOptions, _currentUserId);
-        dialog.ShowDialog(this);
-        if (dialog.DialogResult == DialogResult.OK)
+        await RunWithBotPollPausedAsync(async () =>
         {
-            await _settingsRepository.SaveAsync(dialog.Result);
-        }
+            dialog.ShowDialog(this);
+            if (dialog.DialogResult == DialogResult.OK)
+            {
+                await _settingsRepository.SaveAsync(dialog.Result);
+            }
+        });
     }
 
     /// <summary>Opens the Loyihalar dialog and reconciles whatever it decides the active project should be
@@ -236,8 +239,11 @@ public sealed class AdminForm : Form
         try
         {
             using var dialog = new ProjectManagementForm(_projectService, _session.CurrentProjectId, _currentOrganizationId);
-            dialog.ShowDialog(this);
-            await ApplyActiveProjectAsync(dialog.SelectedActiveProjectId);
+            await RunWithBotPollPausedAsync(async () =>
+            {
+                dialog.ShowDialog(this);
+                await ApplyActiveProjectAsync(dialog.SelectedActiveProjectId);
+            });
         }
         catch (Exception ex)
         {
@@ -260,18 +266,42 @@ public sealed class AdminForm : Form
         // PresentationEditForm's Ism-familya/Sarlavha fields. Restarted in `finally` so a missed bot
         // submission during this window still shows up on the very next tick once the dialog closes, exactly
         // as before.
-        _botPollTimer.Stop();
         try
         {
             using var dialog = new PresentationManagementForm(_queueService, _projectService, _currentOrganizationId);
-            dialog.ShowDialog(this);
-            await _session.ReloadQueueAsync();
-            RefreshQueueList();
-            RefreshCurrentPanel();
+            await RunWithBotPollPausedAsync(async () =>
+            {
+                dialog.ShowDialog(this);
+                await _session.ReloadQueueAsync();
+                RefreshQueueList();
+                RefreshCurrentPanel();
+            });
         }
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Taqdimotlarda xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>Wraps a UI action that shows a modal dialog (or otherwise waits on the operator) with
+    /// <see cref="_botPollTimer"/> paused for its duration. A WinForms modal dialog still pumps this form's
+    /// own WM_TIMER messages on the same UI thread, so without this the every-5-second tick
+    /// (<see cref="OnBotPollTick"/> -&gt; <c>ReloadQueueAsync</c> -&gt; <c>PresentationChanged</c>/<c>StatusChanged</c>
+    /// -&gt; <see cref="RefreshCurrentPanel"/>, including a PowerPoint COM thumbnail re-render in
+    /// <see cref="UpdatePreviewAsync"/>) keeps firing right through the dialog: at best it steals keyboard
+    /// focus away from whatever the operator is mid-sentence typing into, and at worst — while
+    /// <c>StartPresentationGateForm</c>'s "start the timer?" gate is open and <c>Status</c> is still
+    /// <see cref="PresentationStatus.Ready"/> (the gate hasn't been confirmed yet) — <c>ReloadQueueAsync</c>
+    /// sees the session as idle and re-fires <c>StatusChanged(Ready)</c>, which makes
+    /// <see cref="PresentationForm"/> close the very slide preview the operator is being asked to confirm,
+    /// right behind the gate dialog. Restarted in `finally` so a missed bot submission during the pause
+    /// still shows up on the very next tick once the dialog closes.</summary>
+    private async Task RunWithBotPollPausedAsync(Func<Task> action)
+    {
+        _botPollTimer.Stop();
+        try
+        {
+            await action();
         }
         finally
         {
@@ -1059,7 +1089,10 @@ public sealed class AdminForm : Form
                 await _session.SelectPresentationAsync(target.Id);
             }
 
-            await _presentationForm.StartSelectedPresentationAsync();
+            // See RunWithBotPollPausedAsync - StartSelectedPresentationAsync opens the slide preview and
+            // then waits on the operator-confirmation gate while Status is still Ready, which is exactly
+            // the window the bot poll timer must not be allowed to interrupt.
+            await RunWithBotPollPausedAsync(() => _presentationForm.StartSelectedPresentationAsync());
         }
         catch (Exception ex)
         {
@@ -1187,14 +1220,17 @@ public sealed class AdminForm : Form
     private async Task ShowNextPresentationPickerAsync()
     {
         using var picker = new PresentationPickerForm(_session);
-        if (picker.ShowDialog(this) != DialogResult.OK || picker.SelectedPresentationId is not { } presentationId)
+        await RunWithBotPollPausedAsync(async () =>
         {
-            return;
-        }
+            if (picker.ShowDialog(this) != DialogResult.OK || picker.SelectedPresentationId is not { } presentationId)
+            {
+                return;
+            }
 
-        await _session.FinishCurrentPresentationAsync();
-        await _session.SelectPresentationAsync(presentationId);
-        await _presentationForm.StartSelectedPresentationAsync();
+            await _session.FinishCurrentPresentationAsync();
+            await _session.SelectPresentationAsync(presentationId);
+            await _presentationForm.StartSelectedPresentationAsync();
+        });
     }
 
     private async Task RefreshLogsAsync()
