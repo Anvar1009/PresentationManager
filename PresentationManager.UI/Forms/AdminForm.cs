@@ -513,6 +513,7 @@ public sealed class AdminForm : Form
     private static readonly Font QueueTitleFont = new("Segoe UI", 9.5f, FontStyle.Italic);
     private static readonly Font QueueMetaFont = new("Segoe UI", 8.5f, FontStyle.Regular);
     private static readonly Font QueueHeaderFont = new("Segoe UI", 8f, FontStyle.Bold);
+    private static readonly Font QueuePillFont = new("Segoe UI", 7.5f, FontStyle.Bold);
 
     private Control BuildLeftQueuePanel()
     {
@@ -652,11 +653,16 @@ public sealed class AdminForm : Form
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        var rowColor = isSelected
-            ? Blend(LightColors.PanelAlt, LightColors.Accent, 0.30f)
-            : e.Index % 2 == 0
-                ? LightColors.PanelAlt
-                : Blend(LightColors.PanelAlt, LightColors.Panel, 0.5f);
+        // The row actually up on Namoyish Ekrani right now gets its own tinted background (not just the
+        // thin left bar below) so it reads as clearly different from every other row at a glance, even
+        // before the operator looks at the status pill's text.
+        var rowColor = isCurrent
+            ? Blend(LightColors.PanelAlt, LightColors.Success, 0.18f)
+            : isSelected
+                ? Blend(LightColors.PanelAlt, LightColors.Accent, 0.30f)
+                : e.Index % 2 == 0
+                    ? LightColors.PanelAlt
+                    : Blend(LightColors.PanelAlt, LightColors.Panel, 0.5f);
         using (var bgBrush = new SolidBrush(rowColor))
         {
             g.FillRectangle(bgBrush, bounds);
@@ -678,7 +684,25 @@ public sealed class AdminForm : Form
         TextRenderer.DrawText(g, $"{p.OrderNumber + 1}.", QueueMetaFont, orderRect, LightColors.TextSecondary,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
 
-        var nameRect = new Rectangle(textLeft + 28, bounds.Y + 7, bounds.Right - (textLeft + 28) - 16, 24);
+        // Status pill, top-right of the row - every presentation's current stage (Navbatda/Ketmoqda/
+        // Muhokama/Yakunlangan/...) is visible right here in the queue, not just for whichever one happens
+        // to be current.
+        var statusText = UzbekText.StatusLabel(p.Status).ToUpperInvariant();
+        var statusColor = QueueStatusColor(p.Status);
+        var statusSize = TextRenderer.MeasureText(g, statusText, QueuePillFont);
+        var pillWidth = statusSize.Width + 16;
+        const int pillHeight = 20;
+        var pillRect = new Rectangle(bounds.Right - pillWidth - 14, bounds.Y + 8, pillWidth, pillHeight);
+        using (var pillBrush = new SolidBrush(Color.FromArgb(46, statusColor)))
+        using (var pillPath = RoundedRect(pillRect, pillHeight / 2f))
+        {
+            g.FillPath(pillBrush, pillPath);
+        }
+        TextRenderer.DrawText(g, statusText, QueuePillFont, pillRect, statusColor,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+
+        var textRight = Math.Max(textLeft + 28, pillRect.Left - 8);
+        var nameRect = new Rectangle(textLeft + 28, bounds.Y + 7, textRight - (textLeft + 28), 24);
         TextRenderer.DrawText(g, p.FullName, QueueNameFont, nameRect, LightColors.TextPrimary,
             TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
 
@@ -691,6 +715,37 @@ public sealed class AdminForm : Form
         (int)(from.R + (to.R - from.R) * amount),
         (int)(from.G + (to.G - from.G) * amount),
         (int)(from.B + (to.B - from.B) * amount));
+
+    /// <summary>Mirrors <see cref="PresentationPickerForm"/>'s own status-pill color mapping so the same
+    /// status reads as the same color everywhere in the app.</summary>
+    private static Color QueueStatusColor(PresentationStatus status) => status switch
+    {
+        PresentationStatus.Running => LightColors.Success,
+        PresentationStatus.Paused => LightColors.Warning,
+        PresentationStatus.Discussion or PresentationStatus.DiscussionReady => LightColors.DiscussionAction,
+        PresentationStatus.DiscussionPaused => LightColors.Warning,
+        PresentationStatus.ExtraDiscussion or PresentationStatus.ExtraDiscussionReady => LightColors.DiscussionAction,
+        PresentationStatus.Ready => LightColors.Accent,
+        PresentationStatus.Finished or PresentationStatus.Skipped => LightColors.TextSecondary,
+        _ => LightColors.TextSecondary // Waiting
+    };
+
+    private static GraphicsPath RoundedRect(Rectangle bounds, float radius)
+    {
+        var diameter = Math.Min(radius * 2, Math.Min(bounds.Width, bounds.Height));
+        var arcRect = new RectangleF(bounds.X, bounds.Y, diameter, diameter);
+
+        var path = new GraphicsPath();
+        path.AddArc(arcRect, 180, 90);
+        arcRect.X = bounds.Right - diameter;
+        path.AddArc(arcRect, 270, 90);
+        arcRect.Y = bounds.Bottom - diameter;
+        path.AddArc(arcRect, 0, 90);
+        arcRect.X = bounds.X;
+        path.AddArc(arcRect, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
 
     private void OnQueueMouseDown(object? sender, MouseEventArgs e)
     {

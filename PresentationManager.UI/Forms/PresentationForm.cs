@@ -90,6 +90,17 @@ public sealed class PresentationForm : Form
     /// to re-derive which service is in play from the file type every time.</summary>
     private ISlideDisplayService? _activeDisplayService;
 
+    /// <summary>Serializes every actual Open/Close transition against <see cref="_activeDisplayService"/>.
+    /// Needed because <see cref="PresentationSessionController.StatusChanged"/> can fire several times in
+    /// quick succession from one operator action (e.g. AdminForm's Keyingi picker does Finish -> Select ->
+    /// Start back-to-back), each of which schedules its own independent, unawaited
+    /// <see cref="HandleSlideVisibilityAsync"/> call above - without this lock, two of those could end up
+    /// calling Open/CloseAsync on the same <see cref="LiveSlideShowDisplayService"/> concurrently, which
+    /// tears down and recreates its single COM worker thread from two places at once. That race was the
+    /// intermittent "Slaydni ko'rsatishda xatolik" popup operators saw when advancing to the next
+    /// presentation.</summary>
+    private readonly SemaphoreSlim _slideTransitionLock = new(1, 1);
+
     public PresentationForm(
         PresentationSessionController session,
         IFileStorageService fileStorageService,
@@ -574,38 +585,54 @@ public sealed class PresentationForm : Form
             return;
         }
 
-        var absolutePath = await _fileStorageService.GetAbsolutePathAsync(current.FilePath);
-        var bounds = new ScreenBounds(Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height);
+        await _slideTransitionLock.WaitAsync();
+        try
+        {
+            var absolutePath = await _fileStorageService.GetAbsolutePathAsync(current.FilePath);
+            var bounds = new ScreenBounds(Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height);
 
-        // .pptx now runs as a real, live PowerPoint slideshow (animations/transitions and embedded
-        // video+audio all play, and a physical clicker just works) instead of the flattened-to-PDF path —
-        // see LiveSlideShowDisplayService's own remarks. .pdf never had any of that to begin with, so it
-        // keeps going through the same embedded WebView2 viewer as before.
-        ISlideDisplayService displayService = current.FileType == PresentationFileType.Pptx
-            ? _liveSlideShowService
-            : _pdfDisplayService;
+            // .pptx now runs as a real, live PowerPoint slideshow (animations/transitions and embedded
+            // video+audio all play, and a physical clicker just works) instead of the flattened-to-PDF path —
+            // see LiveSlideShowDisplayService's own remarks. .pdf never had any of that to begin with, so it
+            // keeps going through the same embedded WebView2 viewer as before.
+            ISlideDisplayService displayService = current.FileType == PresentationFileType.Pptx
+                ? _liveSlideShowService
+                : _pdfDisplayService;
 
-        await displayService.OpenAsync(absolutePath, bounds);
-        _activeDisplayService = displayService;
-        _slideOpen = true;
-        _openPresentationId = current.Id;
+            await displayService.OpenAsync(absolutePath, bounds);
+            _activeDisplayService = displayService;
+            _slideOpen = true;
+            _openPresentationId = current.Id;
+        }
+        finally
+        {
+            _slideTransitionLock.Release();
+        }
     }
 
     private async Task CloseActiveSlideAsync()
     {
-        if (!_slideOpen)
+        await _slideTransitionLock.WaitAsync();
+        try
         {
-            return;
-        }
+            if (!_slideOpen)
+            {
+                return;
+            }
 
-        if (_activeDisplayService is not null)
+            if (_activeDisplayService is not null)
+            {
+                await _activeDisplayService.CloseAsync();
+            }
+
+            _activeDisplayService = null;
+            _slideOpen = false;
+            _openPresentationId = null;
+        }
+        finally
         {
-            await _activeDisplayService.CloseAsync();
+            _slideTransitionLock.Release();
         }
-
-        _activeDisplayService = null;
-        _slideOpen = false;
-        _openPresentationId = null;
     }
 
     private void StartBlink()

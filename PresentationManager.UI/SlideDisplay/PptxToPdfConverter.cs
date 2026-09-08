@@ -106,6 +106,17 @@ public static class PptxToPdfConverter
         try
         {
             app = new PowerPoint.Application();
+            // Same reasoning as LiveSlideShowDisplayService.OpenAsync: suppresses every COM-automation
+            // alert, most importantly "Do you want to save changes to <file>?" on Quit below, which
+            // PowerPoint can ask even for a ReadOnly-opened presentation (just exporting it can dirty
+            // transient state). Without this, that alert blocks Quit() waiting for a click nobody makes -
+            // since this runs fully headless, that shows up as an orphaned POWERPNT.EXE sitting in the
+            // background forever, holding ConversionLock and starving every later thumbnail/preview request.
+            app.DisplayAlerts = PowerPoint.PpAlertLevel.ppAlertsNone;
+            // NOT setting app.Visible = msoFalse here: PowerPoint refuses that call before any
+            // presentation/window exists yet ("Hiding the application window is not allowed") and throws
+            // instead. WithWindow=msoFalse below already keeps this fully headless with no window ever
+            // becoming visible.
             presentation = app.Presentations.Open(
                 pptxPath,
                 Office.MsoTriState.msoTrue,  // ReadOnly
@@ -117,6 +128,18 @@ public static class PptxToPdfConverter
         }
         finally
         {
+            try
+            {
+                // Same second guarantee as LiveSlideShowDisplayService.CloseAsync - marks the presentation
+                // itself as "nothing to save" so Close()/Quit() has no reason to prompt even if DisplayAlerts
+                // ever gets reset in between.
+                if (presentation is not null) presentation.Saved = Office.MsoTriState.msoTrue;
+            }
+            catch
+            {
+                // ignored
+            }
+
             try
             {
                 presentation?.Close();
