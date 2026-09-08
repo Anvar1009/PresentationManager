@@ -95,6 +95,11 @@ public sealed class LiveSlideShowDisplayService : ISlideDisplayService
                 // a second way, directly on the presentation itself rather than relying on this app-wide
                 // setting alone.
                 _app.DisplayAlerts = PowerPoint.PpAlertLevel.ppAlertsNone;
+                // NOT setting _app.Visible = msoFalse here: PowerPoint refuses that call before any
+                // presentation/window exists yet ("Hiding the application window is not allowed") and throws
+                // instead. WithWindow=msoFalse below already keeps the presentation itself from ever getting
+                // its own document window - the only window that ends up visible at all is the slideshow
+                // window created further down, which gets reparented into _hostPanel.
                 _presentation = _app.Presentations.Open(
                     absoluteFilePath,
                     Office.MsoTriState.msoTrue,  // ReadOnly

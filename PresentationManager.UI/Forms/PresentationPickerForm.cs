@@ -152,6 +152,33 @@ public sealed class PresentationPickerForm : Form
             // Custom-painted in ListBox_DrawItem — this text only backs the item count/index and screen readers.
             _listBox.Items.Add($"{p.OrderNumber + 1}. {p.FullName} - {p.Title}");
         }
+
+        // Pre-selects whatever would naturally come next in queue order, so the common case - just continue
+        // down the list - only takes one click (BOSHLASH) instead of forcing the operator to find and click
+        // their own row first every time. Manually picking a different row still overrides this freely.
+        var suggestedIndex = FindSuggestedNextIndex();
+        if (suggestedIndex >= 0)
+        {
+            _listBox.SelectedIndex = suggestedIndex;
+        }
+    }
+
+    /// <summary>Mirrors the "skip Finished/Skipped" rule <see cref="PresentationSessionController"/>'s own
+    /// AdvanceAsync uses to pick what comes next automatically - the first entry after the presentation
+    /// currently in discussion that isn't already Finished/Skipped.</summary>
+    private int FindSuggestedNextIndex()
+    {
+        var currentId = _session.CurrentPresentation?.Id;
+        var currentIndex = currentId is null ? -1 : _items.FindIndex(p => p.Id == currentId);
+        for (var i = currentIndex + 1; i < _items.Count; i++)
+        {
+            if (_items[i].Status is not (PresentationStatus.Finished or PresentationStatus.Skipped))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private void SetHoveredIndex(int index)
@@ -203,11 +230,22 @@ public sealed class PresentationPickerForm : Form
             e.Graphics.FillPath(rowBrush, rowPath);
         }
 
+        var isCurrentlyPresenting = presentation.Id == _session.CurrentPresentation?.Id;
+
         if (selected)
         {
             using var accentBrush = new SolidBrush(LightColors.Accent);
             using var accentBarPath = RoundedRect(new Rectangle(rowRect.X, rowRect.Y, 4, rowRect.Height), 2);
             e.Graphics.FillPath(accentBrush, accentBarPath);
+        }
+        else if (isCurrentlyPresenting)
+        {
+            // Marks whichever row is the one actually still up on Namoyish Ekrani right now (mid-discussion,
+            // about to be finished) - distinct from the accent bar above, which only ever marks the
+            // operator's own click, so the two never get confused with each other.
+            using var currentBrush = new SolidBrush(LightColors.Success);
+            using var currentBarPath = RoundedRect(new Rectangle(rowRect.X, rowRect.Y, 4, rowRect.Height), 2);
+            e.Graphics.FillPath(currentBrush, currentBarPath);
         }
 
         var badgeRect = new Rectangle(rowRect.X + 16, rowRect.Y + (rowRect.Height - BadgeDiameter) / 2, BadgeDiameter, BadgeDiameter);
